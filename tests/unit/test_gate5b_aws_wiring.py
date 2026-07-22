@@ -46,3 +46,16 @@ def test_budget_is_scoped_to_gate5_services_not_the_whole_account():
         "Amazon EventBridge",
     ):
         assert service in guardrails
+
+
+def test_budget_notifications_and_teardown_match_the_current_owner_authorization():
+    guardrails = (ROOT / "scripts/gate5_guardrails.sh").read_text(encoding="utf-8")
+    assert 'BUDGET_LIMIT="50"' in guardrails
+    assert '"ThresholdType":"ABSOLUTE_VALUE"' in guardrails
+    for threshold in (15, 25, 40, 50):
+        assert f"ensure_notification {threshold}" in guardrails
+    assert "create-budget-action" not in guardrails
+    assert "execute-budget-action" not in guardrails
+    assert 'INITIAL_TEARDOWN_DATE="2026-09-30"' in guardrails
+    assert "delta % 7 == 0" in guardrails
+    assert 'TEARDOWN_EXPRESSION="at(${TEARDOWN_DATE}T23:59:00)"' in guardrails

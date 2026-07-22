@@ -75,16 +75,20 @@ private. Publication was separately authorized and verified afterward.
 
 ## Cost and teardown
 
-The AWS budget is now one cumulative `CUSTOM` period from July 1 through the
-September 22 teardown, with a $10 limit and actual-spend alerts at 80% and
-100%. Readback after deployment showed $4.484 actual and an AWS forecast of
-$5.248. A conservative bottom-up projection is $9.734–$10.984 cumulative by
-teardown. Because the upper case exceeds the authorization, spend must remain
-monitored and the demo must be paused or removed early if it approaches $10.
-The budget filters the seven authorized services but is not resource-tag
-isolated, so it may conservatively include other use of those services.
+The AWS budget is one cumulative, non-resetting `CUSTOM` period with a $50
+limit and investigation-only actual-spend alerts at $15, $25, $40, and $50.
+The guardrail creates or executes no automatic budget action. The scoped role
+cannot enumerate independently created Budget Actions, which remains an audit
+limitation. Post-update readback showed $4.484 actual and an AWS forecast of
+$8.892. A conservative bottom-up projection is approximately
+$10.40–$11.65 cumulative through the initial September 30 teardown, below the
+current authorization. The budget filters the seven authorized services but
+is not resource-tag isolated, so it may conservatively include other use of
+those services.
 
-The logged-out path is intended to remain available through September 16. The
-one-time App Runner deletion remains scheduled for September 22; the remaining
+The logged-out path is authorized to remain available until seven calendar
+days after winners are announced. The one-time App Runner deletion is initially
+scheduled for the end of September 30 and must be postponed in seven-day
+increments if winners have not been announced. The remaining
 ECR, SSM, DynamoDB, IAM, budget, and OAuth cleanup still requires the documented
 manual teardown and readback on that date.

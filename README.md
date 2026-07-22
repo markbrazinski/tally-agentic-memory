@@ -109,10 +109,12 @@ MCP data-plane health. The browser cannot invoke ccloud.
   public API accepts no prompt.
 - **SSM Parameter Store** holds the DSN, renewable OAuth bundle, and private selectors.
 - **DynamoDB** holds only the short-lived owner/expiry lease used to serialize OAuth rotation.
-- **AWS Budgets** must alert at 80% and 100% of the authorized $10 ceiling before deployment.
-- **EventBridge Scheduler** must delete the App Runner service on September 22,
-  2026; the remaining secrets, image, roles, and OAuth grant are removed
-  by the documented teardown checklist that day.
+- **AWS Budgets** sends investigation-only alerts at $15, $25, $40, and $50
+  against the authorized $50 cumulative ceiling. It has no automatic stop
+  action.
+- **EventBridge Scheduler** initially deletes the App Runner service at the end
+  of September 30, 2026; the remaining secrets, image, roles, and OAuth grant
+  are removed by the documented teardown checklist that day.
 
 ## Local verification
 
@@ -197,30 +199,35 @@ OAuth grant is server-side material and must be revoked on teardown.
 
 ## Expected cost and teardown
 
-Gate 5 has a hard owner-authorized AWS ceiling of **$10 total**. The live budget
-is one `CUSTOM` period covering July 1 through the September 22 teardown; it
-does not reset monthly. The design uses
+Gate 5 has an owner-authorized AWS ceiling of **$50 total**. The live budget
+is one non-resetting `CUSTOM` period beginning July 1 and remaining active
+through the eventual teardown. The design uses
 one minimum-size App Runner service, a small ECR image, existing versioned S3
 objects, and bounded requests. Before deployment, the service-scoped budget
-must be read back with alerts at $8 and $10; unrelated account spend must not
-be presented as Gate 5 spend. It is monitoring, not a guarantee that AWS
-automatically stops every charge.
+must be read back with investigation-only alerts at $15, $25, $40, and $50;
+unrelated account spend must not be presented as Gate 5 spend. The alerts do
+not pause, delete, or otherwise interrupt judge access.
 No paid CockroachDB plan or AWS purchase is required.
 
-Readback on July 22 showed $4.484 already accumulated and an AWS-generated
-custom-period forecast of $5.248. A more conservative bottom-up estimate adds
-$5.25–$6.50 through teardown, producing $9.734–$10.984 cumulative. The upper
-case exceeds the authorization, so the alerts and actual spend must be watched
-and the service paused or removed early if it approaches $10. The budget is
-service-filtered rather than resource-tag isolated, so it may conservatively
-include other account use of the same seven services. See the official [App Runner pricing](https://aws.amazon.com/apprunner/pricing/),
+Post-update readback on July 22 showed $4.484 accumulated and an AWS-generated
+custom-period forecast of $8.892. A more conservative bottom-up estimate adds
+$5.92–$7.17 through the initial September 30 teardown, producing approximately
+$10.40–$11.65 cumulative. This is below the current $50 authorization. Alerts
+still require investigation, but do not automatically interrupt access. The
+budget is service-filtered rather than resource-tag isolated, so it may
+conservatively include other account use of the same seven services. See the
+official [App Runner pricing](https://aws.amazon.com/apprunner/pricing/),
 [ECR pricing](https://aws.amazon.com/ecr/pricing/), [Parameter Store
 pricing](https://aws.amazon.com/systems-manager/pricing/), and [AWS Budgets
 pricing](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/).
 
-If Gate 5 passes, the judge URL is intended to remain available through September 16,
-2026. On September 22,
-2026:
+The judge URL is authorized to remain available until seven calendar days after
+winners are announced. The initial teardown is September 30, 2026 at 11:59 PM
+America/Los_Angeles. If winners have not been announced, rerun the guardrail
+before that time with the next seven-day date—for example,
+`TALLY_GATE5_TEARDOWN_DATE=2026-10-07`—and continue in seven-day increments.
+Once winners are announced, retain the first scheduled increment that is at
+least seven calendar days later. On the resulting teardown date:
 
 1. Confirm the scheduled App Runner deletion executed.
 2. Delete the Gate 5 ECR repository and its images.

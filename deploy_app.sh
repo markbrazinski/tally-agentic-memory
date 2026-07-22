@@ -51,7 +51,7 @@ if [ "$AUTOSCALING_ARN" = "None" ] || [ -z "$AUTOSCALING_ARN" ]; then
     --region "$REGION" --auto-scaling-configuration-name "$AUTOSCALING_NAME" \
     --max-concurrency 20 --min-size 1 --max-size 1 \
     --tags Key=Project,Value=Tally Key=Environment,Value=synthetic-gate5 \
-      Key=TeardownDate,Value=2026-09-22 \
+      Key=TeardownDate,Value=2026-09-30 \
     --query 'AutoScalingConfiguration.AutoScalingConfigurationArn' --output text)
 fi
 AUTOSCALING_LIVE=$(aws apprunner describe-auto-scaling-configuration --profile "$PROFILE" \
@@ -63,7 +63,7 @@ if [ "$(jq -r '.AutoScalingConfiguration.MaxConcurrency' <<<"$AUTOSCALING_LIVE")
     --region "$REGION" --auto-scaling-configuration-name "$AUTOSCALING_NAME" \
     --max-concurrency 20 --min-size 1 --max-size 1 \
     --tags Key=Project,Value=Tally Key=Environment,Value=synthetic-gate5 \
-      Key=TeardownDate,Value=2026-09-22 \
+      Key=TeardownDate,Value=2026-09-30 \
     --query 'AutoScalingConfiguration.AutoScalingConfigurationArn' --output text)
 fi
 
@@ -136,7 +136,7 @@ if [ "$SERVICE_ARN" = "None" ] || [ -z "$SERVICE_ARN" ]; then
     --health-check-configuration 'Protocol=HTTP,Path=/readyz,Interval=10,Timeout=5,HealthyThreshold=1,UnhealthyThreshold=3' \
     --network-configuration 'IngressConfiguration={IsPubliclyAccessible=true}' \
     --tags Key=Project,Value=Tally Key=Environment,Value=synthetic-gate5 \
-      Key=TeardownDate,Value=2026-09-22)
+      Key=TeardownDate,Value=2026-09-30)
   SERVICE_ARN=$(jq -r '.Service.ServiceArn' <<<"$CREATE_OUTPUT")
 else
   aws apprunner update-service --profile "$PROFILE" --region "$REGION" \

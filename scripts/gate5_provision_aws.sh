@@ -105,7 +105,7 @@ ensure_role() {
     aws iam create-role --profile "$PROFILE" --role-name "$role_name" \
       --assume-role-policy-document "file://${trust_file}" \
       --tags Key=Project,Value=Tally Key=Environment,Value=synthetic-gate5 \
-        Key=TeardownDate,Value=2026-09-22 >/dev/null
+        Key=TeardownDate,Value=2026-09-30 >/dev/null
   fi
 }
 
@@ -150,7 +150,7 @@ if ! aws ecr describe-repositories --profile "$PROFILE" --region "$REGION" \
   aws ecr create-repository --profile "$PROFILE" --region "$REGION" \
     --repository-name "$ECR_REPO_NAME" --image-scanning-configuration scanOnPush=true \
     --tags Key=Project,Value=Tally Key=Environment,Value=synthetic-gate5 \
-      Key=TeardownDate,Value=2026-09-22 >/dev/null
+      Key=TeardownDate,Value=2026-09-30 >/dev/null
 fi
 
 if ! aws dynamodb describe-table --profile "$PROFILE" --region "$REGION" \
@@ -160,7 +160,7 @@ if ! aws dynamodb describe-table --profile "$PROFILE" --region "$REGION" \
     --attribute-definitions AttributeName=bundle_key,AttributeType=S \
     --key-schema AttributeName=bundle_key,KeyType=HASH \
     --tags Key=Project,Value=Tally Key=Environment,Value=synthetic-gate5 \
-      Key=TeardownDate,Value=2026-09-22 >/dev/null
+      Key=TeardownDate,Value=2026-09-30 >/dev/null
   aws dynamodb wait table-exists --profile "$PROFILE" --region "$REGION" \
     --table-name "$LEASE_TABLE_NAME"
 fi
@@ -169,7 +169,7 @@ LEASE_ARN=$(aws dynamodb describe-table --profile "$PROFILE" --region "$REGION" 
 aws dynamodb tag-resource --profile "$PROFILE" --region "$REGION" \
   --resource-arn "$LEASE_ARN" \
   --tags Key=Project,Value=Tally Key=Environment,Value=synthetic-gate5 \
-    Key=TeardownDate,Value=2026-09-22 >/dev/null
+    Key=TeardownDate,Value=2026-09-30 >/dev/null
 TTL_STATUS=$(aws dynamodb describe-time-to-live --profile "$PROFILE" --region "$REGION" \
   --table-name "$LEASE_TABLE_NAME" --query 'TimeToLiveDescription.TimeToLiveStatus' \
   --output text)
@@ -212,7 +212,7 @@ if ! jq -e '
   || ! jq -e '
     any(.Tags[]; .Key == "Project" and .Value == "Tally") and
     any(.Tags[]; .Key == "Environment" and .Value == "synthetic-gate5") and
-    any(.Tags[]; .Key == "TeardownDate" and .Value == "2026-09-22")
+    any(.Tags[]; .Key == "TeardownDate" and .Value == "2026-09-30")
   ' >/dev/null <<<"$LEASE_TAGS" \
   || ! jq -e '
     [.Statement[] | select(.Sid == "RotateOneOAuthBundle")][0]
