@@ -16,6 +16,8 @@ noncritical limitation.
 
 - Starting public-safe root: `7bde12f14c871406bec9f47988de388311a53eb1`
 - Reviewed Gate 5 implementation: `cbc544da4446452735c5a33098b71fe48e3f4a69`
+- Final reviewed private-repository tree after the clean-clone fixture fix:
+  `7ae11b7571e5d8f2eee4636c17aab07533c8930d`
 - Report/publication commit: the commit containing this file; its exact local
   and remote SHA is verified in the post-commit handoff because a commit cannot
   embed its own SHA.
@@ -155,6 +157,7 @@ denied. See `GATE_5B_REPORT.md` for its bounded limitations.
 | Candidate tree/all-ref safety scan | BLOCKED — one personal email in root commit metadata |
 | Prohibited exact S3 ARN scan | PASS — no exact object ARN in tree/history |
 | Synthetic PDF manual review | PASS — exact reviewed digest allowlisted |
+| Authenticated clean clone | PASS — 663 Python, 23 UI, production build |
 | Unauthenticated repository clone | BLOCKED — repository intentionally remains private |
 
 Unit/integration coverage also exercises dependency failure, no mock fallback,
@@ -190,6 +193,10 @@ schedule, then revoke the OAuth grant and dynamic client.
   four findings were resolved before this report.
 - Automated history scanning independently confirms the one remaining
   publication blocker; it is not suppressed or relabeled as safe.
+- A first authenticated clean clone exposed one ignored synthetic Gate 0
+  inventory fixture. The ignore rule received one exact exception, the
+  fictional fixture was scanned and committed, and a second fresh clone passed
+  all Python/UI/build checks.
 
 ## Limitations and prohibited claims
 
