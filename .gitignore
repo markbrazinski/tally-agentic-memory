@@ -40,6 +40,7 @@ artifacts/recovery/**/*-raw.json
 artifacts/recovery/**/*-private.*
 artifacts/recovery/**/aws-resource-inventory.*
 artifacts/recovery/**/capture-inventory.*
+!artifacts/recovery/gate-0/capture-inventory.example.json
 
 # Database exports and backups
 *.dump

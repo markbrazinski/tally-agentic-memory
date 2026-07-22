@@ -1,0 +1,33 @@
+{
+  "classification": "synthetic example; not production evidence",
+  "bucket": "example-recovery-bucket",
+  "entries": [
+    {
+      "object_key": "raw/northstar-ocean-demo-tariff/2026-01-01/body.txt",
+      "version_id": "fixture-version-northstar-001",
+      "captured_at": "2026-01-01T08:00:00Z",
+      "sha256": "493e388c79adec6d713784600d379cf3b38773c821ba4b572e8bdc856c981216",
+      "size": 90,
+      "manifest_reference": "raw/northstar-ocean-demo-tariff/2026-01-01/manifest.json",
+      "database_record": "fixture-recording-001"
+    },
+    {
+      "object_key": "raw/bluehaven-maritime-demo-tariff/2026-01-09/body.txt",
+      "version_id": "fixture-version-bluehaven-009",
+      "captured_at": "2026-01-09T08:00:00Z",
+      "sha256": "3b35034aab4d202c87f74b707b5f81c0244d8b96fea9d1ee65cf25dbc994eb78",
+      "size": 82,
+      "manifest_reference": "raw/bluehaven-maritime-demo-tariff/2026-01-09/manifest.json",
+      "database_record": "fixture-recording-009"
+    },
+    {
+      "object_key": "raw/harborview-terminal-demo-tariff/2026-01-17/body.txt",
+      "version_id": "fixture-version-harborview-017",
+      "captured_at": "2026-01-17T08:00:00Z",
+      "sha256": "68ac5716999285efcb39e07841468f3eb2c5e5a508396b660ae9f464c3dfa029",
+      "size": 90,
+      "manifest_reference": "raw/harborview-terminal-demo-tariff/2026-01-17/manifest.json",
+      "database_record": "fixture-recording-017"
+    }
+  ]
+}
