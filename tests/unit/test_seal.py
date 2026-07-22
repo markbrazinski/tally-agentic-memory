@@ -312,7 +312,7 @@ def test_seal_case_fresh_seal_writes_one_audit_query_log_row():
     )
     assert len(conn.query_log_rows) == 1
     sql_text = conn.query_log_rows[0]["params"][1]
-    assert "APPROVE & SEND" in sql_text
+    assert "APPROVE & FILE" in sql_text
     assert CASE_ID in sql_text
 
 

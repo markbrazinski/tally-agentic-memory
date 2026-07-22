@@ -410,7 +410,7 @@ def seal_case(dal: DAL, *, case_id: str, sealed_by_user_id: str, sealed_at_displ
             )
 
             audit_line = (
-                f"APPROVE & SEND · case {case_id} · by {actor} · txn {sealed_txn_ts}"
+                f"APPROVE & FILE · case {case_id} · by {actor} · txn {sealed_txn_ts}"
             )
             cur.execute(
                 """
