@@ -1,0 +1,48 @@
+{
+  "classification": "SYNTHETIC DEMO — FICTIONAL DATA",
+  "artifact_kind": "response_contract_example",
+  "execution_provenance": "NOT EXECUTED — illustrative expected fields only",
+  "status": "example_only_not_executed",
+  "mock_fallback": false,
+  "case": {
+    "reference": "GATE5-SYNTHETIC-HERO",
+    "importer": "Northstar Imports (fictional)",
+    "carrier": "Asterline Demo Shipping (fictional)",
+    "state": "CONTESTED"
+  },
+  "replay": {
+    "then": {
+      "state": "FILED",
+      "recorded_rate": 250.0,
+      "anchor": "stored CockroachDB filing transaction (exact value redacted)"
+    },
+    "now": {
+      "state": "CONTESTED",
+      "recorded_rate": 250.0
+    },
+    "receipt": {
+      "bindings_unchanged": true,
+      "exact_versioned_s3_verified": true
+    },
+    "retention": {
+      "ttl_days": 90,
+      "target_queryable": true,
+      "language": "Versioned S3 retains the dated source artifact. Within CockroachDB's configured MVCC window, Tally can also replay the transactional case state at filing."
+    }
+  },
+  "managed_mcp": {
+    "status": "verified_read",
+    "current_state": "CONTESTED",
+    "recorded_rate": 250.0,
+    "later_claimed_rate": 350.0,
+    "rate_currency": "USD",
+    "rate_unit": "day",
+    "sealed_receipt_verified": true
+  },
+  "claims": {
+    "external_send": false,
+    "carrier_credit": false,
+    "legal_determination": false,
+    "production_data": false
+  }
+}

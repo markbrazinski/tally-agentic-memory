@@ -16,7 +16,12 @@ from src.core.sealed_memory import (
     SealedMemoryValidationError,
     validate_sealed_case_memory,
 )
-from src.external.cockroach_mcp import MCPCallTrace, MCPSelectResult, MCPUnavailableError
+from src.external.cockroach_mcp import (
+    MCPAuthenticationError,
+    MCPCallTrace,
+    MCPSelectResult,
+    MCPUnavailableError,
+)
 
 QUERY_TEMPLATE = "gate3-sealed-memory-v1"
 
@@ -148,6 +153,10 @@ def retrieve_contest_memory(
     )
     try:
         result = mcp.select_query(query, correlation_id=correlation)
+    except MCPAuthenticationError:
+        # The public runtime owns one bounded OAuth refresh/replay.  Do not
+        # collapse its retry signal into the ordinary unavailable outcome.
+        raise
     except MCPUnavailableError:
         return ContestMemoryOutcome(
             status="unavailable",

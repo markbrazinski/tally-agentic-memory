@@ -954,24 +954,8 @@ class Component extends DCLogic {
         this.forceUpdate();
       });
     }
-    if (typeof this.provider.subscribeFeed === 'function') {
-      this._unsubscribeFeed = this.provider.subscribeFeed((frame) => this.onFeedEvent(frame));
-    }
   }
-  componentWillUnmount() { window.removeEventListener('keydown', this.onKey); window.removeEventListener('resize', this.onResize); clearInterval(this._ri); clearInterval(this._ci); clearTimeout(this._ft); if (this._unsubscribeFeed) this._unsubscribeFeed(); }
-
-  // Live-mode WS frames (B1FE-S3): {event, ts, payload} per TDD §3.11.
-  // Only case.sealed exists to react to yet (clerk.step/clerk.filed have no
-  // consumer in this session's scope — Case File's Clerk-run display reads
-  // fetchCase()'s state, not the feed, per the view-triage proposal).
-  onFeedEvent(frame) {
-    if (frame.event === 'case.sealed') {
-      const fresh = Object.assign({}, this.state.fresh);
-      fresh['seal-' + frame.payload.case_id] = true;
-      this.setState({ fresh });
-      clearTimeout(this._ft); this._ft = setTimeout(() => this.setState({ fresh: {} }), 4600);
-    }
-  }
+  componentWillUnmount() { window.removeEventListener('keydown', this.onKey); window.removeEventListener('resize', this.onResize); clearInterval(this._ri); clearInterval(this._ci); clearTimeout(this._ft); }
   onResize() { this.setState({ vw: window.innerWidth, vh: window.innerHeight }); }
 
   // ---------- format law: YYYY-MM-DD · HH:MM UTC · $1,234 ----------
@@ -1078,27 +1062,11 @@ class Component extends DCLogic {
     this.setState({ approved, fresh, confirm: null, audit: this.audit('Approve & send — ' + c.ids.length + ' · sealed') });
     clearTimeout(this._ft); this._ft = setTimeout(() => this.setState({ fresh: {} }), 4600);
   }
-  // Live-mode seal (B1FE-S3): one real POST /cases/{id}/approve per id —
-  // the export's bulk cascade (runCascade) is a film-only animation over
-  // seed data (this.inv.filter(pattern===...)), out of scope here; live
-  // mode's confirm modal is always single- or multi-select-but-sequential,
-  // never the animated cascade. sealError surfaces a real failure honestly
-  // instead of the optimistic local-only path silently "succeeding."
-  async doConfirmLive(ids) {
-    this.setState({ confirm: null, sealPending: true, sealError: null });
-    try {
-      for (const id of ids) {
-        const result = await this.provider.approveCase(id);
-        const approved = Object.assign({}, this.state.approved);
-        approved[id] = { t: Date.now(), sealedTxnTs: result.sealed_txn_ts, alreadySealed: !!result.already_sealed };
-        const fresh = Object.assign({}, this.state.fresh); fresh['seal-' + id] = true;
-        this.setState({ approved, fresh, audit: this.audit('Approve & send — ' + id + ' · sealed · txn ' + result.sealed_txn_ts) });
-      }
-      this.setState({ sealPending: false });
-      clearTimeout(this._ft); this._ft = setTimeout(() => this.setState({ fresh: {} }), 4600);
-    } catch (err) {
-      this.setState({ sealPending: false, sealError: String(err && err.message || err) });
-    }
+  // Public demo mode is structurally read-only. Its views expose no route to
+  // this guard; retaining it prevents a future template regression from
+  // turning a click into an optimistic local mutation.
+  async doConfirmLive() {
+    this.setState({ confirm: null, sealPending: false, sealError: 'Mutations are disabled in the logged-out public demo.' });
   }
   acceptSelected(ids) {
     const accepted = Object.assign({}, this.state.accepted);
@@ -1312,67 +1280,30 @@ class Component extends DCLogic {
     });
     return groups;
   }
-  // Live-mode Queue (B1FE-S3). Deliberately NOT the film taxonomy's
-  // owe0/over/valid/unver split: the real backend computes only
-  // DEFECTIVE/NEEDS_REVIEW/VALID (no tier-3 tariff cross-reference yet —
-  // that's Bundle 2 scope). Forcing DEFECTIVE cases into "Owe $0" or
-  // "Overcharged" would render a claim ("full elimination", "recorded
-  // tariff disagrees") the backend hasn't verified. This copy is a first
-  // draft pending strategy/design review, not frozen — see
-  // ui/docs/s3-view-triage-proposal.md's verdict-mapping note.
+  // Logged-out public queue. It presents only the server-selected replay
+  // projection and deliberately exposes no selection or mutation affordance.
   queueValsLive() {
-    const sel = this.state.sel;
-    const notSealed = (v) => !(this.state.approved[v.id]);
-    const rowsOf = (verdict) => this.inv.filter(v => v.verdict === verdict && notSealed(v));
-    const mkRow = (v, selectable) => ({
+    const mkRow = (v) => ({
       id: v.id, container: v.container || '—', carrier: v.carrier || '—', invoiceNo: v.invoiceNo, defect: v.citedRule || '—',
-      amountF: v.amount != null ? this.money(v.amount) : '—', selectable, sel: !!sel[v.id],
-      onToggle: () => this.toggleSel(v.id), stop: (e) => e.stopPropagation(), onOpen: () => this.openCase(v.id),
+      amountF: 'not reported', selectable: false, sel: false,
+      onToggle: () => {}, stop: (e) => e.stopPropagation(), onOpen: () => this.openCase(v.id),
       fresh: !!this.state.fresh['row-' + v.id],
     });
-    // Honest group total: (v.amount || 0) would silently render a real
-    // $0.00 claim for cases whose amount is genuinely unknown (the Clerk
-    // doesn't parse dollar amounts from the PDF in this backend session's
-    // scope — confirmed live, every seeded invoice has amount:null). A
-    // group with any unknown amount shows a count only, never a dollar
-    // figure that isn't true.
-    const groupTotal = (rows) => rows.some(v => v.amount == null)
-      ? rows.length + ' · amount not yet parsed'
-      : rows.length + ' · ' + this.money(rows.reduce((s, v) => s + v.amount, 0));
-    const btnStyle = (disabled) => ({ fontSize: '12.5px', fontWeight: 700, color: disabled ? '#8A96A0' : '#F6F3EC', background: disabled ? '#E5DFD1' : '#1F2A33', border: 'none', borderRadius: '7px', padding: '8px 16px', cursor: disabled ? 'default' : 'pointer' });
-    const groups = [];
-
-    const def = rowsOf('DEFECTIVE'); const defSel = def.filter(v => sel[v.id]);
-    groups.push({
-      key: 'defective', title: 'Defective', sub: 'field or timing defect found',
-      selectable: true,
-      countTotal: groupTotal(def),
-      allSel: def.length > 0 && defSel.length === def.length, onToggleAll: () => this.toggleAllIn(def),
-      rows: def.map(v => mkRow(v, true)),
-      actBtn: 'Approve & send' + (defSel.length ? ' — ' + defSel.length : ''), actDisabled: defSel.length === 0, actStyle: btnStyle(defSel.length === 0),
-      onAct: () => defSel.length && this.openApprove(defSel.map(v => v.id), defSel.length === 1 ? (defSel[0].citedRule || 'field/timing defect — 46 CFR §541') : 'field/timing defects — 46 CFR §541'),
-    });
-
-    const nr = rowsOf('NEEDS_REVIEW');
-    groups.push({
-      key: 'needs_review', title: 'Needs review', sub: 'timing window unclear — not auto-decided', selectable: false,
-      countTotal: groupTotal(nr),
-      rows: nr.map(v => mkRow(v, false)),
-      note: nr.length ? 'The Clerk could not confidently place these in a 30-day window. Open each to decide manually.' : false,
-    });
-
-    const va = rowsOf('VALID');
-    groups.push({
-      key: 'valid', title: 'Valid — pay', sub: 'all required fields present, within window', selectable: false,
-      countTotal: groupTotal(va),
-      rows: va.map(v => mkRow(v, false)),
-    });
-
-    return groups;
+    return [{
+      key: 'public-replay', title: 'Public replay', sub: 'live read-only verification', selectable: false,
+      countTotal: this.inv.length + (this.inv.length === 1 ? ' projection' : ' projections'),
+      rows: this.inv.map(mkRow),
+      note: this.inv.length ? 'Open the projection to inspect the historical/current comparison. Mutations and live feeds are disabled.' : 'Public replay unavailable or still loading. Synthetic film data was not substituted.',
+      actBtn: false, actDisabled: true, onAct: () => {},
+    }];
   }
   toggleAllIn(rows) { const sel = Object.assign({}, this.state.sel); const all = rows.every(v => sel[v.id]); rows.forEach(v => { if (all) delete sel[v.id]; else sel[v.id] = true; }); this.setState({ sel }); }
 
   shiftLine() {
+    if (this.clockMode === 'live') {
+      if (this.disclosure.tone === 'error') return 'Public replay unavailable. Synthetic film data was not substituted.';
+      return this.inv.length ? 'One server-selected public replay projection is ready · read-only.' : 'Loading the server-selected public replay projection…';
+    }
     const clock = this.state.clock, from = clock - 24 * 3600000;
     const checked = this.inv.filter(v => v.cT && v.cT > from && v.cT <= clock);
     const defects = checked.filter(v => v.verdict === 'owe0' || v.verdict === 'over').length;
@@ -2049,24 +1980,18 @@ class Component extends DCLogic {
   // imported unconditionally; only the choice of which factory to call
   // is deferred, never the module load itself.
   //
-  // getCases() still starts empty for LiveProvider even with this fix —
-  // the GET /invoices network round trip itself is real async work no
-  // import timing trick can avoid, hence onDataChange (provider.js).
+  // getCases() starts empty while the public hero projection is loading;
+  // onDataChange re-renders after that same-origin request completes.
   //
-  // ?live=1 selects LiveProvider; default is MockProvider (film mode).
-  // Live credentials may be supplied only through an operator-injected,
-  // ephemeral runtime object. A VITE_* bearer would be compiled into public
-  // browser assets, so build-time token configuration is deliberately absent.
-  // An incomplete live request renders unavailable and never substitutes film data.
+  // The logged-out root selects the read-only public demo provider. The
+  // synthetic film remains an explicit, clearly disclosed opt-in at ?film=1.
+  // Public mode performs one same-origin GET and has no credential, mutation,
+  // generic case API, or feed capability. Failure renders unavailable and
+  // never substitutes film data.
   import { selectProvider } from './src/data/provider-selection.js';
 
   const params = new URLSearchParams(location.search);
-  const wantsLive = params.has('live');
-  const runtimeConfig = window.__TALLY_RUNTIME_CONFIG__ || {};
-  const apiBase = runtimeConfig.apiBase;
-  const bearerToken = runtimeConfig.bearerToken;
-
-  window.__tallyProvider = selectProvider({ wantsLive, apiBase, bearerToken });
+  window.__tallyProvider = selectProvider({ wantsFilm: params.has('film') });
 </script>
 </body>
 </html>

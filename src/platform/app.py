@@ -17,19 +17,37 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import threading
+import time
+from collections import defaultdict, deque
 from datetime import UTC, datetime
 from io import BytesIO
+from pathlib import Path
 
+import boto3
 import pdfplumber
-from fastapi import Depends, FastAPI, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 
 from src.external.bedrock_extract import BedrockExtractor, apply_anti_hallucination_gate
 from src.external.dal import DAL, Tenant
+from src.external.oauth_tokens import (
+    DynamoDBRefreshLease,
+    OAuthTokenManager,
+    SSMTokenStore,
+)
 from src.platform.auth import AuthedActor, make_require_bearer_auth
 from src.platform.clerk_pipeline import file_case, run_extraction_steps
+from src.platform.public_demo import (
+    PublicDemoConfig,
+    PublicDemoUnavailableError,
+    run_public_demo,
+    unavailable_projection,
+)
 from src.platform.seal import CaseNotFoundError, CaseNotSealableError, seal_case
 from src.platform.temporal_replay import (
     ReplayNotFoundError,
@@ -38,9 +56,17 @@ from src.platform.temporal_replay import (
     replay_case,
 )
 
-app = FastAPI(title="Tally")
+PUBLIC_DEMO_ENABLED = os.environ.get("TALLY_PUBLIC_DEMO_ENABLED", "").lower() == "true"
+app = FastAPI(
+    title="Tally",
+    docs_url=None if PUBLIC_DEMO_ENABLED else "/docs",
+    redoc_url=None if PUBLIC_DEMO_ENABLED else "/redoc",
+    openapi_url=None if PUBLIC_DEMO_ENABLED else "/openapi.json",
+)
 
-DEMO_TENANT_ID = "10000000-0000-4000-8000-000000000002"  # Meridian Demo, seeded in B0-S1
+DEMO_TENANT_ID = os.environ.get(
+    "TALLY_TENANT_ID", "10000000-0000-4000-8000-000000000002"
+)
 DEMO_ACTOR = "rachel.martinez"
 
 require_auth = make_require_bearer_auth(DEMO_TENANT_ID)
@@ -72,6 +98,23 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
     max_age=600,
 )
+
+_PUBLIC_HTTP_EXACT_PATHS = frozenset(
+    {"/", "/healthz", "/readyz", "/public/demo/hero"}
+)
+
+
+@app.middleware("http")
+async def restrict_public_demo_surface(request: Request, call_next):
+    """Expose only the judge UI, health, readiness, and fixed hero in public mode."""
+    path = request.url.path
+    if (
+        PUBLIC_DEMO_ENABLED
+        and path not in _PUBLIC_HTTP_EXACT_PATHS
+        and not path.startswith("/assets/")
+    ):
+        return JSONResponse(status_code=404, content={"detail": "not found"})
+    return await call_next(request)
 
 # invoices.s3_key is STRING NOT NULL (migrations/002_bundle0_schema.sql,
 # matching TDD §2.9 - every real invoice has a real S3 pointer). This
@@ -114,15 +157,72 @@ class FeedBroadcaster:
 feed = FeedBroadcaster()
 
 
+class _FixedWindowRateLimiter:
+    """Small single-instance guard for the one read-only public endpoint."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._requests: dict[str, deque[float]] = defaultdict(deque)
+
+    def allow(self, key: str, *, limit: int, window_seconds: float = 60.0) -> bool:
+        now = time.monotonic()
+        floor = now - window_seconds
+        with self._lock:
+            values = self._requests[key]
+            while values and values[0] <= floor:
+                values.popleft()
+            if len(values) >= limit:
+                return False
+            values.append(now)
+            return True
+
+
+public_demo_rate_limiter = _FixedWindowRateLimiter()
+public_demo_pipeline_slot = threading.BoundedSemaphore(value=1)
+_oauth_manager_lock = threading.Lock()
+_oauth_manager: OAuthTokenManager | None = None
+
+
+def _oauth_runtime_configured() -> bool:
+    return all(
+        os.environ.get(name)
+        for name in (
+            "TALLY_MCP_CLUSTER_ID",
+            "TALLY_MCP_DATABASE",
+            "TALLY_OAUTH_TOKEN_PARAMETER",
+            "TALLY_OAUTH_REFRESH_LEASE_TABLE",
+        )
+    )
+
+
+def _get_oauth_manager() -> OAuthTokenManager:
+    """Create the one process-shared manager; rotation is leased across processes."""
+    global _oauth_manager
+    if not _oauth_runtime_configured():
+        raise PublicDemoUnavailableError("configuration_unavailable")
+    with _oauth_manager_lock:
+        if _oauth_manager is None:
+            region = os.environ.get("AWS_REGION", "us-east-1")
+            parameter_name = os.environ["TALLY_OAUTH_TOKEN_PARAMETER"]
+            lease_table = os.environ["TALLY_OAUTH_REFRESH_LEASE_TABLE"]
+            store = SSMTokenStore(
+                boto3.client("ssm", region_name=region),
+                parameter_name=parameter_name,
+            )
+            lease = DynamoDBRefreshLease(
+                boto3.client("dynamodb", region_name=region),
+                table_name=lease_table,
+                bundle_key=parameter_name,
+            )
+            _oauth_manager = OAuthTokenManager(store, refresh_lease=lease)
+        return _oauth_manager
+
+
 def _dal() -> DAL:
     return DAL.connect(Tenant(tenant_id=DEMO_TENANT_ID, actor=DEMO_ACTOR))
 
 
-@app.get("/healthz")
-def healthz() -> dict:
-    """Each dependency checked with a real, cheap query - never assumed
-    healthy. MCP is configuration-only here: a live MCP call on every health
-    request would be wasteful and would not prove the later-contest path."""
+def _database_health_status() -> str:
     db_status = "ok"
     try:
         with _dal() as dal:
@@ -134,18 +234,16 @@ def healthz() -> dict:
             dal.execute("SELECT 1 FROM tenants WHERE id=%s LIMIT 1", (), tag="healthz.db")
     except Exception:  # noqa: BLE001 - a failed health check reports itself, never raises
         db_status = "error"
+    return db_status
 
-    mcp_configured = all(
-        os.environ.get(name)
-        for name in (
-            "TALLY_MCP_CLUSTER_ID",
-            "TALLY_MCP_DATABASE",
-            "TALLY_MCP_ACCESS_TOKEN",
-            "TALLY_MCP_SERVICE_IDENTITY",
-            "TALLY_MCP_PERMISSION_MODE",
-        )
-    )
-    return {
+
+@app.get("/healthz")
+def healthz() -> dict:
+    """Report dependency state without exposing raw connection details."""
+    db_status = _database_health_status()
+
+    mcp_configured = _oauth_runtime_configured()
+    body = {
         "db": db_status,
         "mcp": "configured_not_checked" if mcp_configured else "not_configured",
         "bedrock": "not_checked",  # a live Bedrock call on every /healthz hit is wasteful;
@@ -153,6 +251,91 @@ def healthz() -> dict:
         "last_snapshot": None,
         "version": "local-dev",
     }
+    return body
+
+
+@app.get("/readyz", response_model=None)
+def readyz() -> dict | JSONResponse:
+    """App Runner readiness fails non-2xx when the required DB path is down."""
+    if _database_health_status() != "ok":
+        return JSONResponse(status_code=503, content={"ready": False})
+    if PUBLIC_DEMO_ENABLED:
+        try:
+            _public_demo_config().validate()
+        except PublicDemoUnavailableError:
+            return JSONResponse(status_code=503, content={"ready": False})
+    return {"ready": True}
+
+
+def _public_demo_config() -> PublicDemoConfig:
+    return PublicDemoConfig(
+        tenant_id=DEMO_TENANT_ID,
+        case_id=os.environ.get("TALLY_PUBLIC_DEMO_CASE_ID", ""),
+        contest_id=os.environ.get("TALLY_PUBLIC_DEMO_CONTEST_ID", ""),
+    )
+
+
+def _run_public_demo_live() -> dict:
+    if not public_demo_pipeline_slot.acquire(blocking=False):
+        raise PublicDemoUnavailableError("live_dependencies_busy")
+    config = _public_demo_config()
+
+    try:
+        def dal_factory() -> DAL:
+            return DAL.connect(Tenant(tenant_id=config.tenant_id, actor="public-demo-read"))
+
+        return run_public_demo(
+            config,
+            dal_factory=dal_factory,
+            s3_client=boto3.client(
+                "s3", region_name=os.environ.get("AWS_REGION", "us-east-1")
+            ),
+            token_manager=_get_oauth_manager(),
+        )
+    finally:
+        public_demo_pipeline_slot.release()
+
+
+@app.get("/public/demo/hero", response_model=None)
+async def public_demo_hero() -> dict | JSONResponse:
+    """Execute one server-selected synthetic replay; accept no caller inputs."""
+    if not PUBLIC_DEMO_ENABLED:
+        return JSONResponse(
+            status_code=503,
+            content=unavailable_projection("public_demo_disabled"),
+        )
+    try:
+        limit = max(1, min(int(os.environ.get("TALLY_PUBLIC_RATE_LIMIT_PER_MINUTE", "12")), 60))
+        timeout = max(2.0, min(float(os.environ.get("TALLY_PUBLIC_TIMEOUT_SECONDS", "20")), 30.0))
+    except ValueError:
+        return JSONResponse(
+            status_code=503,
+            content=unavailable_projection("configuration_unavailable"),
+        )
+    # One global bucket bounds total dependency calls even when callers rotate
+    # addresses. App Runner is also capped at one instance by deployment.
+    if not public_demo_rate_limiter.allow("public-demo-global", limit=limit):
+        return JSONResponse(
+            status_code=429,
+            content=unavailable_projection("rate_limited"),
+        )
+    try:
+        return await asyncio.wait_for(run_in_threadpool(_run_public_demo_live), timeout=timeout)
+    except TimeoutError:
+        return JSONResponse(
+            status_code=503,
+            content=unavailable_projection("live_dependencies_timed_out"),
+        )
+    except PublicDemoUnavailableError as exc:
+        return JSONResponse(
+            status_code=503,
+            content=unavailable_projection(exc.safe_code),
+        )
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content=unavailable_projection("live_dependencies_unavailable"),
+        )
 
 
 @app.post("/invoices", status_code=202)
@@ -456,9 +639,19 @@ async def approve_case(case_id: str, actor: AuthedActor = Depends(require_auth))
 
 @app.websocket("/feed")
 async def ws_feed(websocket: WebSocket) -> None:
+    if PUBLIC_DEMO_ENABLED:
+        await websocket.close(code=1008)
+        return
     await feed.connect(websocket)
     try:
         while True:
             await websocket.receive_text()  # client sends nothing meaningful; just keep-alive
     except WebSocketDisconnect:
         feed.disconnect(websocket)
+
+
+_static_root = Path(os.environ.get("TALLY_STATIC_DIR", "/app/ui"))
+if _static_root.is_dir():
+    # API routes are registered first; this final catch-all serves the Vite
+    # build without placing a credential or deployment identifier in it.
+    app.mount("/", StaticFiles(directory=_static_root, html=True), name="public-ui")

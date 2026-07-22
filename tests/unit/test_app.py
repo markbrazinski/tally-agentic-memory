@@ -128,9 +128,8 @@ def test_healthz_truth_labels_configured_mcp_without_claiming_live_health(client
     for name in (
         "TALLY_MCP_CLUSTER_ID",
         "TALLY_MCP_DATABASE",
-        "TALLY_MCP_ACCESS_TOKEN",
-        "TALLY_MCP_SERVICE_IDENTITY",
-        "TALLY_MCP_PERMISSION_MODE",
+        "TALLY_OAUTH_TOKEN_PARAMETER",
+        "TALLY_OAUTH_REFRESH_LEASE_TABLE",
     ):
         monkeypatch.setenv(name, "test-only-placeholder")
     with patch("src.platform.app._dal", return_value=_fake_dal()):
@@ -149,9 +148,9 @@ def test_healthz_query_does_not_reference_nonexistent_tenant_id_column():
     the wrong column name."""
     import inspect
 
-    from src.platform.app import healthz
+    from src.platform.app import _database_health_status
 
-    source = inspect.getsource(healthz)
+    source = inspect.getsource(_database_health_status)
     assert "FROM tenants WHERE id=" in source
     assert "FROM tenants WHERE tenant_id=" not in source
 
@@ -165,8 +164,126 @@ def test_healthz_reports_db_error_when_query_fails(client):
     with patch("src.platform.app._dal", return_value=dal):
         response = client.get("/healthz")
 
-    assert response.status_code == 200  # degraded, not a 500 - judges can hit it either way
+    assert response.status_code == 200
     assert response.json()["db"] == "error"
+
+
+def test_readyz_is_non_200_when_database_is_unavailable(client):
+    class RaisingConnection(FakeConnection):
+        def cursor(self):
+            raise RuntimeError("connection refused")
+
+    dal = DAL(RaisingConnection(), Tenant(tenant_id=TENANT_ID, actor="rachel.martinez"))
+    with patch("src.platform.app._dal", return_value=dal):
+        response = client.get("/readyz")
+    assert response.status_code == 503
+    assert response.json() == {"ready": False}
+
+
+def test_readyz_reports_ready_after_real_query_shape_succeeds(client):
+    with patch("src.platform.app._dal", return_value=_fake_dal()):
+        response = client.get("/readyz")
+    assert response.status_code == 200
+    assert response.json() == {"ready": True}
+
+
+def test_public_demo_route_is_logged_out_fixed_and_safe(monkeypatch):
+    import src.platform.app as app_module
+
+    monkeypatch.setattr(app_module, "PUBLIC_DEMO_ENABLED", True)
+    monkeypatch.setattr(app_module.public_demo_rate_limiter, "allow", lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        app_module,
+        "_run_public_demo_live",
+        lambda: {
+            "classification": "SYNTHETIC DEMO — FICTIONAL DATA",
+            "status": "executed",
+            "mock_fallback": False,
+        },
+    )
+
+    response = TestClient(app).get("/public/demo/hero")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "executed"
+
+
+def test_public_demo_route_has_no_caller_selected_inputs(monkeypatch):
+    import inspect
+
+    import src.platform.app as app_module
+
+    source = inspect.getsource(app_module.public_demo_hero)
+    assert "case_id" not in source
+    assert "tenant_id" not in source
+    assert "contest_id" not in source
+    assert "hlc" not in source.lower()
+    assert "sql" not in source.lower()
+
+
+def test_public_demo_dependency_failure_is_safe_and_has_no_mock_fallback(monkeypatch):
+    import src.platform.app as app_module
+    from src.platform.public_demo import PublicDemoUnavailableError
+
+    monkeypatch.setattr(app_module, "PUBLIC_DEMO_ENABLED", True)
+    monkeypatch.setattr(app_module.public_demo_rate_limiter, "allow", lambda *args, **kwargs: True)
+
+    def unavailable():
+        raise PublicDemoUnavailableError("mcp_memory_unavailable")
+
+    monkeypatch.setattr(app_module, "_run_public_demo_live", unavailable)
+    response = TestClient(app).get("/public/demo/hero")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "classification": "SYNTHETIC DEMO — FICTIONAL DATA",
+        "status": "unavailable",
+        "error_code": "mcp_memory_unavailable",
+        "mock_fallback": False,
+    }
+
+
+def test_public_demo_rate_limit_is_bounded(monkeypatch):
+    import src.platform.app as app_module
+
+    monkeypatch.setattr(app_module, "PUBLIC_DEMO_ENABLED", True)
+    monkeypatch.setattr(app_module.public_demo_rate_limiter, "allow", lambda *args, **kwargs: False)
+    response = TestClient(app).get("/public/demo/hero")
+    assert response.status_code == 429
+    assert response.json()["error_code"] == "rate_limited"
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("get", "/invoices"),
+        ("post", "/invoices"),
+        ("get", "/cases/00000000-0000-4000-8000-000000000001"),
+        ("get", "/cases/00000000-0000-4000-8000-000000000001/replay"),
+        ("post", "/cases/00000000-0000-4000-8000-000000000001/approve"),
+        ("get", "/openapi.json"),
+        ("get", "/docs"),
+    ],
+)
+def test_public_demo_mode_blocks_every_legacy_http_route(monkeypatch, method, path):
+    import src.platform.app as app_module
+
+    monkeypatch.setattr(app_module, "PUBLIC_DEMO_ENABLED", True)
+    response = getattr(TestClient(app), method)(path)
+    assert response.status_code == 404
+    assert response.json() == {"detail": "not found"}
+
+
+def test_public_demo_mode_closes_legacy_feed(monkeypatch):
+    from starlette.websockets import WebSocketDisconnect
+
+    import src.platform.app as app_module
+
+    monkeypatch.setattr(app_module, "PUBLIC_DEMO_ENABLED", True)
+    with pytest.raises(WebSocketDisconnect) as denied:
+        with TestClient(app).websocket_connect("/feed"):
+            pass
+    assert denied.value.code == 1008
 
 
 def test_post_invoices_rejects_non_pdf_content_type(client):

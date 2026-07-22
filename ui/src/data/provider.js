@@ -29,14 +29,9 @@
 //   and renders immediately with whatever getCases()/etc. return right
 //   now (empty for a fresh LiveProvider), then re-renders when notified.
 //
-// Methods below this line exist only on LiveProvider — MockProvider has no
-// backend to fetch from or seal against, so it doesn't implement them.
-// Component code must check `typeof this.provider.fetchCase === 'function'`
-// (or branch on getClockMode() === 'live') before calling them.
+// The logged-out public provider adds only replayCase for its already-loaded,
+// server-selected projection. It deliberately has no generic case lookup,
+// mutation, bearer-authentication, or feed capability.
 //
-// @property {(id: string) => Promise<object>} fetchCase - GET /cases/{id}
-// @property {(id: string) => Promise<object>} replayCase - GET /cases/{id}/replay
-// @property {(caseId: string) => Promise<object>} approveCase - POST /cases/{id}/approve
-// @property {(onEvent: (frame: {event: string, ts: string, payload: object}) => void) => () => void} subscribeFeed -
-//   opens the WS feed, calls onEvent per frame, returns an unsubscribe function
+// @property {(localHeroHandle: string) => Promise<object>} replayCase
 export {};

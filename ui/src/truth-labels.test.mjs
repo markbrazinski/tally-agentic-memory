@@ -34,13 +34,15 @@ test("synthetic query examples are labeled not executed and do not claim credent
   assert.doesNotMatch(html, /isolated tenant/);
 });
 
-test("live bearer credentials are never bundled through Vite build variables", () => {
+test("public mode has no browser credential configuration", () => {
   assert.doesNotMatch(html, /VITE_TALLY_BEARER_TOKEN/);
-  assert.match(html, /window\.__TALLY_RUNTIME_CONFIG__/);
+  assert.doesNotMatch(html, /window\.__TALLY_RUNTIME_CONFIG__/);
+  assert.doesNotMatch(liveProvider, /Authorization|bearerToken/);
 });
 
-test("live case view uses the real replay route rather than the film timeline", () => {
-  assert.match(liveProvider, /\/cases\/\$\{encodeURIComponent\(id\)\}\/replay/);
+test("public case view uses only the same-origin hero projection", () => {
+  assert.match(liveProvider, /fetch\("\/public\/demo\/hero"/);
+  assert.doesNotMatch(liveProvider, /\/invoices|\/cases\//);
   assert.match(html, /this\.provider\.replayCase\(id\)/);
   assert.match(html, /LIVE COCKROACH REPLAY/);
 });

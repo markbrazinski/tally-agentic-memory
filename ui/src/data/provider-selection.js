@@ -29,16 +29,11 @@ function createUnavailableProvider(reason) {
 }
 
 export function selectProvider(
-  { wantsLive, apiBase, bearerToken },
+  { wantsFilm = false } = {},
   { mockFactory = createMockProvider, liveFactory = createLiveProvider } = {},
 ) {
-  if (!wantsLive) return mockFactory();
-  if (!apiBase || !bearerToken) {
-    return createUnavailableProvider(
-      "Live mode was requested, but its API configuration is incomplete. Synthetic film data was not substituted.",
-    );
-  }
-  return liveFactory({ apiBase, bearerToken });
+  if (wantsFilm) return mockFactory();
+  return liveFactory();
 }
 
 export { createUnavailableProvider };

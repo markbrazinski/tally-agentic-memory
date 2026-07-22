@@ -8,18 +8,22 @@ logs bearer credentials or raw responses.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
+import secrets
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 import httpx
 
 MCP_ENDPOINT = "https://cockroachlabs.cloud/mcp"
-PROTOCOL_VERSION = "2025-06-18"
+PROTOCOL_VERSION = "2025-11-25"
 WRITE_TOOLS = frozenset({"create_database", "create_table", "insert_rows"})
 READ_TOOLS = frozenset(
     {
@@ -34,6 +38,9 @@ READ_TOOLS = frozenset(
         "show_running_queries",
     }
 )
+OBSERVED_COCKROACH_READ_SCOPE_DENIAL_SHA256 = (
+    "2a95a5f43db2db6a6181556535a8c0c8201e7cbd44f3ff64fc760bf08210e5e7"
+)
 
 
 class MCPUnavailableError(RuntimeError):
@@ -44,55 +51,90 @@ class MCPPermissionError(MCPUnavailableError):
     """The configured identity is unauthorized or not demonstrably read-only."""
 
 
+class MCPAuthenticationError(MCPPermissionError):
+    """Managed MCP rejected an expired or invalid bearer token with HTTP 401."""
+
+
 class MCPProtocolError(MCPUnavailableError):
     """The server returned a malformed or incompatible MCP response."""
 
 
-class MCPToolDeniedError(MCPPermissionError):
-    """Managed MCP explicitly denied a requested tool invocation."""
-
-
 class MCPAuthorizationDeniedError(MCPPermissionError):
-    """Managed MCP returned HTTP 403 for an authenticated request."""
+    """Managed MCP returned OAuth insufficient_scope for the write scope."""
 
 
-def _explicit_denial_text(value: Any) -> bool:
-    text = str(value).lower()
-    direct_denial = any(
-        marker in text
-        for marker in (
-            "unknown tool",
-            "tool not found",
-            "not authorized",
-            "authorization denied",
-            "unauthorized",
-            "forbidden",
-            "permission denied",
-            "insufficient scope",
-        )
+class MCPForbiddenError(MCPPermissionError):
+    """Managed MCP returned a 403 that was not a write-scope denial proof."""
+
+
+def _explicit_write_scope_denial(response: httpx.Response) -> bool:
+    """Require OAuth insufficient_scope semantics for the write capability."""
+    header = response.headers.get("www-authenticate", "")
+    if not header.lower().startswith("bearer "):
+        return False
+    parameters = {
+        key.lower(): value
+        for key, value in re.findall(r'([A-Za-z][A-Za-z0-9_-]*)="([^"\\]*)"', header)
+    }
+    return parameters.get("error") == "insufficient_scope" and "mcp:write" in set(
+        parameters.get("scope", "").split()
     )
-    provider_write_denial = all(marker in text for marker in ("permission", "access", "write"))
-    return direct_denial or provider_write_denial
+
+
+def _explicit_inband_authorization_denial(result: Mapping[str, Any]) -> bool:
+    """Recognize Cockroach's observed, undocumented permission-denial shape.
+
+    This is deliberately not generic permission-text matching. It is accepted
+    only for an ``isError`` result from the hard-coded write probe whose
+    normalized text exactly matches the one-way fingerprint observed live.
+    """
+    content = result.get("content")
+    if result.get("isError") is not True or not isinstance(content, list) or len(content) != 1:
+        return False
+    block = content[0]
+    if not isinstance(block, Mapping) or block.get("type") != "text":
+        return False
+    normalized = " ".join(str(block.get("text", "")).lower().split())
+    observed = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return secrets.compare_digest(
+        observed, OBSERVED_COCKROACH_READ_SCOPE_DENIAL_SHA256
+    )
 
 
 @dataclass(frozen=True)
 class ManagedMCPConfig:
     cluster_id: str
     database: str
-    access_token: str
+    access_token: str = field(repr=False)
     service_identity: str
     permission_mode: str
     endpoint: str = MCP_ENDPOINT
     timeout_seconds: float = 15.0
 
     @classmethod
-    def from_env(cls) -> ManagedMCPConfig:
+    def from_env(cls, *, access_token: str | None = None) -> ManagedMCPConfig:
+        oauth_runtime = access_token is not None
         values = {
             "cluster_id": os.environ.get("TALLY_MCP_CLUSTER_ID", ""),
             "database": os.environ.get("TALLY_MCP_DATABASE", ""),
-            "access_token": os.environ.get("TALLY_MCP_ACCESS_TOKEN", ""),
-            "service_identity": os.environ.get("TALLY_MCP_SERVICE_IDENTITY", ""),
-            "permission_mode": os.environ.get("TALLY_MCP_PERMISSION_MODE", ""),
+            # Runtime callers pass the OAuth-manager token explicitly.  The
+            # environment lookup remains only for older private operator
+            # tools, never for the public demo path.
+            "access_token": (
+                access_token
+                if access_token is not None
+                else os.environ.get("TALLY_MCP_ACCESS_TOKEN", "")
+            ),
+            "service_identity": (
+                "oauth-read-only-client"
+                if oauth_runtime
+                else os.environ.get("TALLY_MCP_SERVICE_IDENTITY", "")
+            ),
+            "permission_mode": (
+                "oauth-read-only"
+                if oauth_runtime
+                else os.environ.get("TALLY_MCP_PERMISSION_MODE", "")
+            ),
         }
         missing = [name for name, value in values.items() if not value.strip()]
         if missing:
@@ -110,7 +152,7 @@ class ManagedMCPConfig:
             raise MCPPermissionError("credential and service identity are required")
         if self.permission_mode != "oauth-read-only":
             raise MCPPermissionError(
-                "Gate 3 requires a live OAuth token authorized for read-only MCP access"
+                "Managed MCP requires a live OAuth token authorized for read-only access"
             )
         if self.timeout_seconds <= 0:
             raise MCPPermissionError("MCP timeout must be positive")
@@ -235,6 +277,7 @@ class CockroachManagedMCP:
 
     def _post(self, payload: dict[str, Any], *, expect_response: bool) -> tuple[dict, Any]:
         expected_id = payload.get("id")
+        http_failure: MCPUnavailableError | None = None
         try:
             headers = self._headers()
             headers["Mcp-Method"] = str(payload.get("method", ""))
@@ -248,17 +291,24 @@ class CockroachManagedMCP:
             )
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 403:
-                raise MCPAuthorizationDeniedError(
+            if exc.response.status_code == 403 and _explicit_write_scope_denial(exc.response):
+                http_failure = MCPAuthorizationDeniedError(
                     "Managed MCP denied the requested operation"
-                ) from exc
-            if exc.response.status_code == 401:
-                raise MCPPermissionError("Managed MCP rejected the configured identity") from exc
-            raise MCPUnavailableError(
-                f"Managed MCP HTTP failure ({exc.response.status_code})"
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise MCPUnavailableError("Managed MCP transport unavailable") from exc
+                )
+            elif exc.response.status_code == 401:
+                http_failure = MCPAuthenticationError(
+                    "Managed MCP rejected the configured identity"
+                )
+            elif exc.response.status_code == 403:
+                http_failure = MCPForbiddenError("Managed MCP forbade the request")
+            else:
+                http_failure = MCPUnavailableError(
+                    f"Managed MCP HTTP failure ({exc.response.status_code})"
+                )
+        except httpx.HTTPError:
+            http_failure = MCPUnavailableError("Managed MCP transport unavailable")
+        if http_failure is not None:
+            raise http_failure
 
         if not expect_response:
             if response.status_code not in {200, 202, 204}:
@@ -278,11 +328,6 @@ class CockroachManagedMCP:
         if not isinstance(body, Mapping) or body.get("id") != expected_id:
             raise MCPProtocolError("Managed MCP response ID mismatch")
         if "error" in body:
-            error = body.get("error")
-            code = error.get("code") if isinstance(error, Mapping) else None
-            message = error.get("message") if isinstance(error, Mapping) else ""
-            if code == -32601 or (code == -32602 and _explicit_denial_text(message)):
-                raise MCPToolDeniedError("Managed MCP denied the requested tool")
             raise MCPUnavailableError("Managed MCP returned a protocol error")
         result = body.get("result")
         if not isinstance(result, Mapping):
@@ -320,7 +365,7 @@ class CockroachManagedMCP:
             expect_response=False,
         )
 
-    def _read_tool(self) -> tuple[dict[str, Any], tuple[str, ...]]:
+    def _discover_tools(self) -> tuple[list[dict[str, Any]], tuple[str, ...]]:
         tools: list[dict[str, Any]] = []
         cursor: str | None = None
         seen_cursors: set[str] = set()
@@ -347,27 +392,83 @@ class CockroachManagedMCP:
                 "configured MCP identity advertises unrecognized tools: "
                 + ", ".join(sorted(unknown_tools))
             )
+        return tools, names
+
+    def _read_tool(self) -> tuple[dict[str, Any], tuple[str, ...]]:
+        tools, names = self._discover_tools()
         select_tool = next((tool for tool in tools if tool.get("name") == "select_query"), None)
         if select_tool is None:
             raise MCPPermissionError("configured MCP identity cannot use select_query")
         return select_tool, names
 
     def verify_known_write_tool_denied(self) -> bool:
-        """Execute a no-arguments write-tool request and require server denial.
+        """Execute a non-mutating write-tool probe and require authorization denial.
 
-        Providers may advertise cluster-level tools that the OAuth scope cannot
-        execute.  The deliberately incomplete invocation cannot contain row
-        data and is accepted only when the live server rejects it.
+        The probe targets a fresh random table name through ``insert_rows``.
+        It cannot create a table, so it cannot mutate the isolated database.
+        Only an explicit authorization denial passes. Validation, missing-table,
+        or other execution errors mean the credential was not proven read-only.
         """
         self._initialize()
-        self._read_tool()
+        tools, _ = self._discover_tools()
+        insert_tool = next((tool for tool in tools if tool.get("name") == "insert_rows"), None)
+        if insert_tool is None:
+            raise MCPProtocolError("Managed MCP did not advertise the known write probe tool")
+        arguments = self._write_probe_arguments(insert_tool)
         try:
-            result, _, _ = self._request("tools/call", {"name": "insert_rows", "arguments": {}})
-        except (MCPToolDeniedError, MCPAuthorizationDeniedError):
+            result, _, _ = self._request(
+                "tools/call", {"name": "insert_rows", "arguments": arguments}
+            )
+        except MCPAuthorizationDeniedError:
             return True
-        if result.get("isError") is True and _explicit_denial_text(result.get("content")):
+        if _explicit_inband_authorization_denial(result):
             return True
         raise MCPPermissionError("Managed MCP did not deny the write-tool probe")
+
+    def _write_probe_arguments(self, tool: Mapping[str, Any]) -> dict[str, Any]:
+        schema = tool.get("inputSchema")
+        if not isinstance(schema, Mapping):
+            raise MCPProtocolError("insert_rows has no input schema")
+        properties = schema.get("properties")
+        if not isinstance(properties, Mapping):
+            raise MCPProtocolError("insert_rows input schema has no properties")
+        table_name = f"__tally_gate5_write_denial_probe_{uuid4().hex}"
+        insert_query = (
+            f'INSERT INTO "{table_name}" (gate5_probe) '
+            "VALUES ('denial-required')"
+        )
+        choices = {
+            "database": self.config.database,
+            "database_name": self.config.database,
+            "databaseName": self.config.database,
+            "query": insert_query,
+            "sql": insert_query,
+            "statement": insert_query,
+            "schema": "public",
+            "schema_name": "public",
+            "schemaName": "public",
+            "table": table_name,
+            "table_name": table_name,
+            "tableName": table_name,
+            "rows": [{"gate5_probe": "denial-required"}],
+            "columns": ["gate5_probe"],
+            "values": [["denial-required"]],
+        }
+        arguments = {name: value for name, value in choices.items() if name in properties}
+        has_structured_insert = any(
+            key in arguments for key in ("table", "table_name", "tableName")
+        ) and any(key in arguments for key in ("rows", "values"))
+        has_fixed_query = any(key in arguments for key in ("query", "sql", "statement"))
+        if not has_structured_insert and not has_fixed_query:
+            raise MCPProtocolError("insert_rows schema has no safe recognized probe shape")
+        required = schema.get("required", [])
+        if isinstance(required, list):
+            unsupported = set(required).difference(arguments)
+            if unsupported:
+                raise MCPProtocolError(
+                    "insert_rows requires unsupported fields: " + ", ".join(sorted(unsupported))
+                )
+        return arguments
 
     def _select_arguments(self, tool: Mapping[str, Any], query: str) -> dict[str, Any]:
         schema = tool.get("inputSchema")

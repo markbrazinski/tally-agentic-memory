@@ -76,11 +76,18 @@ class _CallbackHandler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         values = parse_qs(parsed.query)
-        self.__class__.result = {key: entries[0] for key, entries in values.items() if entries}
+        if any(len(entries) != 1 for entries in values.values()):
+            self.__class__.result = {"error": "invalid_callback"}
+        else:
+            self.__class__.result = {
+                key: entries[0] for key, entries in values.items() if entries
+            }
         body = b"Gate 3 read-only authorization received. You may close this tab."
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
         self.wfile.write(body)
 
@@ -106,11 +113,15 @@ def _wait_for_callback(authorization_url: str, *, timeout_seconds: int) -> dict[
 
 
 def _mapping(response: httpx.Response, *, stage: str) -> dict[str, Any]:
+    failed = False
     try:
         response.raise_for_status()
         value = response.json()
-    except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:
-        raise OAuthSetupError(f"oauth_{stage}_failed") from exc
+    except (httpx.HTTPError, json.JSONDecodeError, ValueError):
+        failed = True
+        value = None
+    if failed:
+        raise OAuthSetupError(f"oauth_{stage}_failed")
     if not isinstance(value, Mapping):
         raise OAuthSetupError(f"oauth_{stage}_invalid")
     return dict(value)
@@ -260,10 +271,10 @@ def acquire_read_token(
         )
     except OAuthSetupError:
         raise
-    except httpx.HTTPError as exc:
-        raise OAuthSetupError("oauth_transport_failed") from exc
-    except OSError as exc:
-        raise OAuthSetupError("oauth_local_io_failed") from exc
+    except httpx.HTTPError:
+        raise OAuthSetupError("oauth_transport_failed") from None
+    except OSError:
+        raise OAuthSetupError("oauth_local_io_failed") from None
     finally:
         if owns_client:
             client.close()

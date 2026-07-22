@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import hashlib
 import json
 
 import httpx
 import pytest
 
+import src.external.cockroach_mcp as mcp_module
 from src.external.cockroach_mcp import (
     CockroachManagedMCP,
     ManagedMCPConfig,
+    MCPForbiddenError,
     MCPPermissionError,
     MCPUnavailableError,
 )
@@ -25,13 +28,32 @@ def config(**overrides) -> ManagedMCPConfig:
     return ManagedMCPConfig(**values)
 
 
+def test_config_repr_never_contains_bearer_token():
+    assert "test-only-token" not in repr(config())
+
+
 def _json_response(request, value, status=200, headers=None):
     return httpx.Response(status, json=value, headers=headers, request=request)
 
 
+def _insert_tool():
+    return {
+        "name": "insert_rows",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "database": {"type": "string"},
+                "table": {"type": "string"},
+                "rows": {"type": "array"},
+            },
+            "required": ["database", "table", "rows"],
+        },
+    }
+
+
 def handler(
     *,
-    write_tool=False,
+    write_tool=True,
     second_page_write=False,
     rows=None,
     status=None,
@@ -39,6 +61,7 @@ def handler(
     write_probe_code=-32601,
     write_probe_result=None,
     write_probe_status=None,
+    write_probe_headers=None,
 ):
     seen = []
 
@@ -55,7 +78,7 @@ def handler(
                 {
                     "jsonrpc": "2.0",
                     "id": payload["id"],
-                    "result": {"protocolVersion": "2025-06-18", "capabilities": {}},
+                    "result": {"protocolVersion": "2025-11-25", "capabilities": {}},
                 },
                 headers=headers,
             )
@@ -69,7 +92,7 @@ def handler(
                         "jsonrpc": "2.0",
                         "id": payload["id"],
                         "result": {
-                            "tools": [{"name": "insert_rows", "inputSchema": {"type": "object"}}]
+                            "tools": [_insert_tool()]
                         },
                     },
                 )
@@ -84,7 +107,7 @@ def handler(
                 }
             ]
             if write_tool:
-                tools.append({"name": "insert_rows", "inputSchema": {"type": "object"}})
+                tools.append(_insert_tool())
             result = {"tools": tools}
             if second_page_write:
                 result["nextCursor"] = "page-two"
@@ -95,7 +118,14 @@ def handler(
         if method == "tools/call":
             if payload["params"]["name"] == "insert_rows":
                 if write_probe_status is not None:
-                    return httpx.Response(write_probe_status, request=request)
+                    headers = write_probe_headers
+                    if headers is None and write_probe_status == 403:
+                        headers = {
+                            "www-authenticate": (
+                                'Bearer error="insufficient_scope", scope="mcp:write"'
+                            )
+                        }
+                    return httpx.Response(write_probe_status, headers=headers, request=request)
                 if write_probe_result is not None:
                     return _json_response(
                         request,
@@ -200,15 +230,75 @@ def test_sessionless_server_still_receives_negotiated_protocol_header():
     ]
     assert "mcp-protocol-version" not in methods_and_headers[0][1]
     assert all(
-        headers["mcp-protocol-version"] == "2025-06-18" for _, headers in methods_and_headers[1:]
+        headers["mcp-protocol-version"] == "2025-11-25" for _, headers in methods_and_headers[1:]
     )
 
 
 def test_live_shaped_write_probe_requires_server_denial_and_redacts_error():
-    respond, _ = handler()
+    respond, seen = handler(write_probe_status=403)
     http = httpx.Client(transport=httpx.MockTransport(respond))
     with CockroachManagedMCP(config(), http_client=http) as mcp:
         assert mcp.verify_known_write_tool_denied() is True
+    call = next(
+        json.loads(request.content)
+        for request in seen
+        if json.loads(request.content)["method"] == "tools/call"
+    )
+    arguments = call["params"]["arguments"]
+    assert arguments["database"] == "synthetic_database"
+    assert arguments["table"].startswith("__tally_gate5_write_denial_probe_")
+    assert arguments["rows"] == [{"gate5_probe": "denial-required"}]
+
+
+def test_live_query_shaped_write_probe_targets_nonexistent_table():
+    respond, seen = handler(write_probe_status=403)
+
+    def query_schema(request):
+        payload = json.loads(request.content)
+        if payload["method"] == "tools/list":
+            return _json_response(
+                request,
+                {
+                    "jsonrpc": "2.0",
+                    "id": payload["id"],
+                    "result": {
+                        "tools": [
+                            {
+                                "name": "insert_rows",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "cluster_id": {"type": "string"},
+                                        "database": {"type": "string"},
+                                        "query": {"type": "string"},
+                                    },
+                                    "required": ["database", "query"],
+                                },
+                            }
+                        ]
+                    },
+                },
+            )
+        return respond(request)
+
+    http = httpx.Client(transport=httpx.MockTransport(query_schema))
+    with CockroachManagedMCP(config(), http_client=http) as mcp:
+        assert mcp.verify_known_write_tool_denied() is True
+
+    call = next(
+        json.loads(request.content)
+        for request in seen
+        if json.loads(request.content)["method"] == "tools/call"
+    )
+    arguments = call["params"]["arguments"]
+    assert arguments["database"] == "synthetic_database"
+    assert arguments["query"].startswith(
+        'INSERT INTO "__tally_gate5_write_denial_probe_'
+    )
+    assert arguments["query"].endswith(
+        '" (gate5_probe) VALUES (\'denial-required\')'
+    )
+    assert "CREATE" not in arguments["query"]
 
 
 def test_invalid_write_arguments_are_not_misreported_as_authorization_denial():
@@ -219,7 +309,7 @@ def test_invalid_write_arguments_are_not_misreported_as_authorization_denial():
             mcp.verify_known_write_tool_denied()
 
 
-def test_unknown_tool_minus_32602_is_accepted_only_with_explicit_semantics():
+def test_unknown_tool_error_is_not_misreported_as_authorization_denial():
     respond, _ = handler(write_probe_code=-32602)
 
     def explicit_unknown(request):
@@ -238,14 +328,23 @@ def test_unknown_tool_minus_32602_is_accepted_only_with_explicit_semantics():
 
     http = httpx.Client(transport=httpx.MockTransport(explicit_unknown))
     with CockroachManagedMCP(config(), http_client=http) as mcp:
-        assert mcp.verify_known_write_tool_denied() is True
+        with pytest.raises(MCPUnavailableError, match="protocol error"):
+            mcp.verify_known_write_tool_denied()
 
 
-def test_http_403_on_write_probe_is_explicit_authorization_denial():
+def test_oauth_insufficient_scope_403_on_write_probe_is_explicit_denial():
     respond, _ = handler(write_probe_status=403)
     http = httpx.Client(transport=httpx.MockTransport(respond))
     with CockroachManagedMCP(config(), http_client=http) as mcp:
         assert mcp.verify_known_write_tool_denied() is True
+
+
+def test_bare_403_is_not_misreported_as_write_authorization_denial():
+    respond, _ = handler(write_probe_status=403, write_probe_headers={})
+    http = httpx.Client(transport=httpx.MockTransport(respond))
+    with CockroachManagedMCP(config(), http_client=http) as mcp:
+        with pytest.raises(MCPForbiddenError, match="forbade"):
+            mcp.verify_known_write_tool_denied()
 
 
 def test_tool_execution_error_requires_explicit_denial_text():
@@ -261,7 +360,7 @@ def test_tool_execution_error_requires_explicit_denial_text():
             mcp.verify_known_write_tool_denied()
 
 
-def test_tool_execution_error_with_explicit_authorization_denial_is_denial():
+def test_tool_text_claiming_authorization_denial_is_not_structured_proof():
     respond, _ = handler(
         write_probe_result={
             "isError": True,
@@ -270,10 +369,11 @@ def test_tool_execution_error_with_explicit_authorization_denial_is_denial():
     )
     http = httpx.Client(transport=httpx.MockTransport(respond))
     with CockroachManagedMCP(config(), http_client=http) as mcp:
-        assert mcp.verify_known_write_tool_denied() is True
+        with pytest.raises(MCPPermissionError, match="did not deny"):
+            mcp.verify_known_write_tool_denied()
 
 
-def test_provider_write_permission_access_error_is_explicit_denial():
+def test_ambiguous_provider_permission_text_is_not_structured_proof():
     respond, _ = handler(
         write_probe_result={
             "isError": True,
@@ -287,7 +387,52 @@ def test_provider_write_permission_access_error_is_explicit_denial():
     )
     http = httpx.Client(transport=httpx.MockTransport(respond))
     with CockroachManagedMCP(config(), http_client=http) as mcp:
+        with pytest.raises(MCPPermissionError, match="did not deny"):
+            mcp.verify_known_write_tool_denied()
+
+
+def test_observed_inband_insufficient_permission_shape_is_denial(monkeypatch):
+    detail = "Synthetic observed provider authorization denial"
+    monkeypatch.setattr(
+        mcp_module,
+        "OBSERVED_COCKROACH_READ_SCOPE_DENIAL_SHA256",
+        hashlib.sha256(detail.lower().encode()).hexdigest(),
+    )
+    respond, _ = handler(
+        write_probe_result={
+            "isError": True,
+            "content": [
+                {
+                    "type": "text",
+                    "text": detail,
+                }
+            ],
+        }
+    )
+    http = httpx.Client(transport=httpx.MockTransport(respond))
+    with CockroachManagedMCP(config(), http_client=http) as mcp:
         assert mcp.verify_known_write_tool_denied() is True
+
+
+@pytest.mark.parametrize(
+    "detail",
+    [
+        "Insufficient permission: access requires a missing argument",
+        "Insufficient permission: access requires a table that does not exist",
+        "Insufficient permission: access requires valid syntax",
+    ],
+)
+def test_validation_or_execution_markers_override_permission_words(detail):
+    respond, _ = handler(
+        write_probe_result={
+            "isError": True,
+            "content": [{"type": "text", "text": detail}],
+        }
+    )
+    http = httpx.Client(transport=httpx.MockTransport(respond))
+    with CockroachManagedMCP(config(), http_client=http) as mcp:
+        with pytest.raises(MCPPermissionError, match="did not deny"):
+            mcp.verify_known_write_tool_denied()
 
 
 def test_adapter_rejects_non_select_without_network_call():
@@ -314,9 +459,8 @@ def test_adapter_rejects_stacked_statement_without_network_call():
     assert seen == []
 
 
-@pytest.mark.parametrize("status", [401, 403])
-def test_auth_failure_is_redacted_permission_error(status):
-    respond, _ = handler(status=status)
+def test_auth_failure_is_redacted_permission_error():
+    respond, _ = handler(status=401)
     http = httpx.Client(transport=httpx.MockTransport(respond))
     with CockroachManagedMCP(config(), http_client=http) as mcp:
         with pytest.raises(MCPPermissionError) as exc:
@@ -335,6 +479,9 @@ def test_transport_outage_is_recoverable_and_redacted():
     assert str(exc.value) == "Managed MCP transport unavailable"
 
 
-def test_api_key_mode_is_not_accepted_as_read_only_proof():
-    with pytest.raises(MCPPermissionError, match="OAuth"):
-        CockroachManagedMCP(config(permission_mode="service-account-api-key"))
+@pytest.mark.parametrize(
+    "mode", ("service-account-api-key", "service-account-api-key-write-denied")
+)
+def test_api_key_modes_are_not_accepted_as_read_only_proof(mode):
+    with pytest.raises(MCPPermissionError, match="requires a live OAuth token"):
+        CockroachManagedMCP(config(permission_mode=mode))

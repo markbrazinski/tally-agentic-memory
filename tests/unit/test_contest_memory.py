@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from src.external.cockroach_mcp import MCPCallTrace, MCPSelectResult, MCPUnavailableError
+from src.external.cockroach_mcp import (
+    MCPAuthenticationError,
+    MCPCallTrace,
+    MCPSelectResult,
+    MCPUnavailableError,
+)
 from src.platform.contest_memory import build_sealed_memory_query, retrieve_contest_memory
 from tests.unit.test_sealed_memory import CASE_ID, CONTEST_ID, TENANT_ID, sealed_rows
 
@@ -83,6 +88,20 @@ def test_outage_is_recoverable_and_never_invents_memory():
     assert outcome.error_code == "mcp_unavailable"
     assert outcome.memory is None
     assert outcome.mcp_trace is None
+
+
+def test_authentication_error_propagates_for_the_runtime_single_retry():
+    try:
+        retrieve_contest_memory(
+            Selector(error=MCPAuthenticationError("unauthorized")),
+            tenant_id=TENANT_ID,
+            case_id=CASE_ID,
+            contest_id=CONTEST_ID,
+        )
+    except MCPAuthenticationError:
+        pass
+    else:
+        raise AssertionError("authentication failures must reach the runtime retry boundary")
 
 
 def test_malformed_return_is_unavailable_not_memory():

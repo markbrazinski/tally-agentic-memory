@@ -1,25 +1,79 @@
-// LiveProvider (B1FE-S3) — speaks the real API. Implements DataProvider
-// (provider.js) for the seed-shaped getters, plus fetchCase/replayCase/approveCase/
-// subscribeFeed for the routes that exist: GET /invoices, GET /cases/{id},
-// POST /cases/{id}/approve, WS /feed (confirmed live against
-// bundle-0-S3/bundle-2-S0 — see ui/docs/s3-view-triage-proposal.md).
+// PublicDemoProvider — the logged-out, read-only judge surface.
 //
-// Routes that do NOT exist yet (ledger, recordings, contests, rebuttal,
-// carriers, clerk run detail, evals) have no LiveProvider method —
-// Component must not call one that isn't here. Per S1/S3's view-triage
-// ruling those views stay fixture-disclosed or film-only until a later
-// backend bundle ships their routes.
-//
-// getCases() is synchronous (interface parity with MockProvider) but starts
-// empty — the constructor kicks off a background GET /invoices and calls
-// onDataChange's listener when it lands, instead of blocking mount on a
-// network round trip (see provider.js's onDataChange doc for why: no clean
-// way to gate support.js's boot from outside it).
-//
-// implements DataProvider (see provider.js)
-export function createLiveProvider({ apiBase, bearerToken }) {
-  const authHeaders = { Authorization: `Bearer ${bearerToken}` };
-  let cases = [];
+// It consumes exactly one same-origin projection. It intentionally has no
+// generic invoice/case client, mutation method, bearer-token support, or live
+// feed. The server owns hero selection and returns only public display fields.
+
+const PUBLIC_HERO_HANDLE = "public-demo-hero";
+
+function presentString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function presentRate(value) {
+  return (typeof value === "number" && Number.isFinite(value)) || presentString(value)
+    ? value
+    : null;
+}
+
+function normalizeProjection(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  if (payload.available === false || /unavailable|error/i.test(String(payload.status || ""))) return null;
+
+  const replay = payload.replay && typeof payload.replay === "object" ? payload.replay : payload;
+  const then = replay.then && typeof replay.then === "object" ? replay.then : {};
+  const now = replay.now && typeof replay.now === "object" ? replay.now : {};
+  const retention = replay.retention && typeof replay.retention === "object" ? replay.retention : {};
+  const tamper = replay.tamper_check && typeof replay.tamper_check === "object" ? replay.tamper_check : {};
+  const receipt = replay.receipt && typeof replay.receipt === "object" ? replay.receipt : {};
+
+  const thenState = presentString(then.state ?? replay.then_state ?? replay.historical_state);
+  const nowState = presentString(now.state ?? replay.now_state ?? replay.current_state);
+  const thenRate = presentRate(then.tariff_rate ?? then.recorded_rate ?? replay.then_rate ?? replay.historical_rate);
+  const nowRate = presentRate(now.tariff_rate ?? now.recorded_rate ?? replay.now_rate ?? replay.current_rate);
+  const ttlDays = retention.ttl_days ?? replay.retention_days;
+  const retentionLanguage = presentString(retention.language ?? replay.retention_language);
+  const tamperMatch = tamper.match ?? receipt.bindings_unchanged ?? replay.tamper_match;
+
+  // An incomplete 200 response is unavailable, not permission to invent or
+  // fall back to the synthetic film.
+  if (!thenState || !nowState || thenRate == null || nowRate == null) return null;
+  if (!Number.isFinite(ttlDays) || !retentionLanguage || typeof tamperMatch !== "boolean") return null;
+
+  const display = payload.display && typeof payload.display === "object"
+    ? payload.display
+    : (payload.case && typeof payload.case === "object"
+      ? payload.case
+      : (payload.hero && typeof payload.hero === "object" ? payload.hero : {}));
+
+  return {
+    case: {
+      // This local handle is deliberately unrelated to a database identifier.
+      id: PUBLIC_HERO_HANDLE,
+      container: presentString(display.container ?? display.container_label ?? display.importer),
+      carrier: presentString(display.carrier ?? display.carrier_label) || "Public demo",
+      invoiceNo: presentString(display.invoice ?? display.invoice_label ?? display.reference) || "Replay projection",
+      amount: null,
+      dispute: null,
+      verdict: "PUBLIC_DEMO",
+      citedRule: "Read-only replay projection",
+      aT: null,
+      cT: null,
+      sT: null,
+      kT: null,
+      rT: null,
+    },
+    replay: {
+      then: { state: thenState, tariff_rate: thenRate },
+      now: { state: nowState, tariff_rate: nowRate },
+      retention: { ttl_days: ttlDays, language: retentionLanguage },
+      tamper_check: { match: tamperMatch },
+    },
+  };
+}
+
+export function createLiveProvider() {
+  let projection = null;
   let changeListeners = [];
   let loadState = "loading";
 
@@ -27,132 +81,78 @@ export function createLiveProvider({ apiBase, bearerToken }) {
     changeListeners.forEach((fn) => fn());
   }
 
-  async function apiFetch(path, opts = {}) {
-    const res = await fetch(`${apiBase}${path}`, opts);
-    if (!res.ok) {
-      // Do not surface an arbitrary response body in the browser console; it
-      // may contain private identifiers or server diagnostics.
-      throw new Error(`${opts.method || "GET"} ${path} -> ${res.status}`);
-    }
-    return res.status === 204 ? null : res.json();
-  }
+  async function loadHero() {
+    const response = await fetch("/public/demo/hero", {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    });
+    if (!response.ok) throw new Error(`GET /public/demo/hero -> ${response.status}`);
 
-  // Maps GET /invoices' real shape to the field names Component's *Vals()
-  // methods read (id/container/carrier/invoiceNo/amount/verdict/aT etc.) —
-  // see ui/docs/s3-view-triage-proposal.md's verdict-mapping note: the real
-  // backend only computes DEFECTIVE/NEEDS_REVIEW/VALID (no tier-3 rate
-  // check yet), so this does NOT invent owe0/over/unver — queueVals()'s
-  // live-mode branch (index.html) handles that distinction honestly.
-  function mapInvoiceItem(item) {
-    return {
-      id: item.case_id || item.id,
-      invoiceId: item.id,
-      container: item.container_no,
-      carrier: item.carrier?.name ?? null,
-      invoiceNo: item.id,
-      amount: item.amount,
-      dispute: item.amount,
-      verdict: item.verdict, // real: DEFECTIVE | NEEDS_REVIEW | VALID
-      citedRule: item.cited_rule,
-      aT: item.received_at ? Date.parse(item.received_at) : null,
-      cT: item.received_at ? Date.parse(item.received_at) : null, // no separate "checked" timestamp yet
-      sT: null, kT: null, rT: null, // sealed/contested/resolved timestamps come from GET /cases/{id}, not this list
-    };
-  }
-
-  async function refreshCases() {
-    const data = await apiFetch("/invoices");
-    cases = data.items.map(mapInvoiceItem);
+    const normalized = normalizeProjection(await response.json());
+    if (!normalized) throw new Error("GET /public/demo/hero -> incomplete public projection");
+    projection = normalized;
     loadState = "ready";
     notifyChange();
   }
-  // ponytail: one retry, not a backoff loop — the initial load has been
-  // observed to transiently fail against the live App Runner endpoint
-  // (cold start), and a single retry clears it every time seen so far.
-  // Escalate to real backoff only if this proves insufficient in practice.
-  refreshCases().catch(() => refreshCases()).catch(() => {
+
+  // One cold-start retry is bounded and never changes the source of truth.
+  loadHero().catch(() => loadHero()).catch(() => {
+    projection = null;
     loadState = "unavailable";
-    console.error("[LiveProvider] initial GET /invoices unavailable after one retry; synthetic data was not substituted.");
+    console.error("[PublicDemoProvider] public hero unavailable; synthetic film data was not substituted.");
     notifyChange();
   });
 
-  // ---------- seed-shaped getters ----------
-  const getCases = () => cases;
+  const getCases = () => projection ? [projection.case] : [];
   const getCredits = () => [];
   const getPaidSeed = () => [];
   const getNotPressedSeed = () => [];
   const getConduct = () => [];
   const getEvalRun = () => null;
   const getTariffCapture = () => ({ at: null, atS: null, rate: null, carrier: null, lane: null });
-  const getHeroCaseId = () => null;
-
-  // Law 2 fence: LiveProvider must never synthesize a log line. Live mode
-  // renders only feed-delivered lines (subscribeFeed), never this.
-  function getCommitLog() {
-    throw new Error("LiveProvider.getCommitLog: live mode renders only feed-delivered lines (Law 2) — this must never be called");
-  }
-
+  const getHeroCaseId = () => projection ? PUBLIC_HERO_HANDLE : null;
+  const getCommitLog = () => {
+    throw new Error("PublicDemoProvider.getCommitLog: no synthetic log may be rendered");
+  };
   const getClockMode = () => "live";
-  const getDisclosure = () => loadState === "unavailable" ? ({
-    label: "LIVE API — UNAVAILABLE",
-    detail: "The initial live data load failed. Synthetic film data was not substituted.",
-    tone: "error",
-  }) : ({
-    label: loadState === "ready" ? "LIVE API" : "LIVE API — LOADING",
-    detail: "Data shown in live-backed views comes from the configured API. Views without a backing route remain unavailable.",
-    tone: "live",
-  });
   const getInitialClock = () => Date.now();
   const getRecordingStart = () => Date.now();
+  const getDisclosure = () => loadState === "unavailable" ? ({
+    label: "PUBLIC DEMO — UNAVAILABLE",
+    detail: "The live public replay projection could not be loaded. Synthetic film data was not substituted.",
+    tone: "error",
+  }) : ({
+    label: loadState === "ready" ? "PUBLIC DEMO — LIVE READ-ONLY" : "PUBLIC DEMO — LOADING",
+    detail: "This logged-out view reads one server-selected public replay projection. Mutations and live feeds are disabled.",
+    tone: "live",
+  });
   const onDataChange = (fn) => { changeListeners.push(fn); };
 
-  // ---------- real routes ----------
-  async function fetchCase(id) {
-    return apiFetch(`/cases/${encodeURIComponent(id)}`);
-  }
-
   async function replayCase(id) {
-    return apiFetch(`/cases/${encodeURIComponent(id)}/replay`, {
-      headers: authHeaders,
-    });
-  }
-
-  async function approveCase(caseId) {
-    const result = await apiFetch(`/cases/${encodeURIComponent(caseId)}/approve`, {
-      method: "POST",
-      headers: authHeaders,
-    });
-    await refreshCases(); // seal changes case state — refresh the list so Queue/status reflect it
-    return result;
-  }
-
-  // ponytail: no reconnect/backoff loop — S3's scope is "wire the feed",
-  // not build resilience for a connection that (as of this session) the
-  // App Runner deploy rejects outright (confirmed: fails even from a bare
-  // Node WebSocket client, no browser/CORS involved — see
-  // ui/docs/s3-view-triage-proposal.md addendum). Add retry when the
-  // underlying block is diagnosed and fixed; retrying against a
-  // structurally-failing connection would just be a noisier no-op.
-  function subscribeFeed(onEvent) {
-    const wsBase = apiBase.replace(/^http/, "ws");
-    const ws = new WebSocket(`${wsBase}/feed`);
-    ws.addEventListener("message", (ev) => {
-      try {
-        onEvent(JSON.parse(ev.data));
-      } catch {
-        // malformed frame — drop it, never crash the feed listener over one bad frame
-      }
-    });
-    ws.addEventListener("error", () => {
-      console.warn("[LiveProvider] WS /feed connection failed — case.sealed live updates unavailable this session, seal still works via the direct POST response.");
-    });
-    return () => ws.close();
+    if (id !== PUBLIC_HERO_HANDLE || !projection) {
+      throw new Error("Public replay projection unavailable");
+    }
+    return projection.replay;
   }
 
   return {
-    getCases, getCredits, getPaidSeed, getNotPressedSeed, getConduct,
-    getEvalRun, getTariffCapture, getHeroCaseId, getCommitLog,
-    getClockMode, getDisclosure, getInitialClock, getRecordingStart, onDataChange,
-    fetchCase, replayCase, approveCase, subscribeFeed,
+    getCases,
+    getCredits,
+    getPaidSeed,
+    getNotPressedSeed,
+    getConduct,
+    getEvalRun,
+    getTariffCapture,
+    getHeroCaseId,
+    getCommitLog,
+    getClockMode,
+    getDisclosure,
+    getInitialClock,
+    getRecordingStart,
+    onDataChange,
+    replayCase,
   };
 }
+
+export { normalizeProjection };
