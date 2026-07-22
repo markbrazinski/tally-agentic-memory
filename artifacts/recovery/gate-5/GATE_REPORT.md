@@ -6,10 +6,11 @@ The Gate 5B renewable OAuth path passes its safety and lifecycle checks. Gate 5
 as a whole remains blocked for two independent reasons: the final clean
 deployment fails closed because the original CockroachDB seal timestamp is now
 below a replica GC threshold, and the designated code repository is private.
-Its parentless root commit contains one personal author email in Git metadata,
-so the complete reachable history does not meet the authorized public-safety
-policy. No ref was deleted or rewritten, the repository was not made public,
-and neither blocker is treated as a noncritical limitation.
+Its reachable commit metadata contains a personal author email, beginning with
+the parentless root commit, so the complete history does not meet the
+authorized public-safety policy. No ref was deleted or rewritten, the
+repository was not made public, and neither blocker is treated as a
+noncritical limitation.
 
 ## Release identity
 
