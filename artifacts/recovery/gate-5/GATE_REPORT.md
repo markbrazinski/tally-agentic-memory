@@ -2,13 +2,14 @@
 
 Overall verdict: **BLOCKED**
 
-The AWS judge application and Gate 5B renewable OAuth path pass their
-functional, safety, and cost checks. Gate 5 as a whole remains blocked because
-the designated code repository is private. Its parentless root commit contains
-one personal author email in Git metadata, so the complete reachable history
-does not meet the authorized public-safety policy. No ref was deleted or
-rewritten, the repository was not made public, and this report does not treat a
-private repository as a noncritical limitation.
+The Gate 5B renewable OAuth path passes its safety and lifecycle checks. Gate 5
+as a whole remains blocked for two independent reasons: the final clean
+deployment fails closed because the original CockroachDB seal timestamp is now
+below a replica GC threshold, and the designated code repository is private.
+Its parentless root commit contains one personal author email in Git metadata,
+so the complete reachable history does not meet the authorized public-safety
+policy. No ref was deleted or rewritten, the repository was not made public,
+and neither blocker is treated as a noncritical limitation.
 
 ## Release identity
 
@@ -91,9 +92,10 @@ cannot submit prompts.
 - One 401 can refresh and replay once; 403 never refreshes. Refresh, persistence,
   rotation, lease, or repeated-authentication failure fails closed.
 
-## Executed judge path
+## Executed judge path and final regression
 
-Three consecutive logged-out hero requests passed with stable public fields:
+Before the final clean image update, three consecutive logged-out hero
+requests passed with stable public fields:
 
 - classification: `SYNTHETIC DEMO — FICTIONAL DATA`
 - status: `executed`
@@ -102,10 +104,30 @@ Three consecutive logged-out hero requests passed with stable public fields:
 - exact versioned S3 verification: `true`
 - Managed MCP status: `verified_read`
 
-The public response reports the fictional recorded rate of $250/day against a
+Those executed public responses reported the fictional recorded rate of
+$250/day against a
 later fictional $350/day claim. It makes no real send, recovery, carrier,
 credit, resolution, or legal claim. The 90-day CockroachDB MVCC limit and the
 longer-lived versioned S3 role remain explicit.
+
+The final commit-SHA App Runner update itself succeeded, `/healthz` and
+`/readyz` returned HTTP 200, and exact S3 receipt verification still passed.
+The hero then returned the designed safe HTTP 503 projection with
+`mock_fallback: false`. A private split diagnostic showed:
+
+- stored seal age: approximately 47 hours;
+- all four replay tables currently report 90-day GC TTLs;
+- S3 receipt verification: pass;
+- historical replay: CockroachDB `XXUUU`, batch timestamp below replica GC
+  threshold.
+
+The likely sequence is that the 90-day policies were installed after a prior
+shorter GC threshold had already advanced. Raising a TTL cannot resurrect an
+already collected MVCC version. The original stored timestamp was not changed,
+and no newer timestamp/current row was substituted as historical evidence.
+Managed Basic backups exist, but CockroachDB documents Basic restore as a full
+cluster operation requiring a completely wiped destination. No destructive
+restore or additional cluster was authorized or attempted.
 
 Gate 5B additionally passed two immediate refresh grants, observed refresh
 rotation, simulated expiry, a 3,006-second real-clock near-expiry refresh, and
@@ -124,8 +146,9 @@ denied. See `GATE_5B_REPORT.md` for its bounded limitations.
 | Changed Python Ruff/compile | PASS |
 | Git diff integrity | PASS |
 | linux/amd64 container build | PASS |
-| App Runner configuration/readiness | PASS |
-| Three logged-out hero runs | PASS |
+| App Runner clean image update/configuration/readiness | PASS |
+| Three pre-final logged-out hero runs | PASS |
+| Final clean logged-out hero | BLOCKED — safe 503; original AOST below GC threshold |
 | Deployed OAuth expiry/rotation probe | PASS |
 | Exact live-token repository scan | PASS — zero token-value findings |
 | Candidate tree/all-ref safety scan | BLOCKED — one personal email in root commit metadata |
@@ -169,9 +192,12 @@ schedule, then revoke the OAuth grant and dynamic client.
 
 ## Limitations and prohibited claims
 
-- Gate 5 is **not complete or eligible for submission** until the repository is
-  public, cloneable without permission, and its complete reachable history is
-  approved as public-safe.
+- Gate 5 is **not complete or eligible for submission** until the original
+  AOST proof is truthfully recovered or a separately authorized full synthetic
+  reseed/replay is executed from retained exact source evidence, and the final
+  logged-out hero passes again.
+- The repository must also be public, cloneable without permission, and have
+  complete reachable history approved as public-safe.
 - OAuth refresh is metadata-discovered and observed live; CockroachDB has not
   published a judging-period refresh-token durability guarantee.
 - The observed write denial is an exact accepted in-band MCP error fingerprint,

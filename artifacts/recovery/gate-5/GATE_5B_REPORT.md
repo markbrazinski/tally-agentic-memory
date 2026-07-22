@@ -2,6 +2,12 @@
 
 Terminal verdict: **PASS WITH LIMITATIONS**
 
+This component verdict does not override the overall Gate 5 `BLOCKED` verdict.
+After Gate 5B passed, the final Gate 5 verification found that the original
+CockroachDB historical timestamp had fallen below a replica GC threshold; the
+OAuth/MCP lifecycle remained independently proven, but the combined live hero
+now fails closed.
+
 This report covers only the replacement of the rejected service-account API
 key with an unattended OAuth lifecycle. Detailed provider responses and all
 credentials remain in ignored, mode-restricted private evidence.
