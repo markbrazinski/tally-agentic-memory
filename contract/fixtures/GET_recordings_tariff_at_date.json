@@ -1,0 +1,13 @@
+{
+  "classification": "synthetic demonstration contract example",
+  "snapshot": {
+    "id": "…",
+    "version_label": "v2026-07-04",
+    "headline_rate": 250.00,
+    "captured_at_display": "2026-07-04T08:00:14Z",
+    "source": "seed:story",
+    "s3_key": "…"
+  },
+  "query": {"via": "mcp", "tool_line": "MCP: select_query · read-only ✓", "elapsed_ms": 38},
+  "empty_state": null
+}

@@ -1,0 +1,70 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 612 792] /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 670 >>
+stream
+BT
+/F1 10 Tf
+50 750 Td
+12 TL
+(NOL DEMURRAGE AND DETENTION INVOICE) Tj
+T*
+() Tj
+T*
+(Invoice Date: 2026-08-02) Tj
+T*
+(Port of discharge: Harbor City, CA) Tj
+T*
+(Container numbers: NOLU1234567) Tj
+T*
+(Earliest return date: N/A) Tj
+T*
+(Free time days: 5) Tj
+T*
+(Free time start: 2026-04-03) Tj
+T*
+(Free time end: 2026-04-08) Tj
+T*
+(Applicable rule: 541.6\(a\)) Tj
+T*
+(Applicable rate: $250.00/day) Tj
+T*
+(Total amount due: $1050.00) Tj
+T*
+(Contact for disputes: disputes@nol.example) Tj
+T*
+(Certifications: charges consistent with FMC rules; carrier performance) Tj
+T*
+(did not cause or contribute to the delay.) Tj
+T*
+() Tj
+T*
+(Billed to: Meridian Home & Hardware) Tj
+T*
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1032
+%%EOF

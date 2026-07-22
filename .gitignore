@@ -1,0 +1,76 @@
+# Internal strategy/spec docs — not for the public repo
+/docs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# Private recovery evidence and exports. Public artifacts must use explicit
+# .example/.sanitized names and synthetic identifiers.
+/private-recovery/
+/artifacts/recovery/private/
+/artifacts/recovery/**/application-data/
+/artifacts/recovery/**/capture-inventory.json
+/artifacts/recovery/**/hash-verification.json
+/artifacts/recovery/**/*.private.*
+*.private.csv
+*.bundle
+*.bundle.enc
+/TALLY_CLEAN_ROOM_BRIEF.md
+/TALLY_INTERNAL_AUDIT.md
+
+# Private recovery evidence (defense in depth)
+artifacts/recovery/private/
+artifacts/recovery/**/database-exports/
+artifacts/recovery/**/*.csv
+artifacts/recovery/**/*-inventory.json
+artifacts/recovery/**/*-raw.json
+artifacts/recovery/**/*-private.*
+artifacts/recovery/**/aws-resource-inventory.*
+artifacts/recovery/**/capture-inventory.*
+
+# Database exports and backups
+*.dump
+*.backup
+*.sql.gz
+*.csv.gz
+exports/
+backups/
+
+# Additional credential formats
+*.key
+*.p12
+
+# Runtime evidence containing infrastructure identifiers
+runtime-artifacts/
+audit-exports/
+query-exports/
+
+# AWS SAM / build artifacts
+.aws-sam/
+deploy/
+
+# OS cruft
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+
+# Build aids explicitly called out as gitignored in CLAUDE.md
+graphify-out/
+
+# Claude Code session-local runtime state, not project config
+.claude/scheduled_tasks.lock

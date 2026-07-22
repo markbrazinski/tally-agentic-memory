@@ -1,0 +1,9 @@
+{
+  "classification": "synthetic demonstration contract example",
+  "status": "SUCCEEDED",
+  "current_step": 7,
+  "steps": [
+    {"step": 1, "name": "541.6 fields", "ok": true, "elapsed_ms": 2140, "note": "13/13"}
+  ],
+  "error": null
+}

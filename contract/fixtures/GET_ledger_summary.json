@@ -1,0 +1,15 @@
+{
+  "classification": "synthetic demonstration contract example",
+  "recovered": {
+    "available": false,
+    "total": null,
+    "marks": [],
+    "reason": "No external carrier recovery is confirmed by the synthetic recovery build."
+  },
+  "conduct": {
+    "available": false,
+    "items": [],
+    "reason": "No computed conduct harness is connected."
+  },
+  "coverage": {"live_days": 42, "carrier": "Asterline Demo Shipping (fictional)", "lane": "DEMO-NP-SP"}
+}

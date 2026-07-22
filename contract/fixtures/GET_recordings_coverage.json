@@ -1,0 +1,12 @@
+{
+  "classification": "synthetic demonstration contract example",
+  "live_days": 42,
+  "first_live_day": "2026-07-06",
+  "carrier": "Asterline Demo Shipping (fictional)",
+  "lane": "DEMO-NP-SP",
+  "days": [
+    {"date": "2026-07-06", "state": "recorded"},
+    {"date": "2026-07-14", "state": "hollow"},
+    {"date": "2026-07-05", "state": "recorded", "source": "synthetic:story"}
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "classification": "synthetic demonstration contract example",
+  "available": false,
+  "synthetic": true,
+  "reason": "No computed evaluation route is connected to the public UI. See the committed Gate 4 evaluation artifact for executed synthetic results."
+}

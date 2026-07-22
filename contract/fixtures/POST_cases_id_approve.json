@@ -1,0 +1,9 @@
+{
+  "classification": "synthetic demonstration contract example",
+  "state": "FILED",
+  "sealed_at_display": "2026-07-08T14:02:11Z",
+  "sealed_txn_ts": "1755024131000000000.0000000001",
+  "evidence_hash": "sha256:…",
+  "evidence_count": 4,
+  "commit_line": "1 finding · 4 evidence rows · 1 draft — single transaction"
+}

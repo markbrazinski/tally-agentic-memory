@@ -1,0 +1,25 @@
+-- Migration 001b: add invocation provenance to recordings.
+--
+-- Bundle R addendum (2026-07-05): a recorded day must disclose HOW it was
+-- captured - "scheduled" (EventBridge Scheduler fired the Lambda
+-- unattended) vs. "manual" (a human ran `aws lambda invoke` or the
+-- console's Test button). This is provenance about the commit-log entry
+-- itself, not the evidentiary content, so it lives on recordings (TDD
+-- ss2.15: "the snapshot job's commit log"), not tariff_snapshots (the
+-- append-only evidentiary content table).
+--
+-- Raw-bytes-first discipline (lock 1) applies to disclosure too: a
+-- manually-invoked day still COUNTS as recorded. This column exists to
+-- disclose that fact honestly, never to let a manual day be excluded or
+-- hidden from a coverage query - it is metadata about provenance, not a
+-- second-class status.
+--
+-- Default 'manual' (not NULL) for the ALTER: every row that exists before
+-- this migration (July 4-5, 2026) was in fact a manual invoke - the
+-- EventBridge schedules that make "scheduled" possible were not created
+-- until after those rows were committed. The default is therefore not a
+-- placeholder, it is the honest, correct backfill value for prior rows;
+-- see scripts/annotate_manual_invocations.py for the corresponding
+-- targeted UPDATE.
+
+ALTER TABLE recordings ADD COLUMN IF NOT EXISTS invocation STRING NOT NULL DEFAULT 'manual';

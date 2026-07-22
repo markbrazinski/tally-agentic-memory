@@ -1,0 +1,6 @@
+-r requirements.txt
+pytest==9.1.1
+ruff==0.15.20
+# boto3 now lives in requirements.txt (src/platform's FastAPI service needs
+# it directly for Bedrock, unlike the Lambda-provided capture/ path) - no
+# separate dev-only pin needed here anymore.

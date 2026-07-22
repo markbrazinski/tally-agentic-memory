@@ -1,0 +1,38 @@
+{
+  "classification": "synthetic demonstration contract example",
+  "envelope": {"event": "…", "ts": "…", "payload": "…"},
+  "events": {
+    "query_log.line": {
+      "fired_by": "DAL middleware, every statement",
+      "payload_shape": "the query_log row"
+    },
+    "clerk.step": {
+      "fired_by": "pipeline, per step",
+      "payload_shape": {"run_id": "…", "step": 1, "name": "…", "ok": true, "elapsed_ms": 0, "note": "…"}
+    },
+    "clerk.filed": {
+      "fired_by": "filing commit",
+      "payload_shape": {"run_id": "…", "case_id": "…", "pin_date": "…", "verdict": "…"}
+    },
+    "case.sealed": {
+      "fired_by": "seal commit",
+      "payload_shape": {"case_id": "…", "sealed_at_display": "…", "sealed_txn_ts": "…"}
+    },
+    "contest.arrived": {
+      "fired_by": "POST /contests",
+      "payload_shape": {"contest_id": "…", "case_id": "…", "received_at": "…", "sender": "…"}
+    },
+    "rebuttal.sent": {
+      "fired_by": "rebuttal/send",
+      "payload_shape": {"contest_id": "…", "ts": "…"}
+    },
+    "snapshot.committed": {
+      "fired_by": "Lambda via POST /internal/notify-snapshot",
+      "payload_shape": {"run_date": "…", "target": "…", "carrier": "…", "lane": "…", "log_line": "…"}
+    },
+    "coverage.updated": {
+      "fired_by": "same as snapshot.committed",
+      "payload_shape": {"live_days": 0}
+    }
+  }
+}

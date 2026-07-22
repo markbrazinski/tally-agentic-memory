@@ -1,0 +1,26 @@
+{
+  "classification": "synthetic demonstration contract example",
+  "contest": {
+    "id": "…",
+    "sender": "disputes@northstar.example",
+    "received_at": "…",
+    "claim_text": "per our tariff: $350",
+    "claimed_rate": 350.00
+  },
+  "record": {
+    "rate": 250.00,
+    "version_label": "v2026-07-04",
+    "captured_at_display": "2026-07-04T08:00:14Z",
+    "sealed_at_display": "2026-07-08T14:02:11Z",
+    "evidence_hash": "sha256:…"
+  },
+  "verification": {
+    "aost_ts": "<sealed_txn_ts>",
+    "match": true,
+    "queries": [
+      {"tag": "rebuttal.then", "via": "mcp", "elapsed_ms": 41, "sql": "SELECT …"},
+      {"tag": "rebuttal.now", "via": "mcp", "elapsed_ms": 12, "sql": "SELECT …"}
+    ]
+  },
+  "retention_caption": "history retention: 90 days — configured"
+}

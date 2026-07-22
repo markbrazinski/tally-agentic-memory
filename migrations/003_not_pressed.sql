@@ -1,0 +1,14 @@
+-- Migration 003: NOT_PRESSED case-decision delta (Bundle 2, Session 0).
+--
+-- cases.state is unconstrained STRING (migration 002) - no CHECK
+-- constraint to alter. NOT_PRESSED and ACCEPTED join the state vocabulary
+-- alongside the existing ANALYZED/FILED/CONTESTED/RESOLVED values (see
+-- contract/fixtures/README.md's state list and src/platform/app.py's
+-- route logic, both updated alongside this migration). Transitions INTO
+-- these states are Bundle 3 scope - this session only adds the column and
+-- the vocabulary entry.
+--
+-- decision_reason: nullable free-text explaining a NOT_PRESSED/ACCEPTED
+-- ruling. NULL for every other state - not populated by this session,
+-- just given a real column to land in once B3 writes to it.
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS decision_reason STRING;

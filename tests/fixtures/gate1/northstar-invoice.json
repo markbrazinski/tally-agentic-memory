@@ -1,0 +1,12 @@
+{
+  "classification": "synthetic demonstration data",
+  "invoice_no": "INV-NOL-0001",
+  "claimed_rate": {
+    "amount": "350.00",
+    "currency": "USD",
+    "unit": "per_day"
+  },
+  "charge_days": 7,
+  "invoice_date": "2026-07-20",
+  "received_at": "2026-07-20T17:31:00Z"
+}

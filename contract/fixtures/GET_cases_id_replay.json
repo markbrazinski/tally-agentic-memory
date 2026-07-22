@@ -1,0 +1,31 @@
+{
+  "classification": "synthetic demonstration contract example",
+  "then": {
+    "as_of": "1784682000000000000.0000000000",
+    "state": "FILED",
+    "tariff_rate": 250.00,
+    "version_label": "synthetic-v2026-07-01",
+    "evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source": "AS OF SYSTEM TIME"
+  },
+  "now": {
+    "state": "CONTESTED",
+    "tariff_rate": 250.00,
+    "version_label": "synthetic-v2026-07-01",
+    "evidence_hash_recomputed": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source": "current read"
+  },
+  "tamper_check": {"match": true},
+  "sealed_copy": {
+    "rate": 250.00,
+    "content_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "source": "case_evidence (sealed evidence copy)"
+  },
+  "retention": {
+    "ttl_seconds": 7776000,
+    "ttl_days": 90,
+    "target_queryable": true,
+    "language": "Versioned S3 retains the dated source artifact. Within CockroachDB’s configured MVCC window, Tally can also replay the transactional case state at filing."
+  },
+  "queries": []
+}

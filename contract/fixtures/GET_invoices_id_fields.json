@@ -1,0 +1,15 @@
+{
+  "classification": "synthetic demonstration contract example",
+  "fields": [
+    {
+      "key": "proper_party_basis",
+      "label": "Basis: charged party is proper party",
+      "cite": "541.6(a)(7)",
+      "present": true,
+      "how": "implicit:consignee_label",
+      "value": "Consignee: Example Mercantile (fictional)",
+      "span": {"page": 1, "quote": "Consignee: Example Mercantile (fictional)"},
+      "confidence": 0.93
+    }
+  ]
+}

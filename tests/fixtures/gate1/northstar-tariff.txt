@@ -1,0 +1,3 @@
+SYNTHETIC DEMONSTRATION DATA — NORTHSTAR OCEAN LINES
+Tariff NS-2026, effective 2026-07-01 through 2026-12-31.
+Section 4 — Import demurrage: The rate is USD $250.00 per day for each chargeable day after free time.

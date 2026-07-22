@@ -1,0 +1,2072 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap">
+  <style>
+    html, body { margin: 0; padding: 0; background: #10171D; }
+    * { box-sizing: border-box; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: rgba(31,42,51,0.25); border-radius: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    @keyframes tallyWash { 0% { opacity: 0.55; } 100% { opacity: 0; } }
+    @keyframes tallyTick { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+    @keyframes tallyPulse { 0% { box-shadow: 0 0 0 0 rgba(229,216,188,0.9); } 100% { box-shadow: 0 0 0 14px rgba(229,216,188,0); } }
+    @keyframes tallyStamp { 0% { transform: scale(1.9) rotate(-16deg); opacity: 0; } 55% { transform: scale(0.96) rotate(-7deg); opacity: 1; } 75% { transform: scale(1.04) rotate(-8.5deg); } 100% { transform: scale(1) rotate(-8deg); opacity: 1; } }
+    @keyframes tallyHb { 0% { opacity: 1; } 50% { opacity: 0.35; } 100% { opacity: 1; } }
+    @keyframes tallyFade { 0% { opacity: 0; transform: translateY(6px); } 100% { opacity: 1; transform: translateY(0); } }
+    @keyframes tallyRowFlip { 0% { background: rgba(229,216,188,0.55); } 100% { background: transparent; } }
+    @keyframes tallyDraw { to { stroke-dashoffset: 0; } }
+  </style>
+</helmet>
+<div style="position: fixed; inset: 0; background: #10171D; overflow: hidden; font-family: 'Schibsted Grotesk','Helvetica Neue',Helvetica,sans-serif; -webkit-font-smoothing: antialiased;">
+  <div style="{{ stageStyle }}">
+    <div style="display: flex; width: 1920px; height: 1080px; background: #F6F3EC; overflow: hidden;">
+
+      <nav style="width: 232px; flex: 0 0 232px; background: #1F2A33; color: #C9D4DC; display: flex; flex-direction: column; padding: 26px 0 0 0;">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 0 22px 26px 22px;">
+          <svg width="40" height="28" viewBox="0 0 72 48" style="display: block;">
+            <line x1="9" y1="6" x2="9" y2="42" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round"></line>
+            <line x1="25" y1="6" x2="25" y2="42" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round"></line>
+            <line x1="41" y1="6" x2="41" y2="42" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round"></line>
+            <line x1="57" y1="6" x2="57" y2="42" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round"></line>
+            <line x1="1" y1="40" x2="66" y2="7" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round"></line>
+          </svg>
+          <div>
+            <div style="font-weight: 700; letter-spacing: 0.22em; font-size: 16px; color: #F6F3EC;">TALLY</div>
+            <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 10px; color: #6E7F8B; letter-spacing: 0.06em; margin-top: 2px;">demurrage &amp; detention</div>
+          </div>
+        </div>
+        <sc-for list="{{ navGroups }}" as="ng" hint-placeholder-count="3">
+          <div style="padding: 14px 0 4px 0;">
+            <div style="font-size: 10px; letter-spacing: 0.22em; color: #5C6E7B; font-weight: 600; padding: 0 22px 8px 22px;">{{ ng.label }}</div>
+            <sc-for list="{{ ng.items }}" as="ni" hint-placeholder-count="2">
+              <div onClick="{{ ni.onClick }}" style="{{ ni.style }}">
+                <span>{{ ni.label }}</span>
+                <sc-if value="{{ ni.badge }}" hint-placeholder-val="{{ false }}">
+                  <span style="{{ ni.badgeStyle }}">{{ ni.badge }}</span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+        <div style="margin-top: auto; padding: 18px 22px 20px 22px; border-top: 1px solid rgba(229,223,209,0.12);">
+          <div style="font-size: 13px; font-weight: 600; color: #E5D8BC;">{{ tenantName }}</div>
+          <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 10.5px; color: #6E7F8B; margin-top: 4px; line-height: 1.5;">{{ tenantScope }}</div>
+        </div>
+      </nav>
+
+      <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+        <div style="height: 56px; flex: 0 0 56px; display: flex; align-items: center; justify-content: flex-end; gap: 28px; padding: 0 40px; border-bottom: 1px solid #E5DFD1; background: #F6F3EC;">
+          <div title="{{ modeDetail }}" style="{{ modeBadgeStyle }}">{{ modeLabel }}</div>
+          <div style="display: flex; align-items: center; gap: 9px; font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #5C6B76;">
+            <span style="{{ recorderDotStyle }}"></span>
+            <span>{{ recorderStatus }}</span>
+          </div>
+          <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #26313A;">{{ clockDate }} · {{ clockTime }}</div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="width: 28px; height: 28px; border-radius: 50%; background: #1F2A33; color: #E5D8BC; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;">{{ operatorInitials }}</span>
+            <span style="font-size: 13px; color: #26313A; font-weight: 500;">{{ operatorName }}</span>
+          </div>
+        </div>
+
+        <div style="flex: 1; overflow: auto; min-height: 0;">
+
+          <sc-if value="{{ isQueue }}" hint-placeholder-val="{{ true }}">
+            <div data-screen-label="Queue" style="padding: 36px 56px 48px 56px; max-width: 1450px;">
+              <div style="font-size: 26px; font-weight: 700; color: #1F2A33; letter-spacing: -0.01em;">Queue</div>
+              <div style="font-size: 14px; color: #5C6B76; margin-top: 6px;">Decisions, grouped by what the checks found. Everything else runs on its own.</div>
+              <div style="display: flex; gap: 24px; margin-top: 16px; border-bottom: 1px solid #E5DFD1;">
+                <sc-for list="{{ qTabs }}" as="qt" hint-placeholder-count="2">
+                  <button onClick="{{ qt.onClick }}" style="{{ qt.style }}">{{ qt.label }}</button>
+                </sc-for>
+              </div>
+              <sc-if value="{{ qtDec }}" hint-placeholder-val="{{ true }}">
+              <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 13px; color: #26313A; background: #EFEADD; border: 1px solid #E5DFD1; border-radius: 6px; padding: 12px 18px; margin-top: 22px;">{{ shiftLine }}</div>
+
+              <sc-for list="{{ queueGroups }}" as="g" hint-placeholder-count="4">
+                <section style="margin-top: 28px; background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; overflow: hidden;">
+                  <div style="display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid #E5DFD1; background: #FBF9F3;">
+                    <sc-if value="{{ g.selectable }}" hint-placeholder-val="{{ false }}">
+                      <input type="checkbox" checked="{{ g.allSel }}" onChange="{{ g.onToggleAll }}" style="width: 15px; height: 15px; accent-color: #1F2A33; cursor: pointer;">
+                    </sc-if>
+                    <span style="font-size: 15px; font-weight: 700; color: #1F2A33;">{{ g.title }}</span>
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 13px; color: #5C6B76;">{{ g.countTotal }}</span>
+                    <span style="font-size: 12px; color: #8A96A0;">{{ g.sub }}</span>
+                    <span style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
+                      <sc-if value="{{ g.actBtn }}" hint-placeholder-val="{{ false }}">
+                        <button onClick="{{ g.onAct }}" disabled="{{ g.actDisabled }}" style="{{ g.actStyle }}">{{ g.actBtn }}</button>
+                      </sc-if>
+                      <sc-if value="{{ g.chip }}" hint-placeholder-val="{{ false }}">
+                        <button onClick="{{ g.onChip }}" style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #26313A; background: #E5D8BC; border: none; border-radius: 999px; padding: 6px 14px; cursor: pointer;">{{ g.chip }}</button>
+                      </sc-if>
+                    </span>
+                  </div>
+                  <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2">
+                    <div onClick="{{ r.onOpen }}" style="position: relative; display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid #F0EBDF; cursor: pointer; background: #FFFFFF;" style-hover="background: #FBF9F3;">
+                      <sc-if value="{{ r.fresh }}" hint-placeholder-val="{{ false }}">
+                        <span style="position: absolute; inset: 0; background: #E5D8BC; pointer-events: none; animation: tallyWash 3.4s ease-out forwards;"></span>
+                        <span style="position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #C9A961; pointer-events: none; animation: tallyTick 4.2s ease-out forwards;"></span>
+                      </sc-if>
+                      <sc-if value="{{ r.selectable }}" hint-placeholder-val="{{ false }}">
+                        <input type="checkbox" checked="{{ r.sel }}" onChange="{{ r.onToggle }}" onClick="{{ r.stop }}" style="width: 15px; height: 15px; accent-color: #1F2A33; cursor: pointer; position: relative;">
+                      </sc-if>
+                      <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 13px; color: #26313A; width: 128px; position: relative;">{{ r.container }}</span>
+                      <span style="font-size: 13px; color: #26313A; width: 110px; font-weight: 500; position: relative;">{{ r.carrier }}</span>
+                      <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #8A96A0; width: 150px; position: relative;">{{ r.invoiceNo }}</span>
+                      <span style="font-size: 13px; color: #5C6B76; flex: 1; position: relative;">{{ r.defect }}</span>
+                      <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 14px; color: #1F2A33; font-weight: 600; position: relative;">{{ r.amountF }}</span>
+                      <span style="color: #B4BDC4; font-size: 14px; position: relative;">›</span>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ g.note }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding: 14px 20px; font-size: 13px; color: #5C6B76; line-height: 1.6; background: #FFFFFF;">
+                      {{ g.note }}
+                      <span style="display: inline-flex; gap: 10px; margin-left: 14px;">
+                        <button onClick="{{ g.onHold }}" style="font-size: 12px; font-weight: 600; color: #26313A; background: #FFFFFF; border: 1px solid #C9D0D6; border-radius: 6px; padding: 5px 12px; cursor: pointer;">{{ g.holdLabel }}</button>
+                        <button onClick="{{ g.onManual }}" style="font-size: 12px; font-weight: 600; color: #26313A; background: #FFFFFF; border: 1px solid #C9D0D6; border-radius: 6px; padding: 5px 12px; cursor: pointer;">Decide manually</button>
+                      </span>
+                    </div>
+                  </sc-if>
+                </section>
+              </sc-for>
+
+              <div style="display: flex; align-items: center; gap: 8px; margin-top: 26px; font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #8A96A0;">
+                <span>{{ quietStrip }}</span>
+                <button onClick="{{ goDocket }}" style="font-family: inherit; font-size: 12px; color: #5C6B76; background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; padding: 0; margin-left: 8px;">docket preview</button>
+              </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isCasesPage }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="All cases" style="padding: 0 56px 48px 56px; max-width: 1450px; margin-top: -22px;">
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+                <sc-for list="{{ casePills }}" as="cp" hint-placeholder-count="9">
+                  <button onClick="{{ cp.onClick }}" style="{{ cp.style }}">{{ cp.label }}</button>
+                </sc-for>
+                <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #8A96A0; margin-left: auto;">{{ caseCount }}</span>
+              </div>
+              <sc-if value="{{ caseEmpty }}" hint-placeholder-val="{{ false }}">
+                <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; margin-top: 16px; padding: 34px 24px; font-size: 13.5px; color: #5C6B76; text-align: center;">{{ caseEmpty }}</div>
+              </sc-if>
+              <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; margin-top: 16px; overflow: hidden;">
+                <div style="display: flex; gap: 14px; padding: 10px 20px; border-bottom: 1px solid #E5DFD1; background: #FBF9F3; font-size: 11px; letter-spacing: 0.1em; color: #8A96A0; font-weight: 600;">
+                  <span style="width: 110px;">CASE</span><span style="width: 128px;">CONTAINER</span><span style="width: 110px;">CARRIER</span><span style="width: 130px;">VERDICT</span><span style="flex: 1;">STATUS</span><span style="width: 90px; text-align: right;">AT STAKE</span><span style="width: 110px; text-align: right;">UPDATED</span>
+                </div>
+                <sc-for list="{{ caseRows }}" as="cr" hint-placeholder-count="6">
+                  <div onClick="{{ cr.onOpen }}" style="display: flex; gap: 14px; align-items: center; padding: 11px 20px; border-bottom: 1px solid #F0EBDF; cursor: pointer; background: #FFFFFF;" style-hover="background: #FBF9F3;">
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12.5px; color: #26313A; width: 110px;">{{ cr.id }}</span>
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12.5px; color: #5C6B76; width: 128px;">{{ cr.container }}</span>
+                    <span style="font-size: 13px; color: #26313A; width: 110px;">{{ cr.carrier }}</span>
+                    <span style="font-size: 12.5px; color: #26313A; width: 130px; font-weight: 500;">{{ cr.verdict }}</span>
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #8A96A0; flex: 1;">{{ cr.status }}</span>
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 13px; color: #1F2A33; width: 90px; text-align: right;">{{ cr.amountF }}</span>
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #8A96A0; width: 110px; text-align: right;">{{ cr.updatedF }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isCase }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="Case file" style="padding: 30px 56px 60px 56px; max-width: 1520px;">
+              <button onClick="{{ cs.onBack }}" style="font-size: 13px; color: #5C6B76; background: none; border: none; cursor: pointer; padding: 0;">{{ cs.backLabel }}</button>
+
+              <div style="display: grid; grid-template-columns: 1fr 290px; gap: 44px; align-items: start;">
+              <div style="min-width: 0;">
+              <div style="display: flex; align-items: flex-start; gap: 40px; margin-top: 14px;">
+                <div style="flex: 1;">
+                  <div style="display: flex; align-items: center; gap: 16px;">
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 24px; font-weight: 600; color: #1F2A33;">{{ cs.id }}</span>
+                    <span style="{{ cs.pillStyle }}">{{ cs.pill }}</span>
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #8A96A0;">{{ cs.statusLine }}</span>
+                  </div>
+                  <div style="font-size: 13.5px; color: #5C6B76; margin-top: 6px;">{{ cs.sub }}</div>
+                  <div style="display: flex; gap: 44px; margin-top: 22px;">
+                    <div><div style="font-size: 11px; letter-spacing: 0.12em; color: #8A96A0; font-weight: 600;">BILLED</div><div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 32px; font-weight: 600; color: #1F2A33; margin-top: 4px;">{{ cs.billedF }}</div></div>
+                    <sc-if value="{{ cs.showAmounts }}" hint-placeholder-val="{{ true }}">
+                      <div><div style="font-size: 11px; letter-spacing: 0.12em; color: #8A96A0; font-weight: 600;">RECORDED-CORRECT</div><div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 32px; font-weight: 600; color: #1F2A33; margin-top: 4px;">{{ cs.correctF }}</div></div>
+                      <div><div style="font-size: 11px; letter-spacing: 0.12em; color: #8A96A0; font-weight: 600;">DISPUTED</div><div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 32px; font-weight: 600; color: #1F2A33; margin-top: 4px;">{{ cs.disputedF }}</div></div>
+                    </sc-if>
+                  </div>
+                  <sc-if value="{{ cs.press }}" hint-placeholder-val="{{ true }}">
+                    <div style="font-size: 13.5px; color: #26313A; margin-top: 18px;">{{ cs.press }} <button onClick="{{ cs.onDossier }}" style="font-size: 13px; color: #26313A; background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; padding: 0;">dossier</button></div>
+                  </sc-if>
+                </div>
+                <sc-if value="{{ cs.sealed }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ cs.sealWrapStyle }}">
+                    <div style="border: 3px solid #C1121F; color: #C1121F; border-radius: 10px; padding: 12px 20px; transform: rotate(-8deg); text-align: center; margin-top: 8px;">
+                      <div style="font-size: 17px; font-weight: 800; letter-spacing: 0.24em;">SEALED</div>
+                      <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11px; margin-top: 4px;">{{ cs.sealId }}</div>
+                      <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 10.5px; margin-top: 2px;">{{ cs.sealAt }}</div>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+
+              <section style="margin-top: 34px;">
+                <div style="display: flex; align-items: baseline; gap: 14px;">
+                  <div style="font-size: 16px; font-weight: 700; color: #1F2A33;">The Clerk's run</div>
+                  <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #5C6B76;">{{ cs.runLine }}</div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 14px;">
+                  <sc-for list="{{ cs.tiers }}" as="t" hint-placeholder-count="4">
+                    <sc-if value="{{ t.shown }}" hint-placeholder-val="{{ true }}">
+                      <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; padding: 16px 18px; animation: tallyFade 0.35s ease-out;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                          <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11px; color: #8A96A0;">TIER {{ t.n }}</span>
+                          <span style="{{ t.chipStyle }}">{{ t.chip }}</span>
+                        </div>
+                        <div style="font-size: 14px; font-weight: 700; color: #1F2A33; margin-top: 8px;">{{ t.title }}</div>
+                        <sc-for list="{{ t.lines }}" as="tl" hint-placeholder-count="1">
+                          <div style="font-size: 12.5px; color: #5C6B76; line-height: 1.5; margin-top: 7px;">{{ tl }}</div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </sc-for>
+                </div>
+                <sc-if value="{{ cs.committed }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #26313A; background: #EFEADD; border: 1px solid #E5DFD1; border-radius: 6px; padding: 10px 16px; margin-top: 14px;">{{ cs.commitLine }}</div>
+                </sc-if>
+              </section>
+
+              <sc-if value="{{ cs.hasSpine }}" hint-placeholder-val="{{ false }}">
+                <section style="margin-top: 38px;">
+                  <div style="display: flex; align-items: baseline; gap: 14px;">
+                    <div style="font-size: 16px; font-weight: 700; color: #1F2A33;">The life of this box</div>
+                    <div style="font-size: 12px; color: #8A96A0;">carrier claims above the line · the record below · drag the playhead to rewind the facts</div>
+                    <sc-if value="{{ cs.rewound }}" hint-placeholder-val="{{ false }}">
+                      <button onClick="{{ cs.onPhReset }}" style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11px; color: #5C6B76; background: none; border: 1px solid #C9D0D6; border-radius: 5px; padding: 3px 10px; cursor: pointer;">return to now</button>
+                    </sc-if>
+                  </div>
+                  <div style="display: flex; gap: 44px; align-items: flex-start; margin-top: 16px;">
+                    <div style="flex: 1; padding: 74px 30px 66px 30px;">
+                      <div ref="{{ spineRef }}" onPointerDown="{{ cs.onSpineDown }}" style="position: relative; height: 18px; background: #EFEADD; border-radius: 3px; cursor: ew-resize;">
+                        <sc-for list="{{ cs.segs }}" as="sg" hint-placeholder-count="2">
+                          <div style="{{ sg.style }}" title="{{ sg.label }}"></div>
+                        </sc-for>
+                        <sc-for list="{{ cs.above }}" as="ma" hint-placeholder-count="2">
+                          <div style="{{ ma.style }}">
+                            <div style="{{ ma.lblStyle }}">{{ ma.label }}</div>
+                            <div style="{{ ma.tickStyle }}"></div>
+                          </div>
+                        </sc-for>
+                        <sc-for list="{{ cs.below }}" as="mb" hint-placeholder-count="3">
+                          <div style="{{ mb.style }}">
+                            <div style="{{ mb.tickStyle }}"></div>
+                            <div style="{{ mb.lblStyle }}">{{ mb.label }}</div>
+                          </div>
+                        </sc-for>
+                        <div style="{{ cs.phStyle }}"></div>
+                        <div style="{{ cs.phLabelStyle }}">{{ cs.phLabel }}</div>
+                      </div>
+                    </div>
+                    <div style="width: 372px; flex: 0 0 372px; background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; padding: 18px 22px;">
+                      <div style="display: flex; gap: 18px; align-items: flex-start;">
+                        <div style="flex: 1; min-width: 0;">
+                          <div style="font-size: 11px; letter-spacing: 0.12em; color: #8A96A0; font-weight: 600;">THE RECORD — AS OF PLAYHEAD</div>
+                          <div style="margin-top: 10px; display: inline-block;"><span style="{{ cs.rateStyle }}">{{ cs.rateBig }}</span></div>
+                          <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11px; color: #5C6B76; margin-top: 8px; line-height: 1.6;">{{ cs.rateCap }}</div>
+                        </div>
+                        <div style="width: 108px; flex: 0 0 108px; border-left: 1px solid #E5DFD1; padding-left: 16px;">
+                          <div style="font-size: 11px; letter-spacing: 0.12em; color: #8A96A0; font-weight: 600;">CARRIER CLAIMS</div>
+                          <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 19px; font-weight: 600; color: #5C6B76; margin-top: 12px;">$350 / day</div>
+                          <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 10px; color: #8A96A0; margin-top: 6px;">contested 2026-07-21</div>
+                        </div>
+                      </div>
+                      <sc-if value="{{ cs.asofOn }}" hint-placeholder-val="{{ false }}">
+                        <pre style="margin: 14px 0 0 0; white-space: pre-wrap; font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 10.5px; line-height: 1.6; color: #26313A; background: #F6F3EC; border: 1px solid #E5DFD1; border-radius: 6px; padding: 10px 12px;">{{ cs.asofSql }}</pre>
+                        <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 10.5px; color: #8A96A0; margin-top: 8px;">synthetic policy example: 90 days · not a live readback</div>
+                      </sc-if>
+                    </div>
+                  </div>
+                </section>
+              </sc-if>
+
+              <sc-if value="{{ cs.showDraft }}" hint-placeholder-val="{{ false }}">
+                <section style="margin-top: 38px; max-width: 980px;">
+                  <div style="font-size: 16px; font-weight: 700; color: #1F2A33;">Draft dispute</div>
+                  <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; padding: 20px 24px; margin-top: 12px;">
+                    <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #8A96A0;">{{ cs.draftTo }}</div>
+                    <div style="font-size: 14px; color: #26313A; line-height: 1.7; margin-top: 10px;">{{ cs.draftBody }}</div>
+                  </div>
+                  <div style="display: flex; gap: 12px; margin-top: 16px;">
+                    <button onClick="{{ cs.onApprove }}" style="font-size: 14px; font-weight: 700; color: #F6F3EC; background: #1F2A33; border: none; border-radius: 8px; padding: 11px 22px; cursor: pointer;">Approve &amp; send</button>
+                    <button onClick="{{ cs.onDontPress }}" style="font-size: 14px; font-weight: 600; color: #26313A; background: #FFFFFF; border: 1px solid #C9D0D6; border-radius: 8px; padding: 11px 18px; cursor: pointer;">Don't press</button>
+                  </div>
+                </section>
+              </sc-if>
+              <sc-if value="{{ cs.showAccept }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top: 34px;"><button onClick="{{ cs.onAccept }}" style="font-size: 14px; font-weight: 700; color: #F6F3EC; background: #1F2A33; border: none; border-radius: 8px; padding: 11px 22px; cursor: pointer;">Accept — pay</button></div>
+              </sc-if>
+              <sc-if value="{{ cs.showHold }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top: 34px;"><button onClick="{{ cs.onHold }}" style="font-size: 14px; font-weight: 600; color: #26313A; background: #FFFFFF; border: 1px solid #C9D0D6; border-radius: 8px; padding: 11px 20px; cursor: pointer;">Hold — the synthetic record doesn't reach Demo Westhaven yet</button></div>
+              </sc-if>
+
+              <sc-if value="{{ cs.hasThread }}" hint-placeholder-val="{{ false }}">
+                <section style="margin-top: 38px; max-width: 980px;">
+                  <div style="font-size: 16px; font-weight: 700; color: #1F2A33;">Thread</div>
+                  <sc-for list="{{ cs.msgs }}" as="m" hint-placeholder-count="2">
+                    <sc-if value="{{ m.res }}" hint-placeholder-val="{{ false }}">
+                      <div style="position: relative; display: flex; align-items: center; gap: 14px; margin-top: 14px; background: #FFFFFF; border: 1px solid #2E6E4E; border-radius: 10px; padding: 16px 22px;">
+                        <sc-if value="{{ m.fresh }}" hint-placeholder-val="{{ false }}"><span style="position: absolute; inset: 0; background: #E5D8BC; pointer-events: none; border-radius: 10px; animation: tallyWash 3.4s ease-out forwards;"></span></sc-if>
+                        <span style="font-size: 13px; font-weight: 800; letter-spacing: 0.14em; color: #2E6E4E; position: relative;">RESOLVED</span>
+                        <span style="font-size: 14px; color: #2E6E4E; font-weight: 600; position: relative;">{{ m.body }}</span>
+                        <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11.5px; color: #2E6E4E; margin-left: auto; position: relative;">{{ m.meta }}</span>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ m.notRes }}" hint-placeholder-val="{{ true }}">
+                      <div style="{{ m.style }}">
+                        <sc-if value="{{ m.fresh }}" hint-placeholder-val="{{ false }}"><span style="position: absolute; inset: 0; background: #E5D8BC; pointer-events: none; border-radius: 10px; animation: tallyWash 3.4s ease-out forwards;"></span><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #C9A961; pointer-events: none; animation: tallyTick 4.2s ease-out forwards;"></span></sc-if>
+                        <div style="display: flex; align-items: baseline; gap: 12px; position: relative;">
+                          <span style="font-size: 13px; font-weight: 700; color: #1F2A33;">{{ m.who }}</span>
+                          <sc-if value="{{ m.chip }}" hint-placeholder-val="{{ false }}"><span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 10.5px; color: #26313A; background: #E5D8BC; border-radius: 999px; padding: 1px 9px;">{{ m.chip }}</span></sc-if>
+                          <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11.5px; color: #8A96A0; margin-left: auto;">{{ m.at }}</span>
+                        </div>
+                        <div style="font-size: 14px; color: #26313A; line-height: 1.65; margin-top: 8px; position: relative;">
+                          <sc-if value="{{ m.bHi }}" hint-placeholder-val="{{ false }}"><span>{{ m.b1 }}</span><span style="background: #E5D8BC; border-radius: 3px; padding: 1px 6px; font-weight: 600;">{{ m.bHi }}</span><span>{{ m.b2 }}</span></sc-if>
+                          <sc-if value="{{ m.noHi }}" hint-placeholder-val="{{ true }}"><span>{{ m.body }}</span></sc-if>
+                          <sc-if value="{{ m.exhibit }}" hint-placeholder-val="{{ false }}"><button onClick="{{ cs.onExhibit }}" style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #26313A; background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; padding: 0; margin-left: 6px;">tally.record/exhibit/CASE-0142</button></sc-if>
+                        </div>
+                      </div>
+                    </sc-if>
+                  </sc-for>
+                </section>
+              </sc-if>
+              </div>
+
+              <aside style="position: sticky; top: 24px; margin-top: 46px;">
+                <div style="font-size: 11px; letter-spacing: 0.14em; color: #8A96A0; font-weight: 700;">EVIDENCE</div>
+                <sc-for list="{{ cs.evidence }}" as="ev" hint-placeholder-count="3">
+                  <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 8px; padding: 13px 16px; margin-top: 10px;">
+                    <div style="font-size: 12.5px; font-weight: 600; color: #1F2A33;">{{ ev.k }}</div>
+                    <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11px; color: #5C6B76; margin-top: 5px; line-height: 1.6;">{{ ev.v }}</div>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ cs.sealed }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ cs.onExhibit }}" style="width: 100%; margin-top: 12px; font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #26313A; background: #E5D8BC; border: none; border-radius: 8px; padding: 11px 14px; cursor: pointer; text-align: left;">view the sealed exhibit →</button>
+                </sc-if>
+              </aside>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isFindings }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="Findings" style="padding: 36px 56px 48px 56px; max-width: 1450px;">
+              <div style="font-size: 26px; font-weight: 700; color: #1F2A33;">Findings</div>
+              <div style="font-size: 14px; color: #5C6B76; margin-top: 6px;">Patterns the checks keep finding. One human decision covers a shared finding.</div>
+
+              <section style="margin-top: 24px; background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; overflow: hidden;">
+                <div style="padding: 20px 24px; border-bottom: 1px solid #E5DFD1; background: #FBF9F3;">
+                  <div style="display: flex; align-items: baseline; gap: 16px;">
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 16px; font-weight: 600; color: #1F2A33;">PTN-0007</span>
+                    <span style="font-size: 15px; color: #26313A;">Fictional Northstar Lines billed $350/day where the synthetic tariff said $250/day.</span>
+                  </div>
+                  <div style="display: flex; align-items: baseline; gap: 10px; margin-top: 12px; font-family: 'IBM Plex Mono',ui-monospace,monospace;">
+                    <span style="font-size: 20px; font-weight: 600; color: #1F2A33;">{{ fExposure }}</span>
+                    <span style="font-size: 12.5px; color: #5C6B76;">{{ fSplit }}</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 16px; margin-top: 14px;">
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11.5px; color: #8A96A0;">{{ fBasis }}</span>
+                    <span style="margin-left: auto;">
+                      <sc-if value="{{ fBulkBtn }}" hint-placeholder-val="{{ false }}">
+                        <button onClick="{{ onBulk }}" style="font-size: 13px; font-weight: 700; color: #F6F3EC; background: #1F2A33; border: none; border-radius: 8px; padding: 10px 18px; cursor: pointer;">{{ fBulkBtn }}</button>
+                      </sc-if>
+                      <sc-if value="{{ fDone }}" hint-placeholder-val="{{ false }}">
+                        <span style="font-size: 13px; color: #5C6B76;">{{ fDone }}</span>
+                      </sc-if>
+                    </span>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 14px; padding: 9px 20px; border-bottom: 1px solid #E5DFD1; font-size: 11px; letter-spacing: 0.1em; color: #8A96A0; font-weight: 600;">
+                  <span style="width: 110px;">CASE</span><span style="width: 130px;">CONTAINER</span><span style="width: 150px;">INVOICE</span><span style="width: 80px;">DAYS</span><span style="width: 110px;">OVERCHARGE</span><span style="flex: 1; text-align: right;">STATUS</span>
+                </div>
+                <sc-for list="{{ fRows }}" as="fr" hint-placeholder-count="6">
+                  <div onClick="{{ fr.onOpen }}" style="{{ fr.rowStyle }}">
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12.5px; color: #26313A; width: 110px;">{{ fr.id }}</span>
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12.5px; color: #5C6B76; width: 130px;">{{ fr.container }}</span>
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #8A96A0; width: 150px;">{{ fr.invoiceNo }}</span>
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12.5px; color: #26313A; width: 80px;">{{ fr.days }}</span>
+                    <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 13px; font-weight: 600; color: #1F2A33; width: 110px;">{{ fr.overF }}</span>
+                    <span style="flex: 1; display: flex; justify-content: flex-end;"><span style="{{ fr.chipStyle }}">{{ fr.chipLabel }}</span></span>
+                  </div>
+                </sc-for>
+              </section>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isLedger }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="Ledger" style="padding: 36px 56px 48px 56px; max-width: 1450px;">
+              <div style="font-size: 26px; font-weight: 700; color: #1F2A33;">The Ledger</div>
+              <div style="font-size: 14px; color: #5C6B76; margin-top: 6px;">Outcomes, with receipts. Every number expands into how it happened.</div>
+
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 24px;">
+                <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; padding: 20px 22px;">
+                  <div style="font-size: 11px; letter-spacing: 0.12em; color: #8A96A0; font-weight: 600;">RECOVERED &amp; ATTRIBUTED</div>
+                  <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 34px; font-weight: 600; color: #2E6E4E; margin-top: 8px;">{{ lgRecovered }}</div>
+                  <div style="font-size: 12.5px; color: #5C6B76; margin-top: 8px; line-height: 1.5;">{{ lgRecoveredSub }}</div>
+                </div>
+                <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; padding: 20px 22px;">
+                  <div style="font-size: 11px; letter-spacing: 0.12em; color: #8A96A0; font-weight: 600;">UNLOCKED</div>
+                  <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 22px; font-weight: 600; color: #1F2A33; margin-top: 14px;">{{ lgUnlocked }}</div>
+                  <div style="font-size: 12.5px; color: #5C6B76; margin-top: 8px; line-height: 1.5;">{{ lgUnlockedSub }}</div>
+                </div>
+                <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; padding: 20px 22px;">
+                  <div style="font-size: 11px; letter-spacing: 0.12em; color: #8A96A0; font-weight: 600;">CARRIER CONDUCT</div>
+                  <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+                    <sc-for list="{{ lgConduct }}" as="cd" hint-placeholder-count="5">
+                      <div onClick="{{ cd.onOpen }}" style="display: flex; align-items: center; gap: 8px; cursor: pointer; border-radius: 5px; padding: 2px 4px; margin: -2px -4px;" style-hover="background: #FBF9F3;">
+                        <span style="font-size: 11.5px; color: #26313A; width: 82px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ cd.carrier }}</span>
+                        <span style="display: flex; flex-direction: column; gap: 2px;"><span style="{{ cd.foldStyle }}"></span><span style="{{ cd.rebillStyle }}"></span></span>
+                        <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 10px; color: #8A96A0; white-space: nowrap;">{{ cd.folds }} · {{ cd.rebills }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="font-size: 11px; color: #8A96A0; margin-top: 10px;"><span style="display: inline-block; width: 9px; height: 9px; background: #E5D8BC; border-radius: 2px; margin-right: 5px;"></span>folds<span style="display: inline-block; width: 9px; height: 9px; background: #1F2A33; border-radius: 2px; margin: 0 5px 0 14px;"></span>re-bills · click a carrier for its dossier</div>
+                </div>
+                <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; padding: 20px 22px;">
+                  <div style="font-size: 11px; letter-spacing: 0.12em; color: #8A96A0; font-weight: 600;">RECORDING COVERAGE</div>
+                  <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 34px; font-weight: 600; color: #1F2A33; margin-top: 8px;">{{ lgCoverage }}</div>
+                  <div style="font-size: 12.5px; color: #26313A; margin-top: 8px;">{{ lgCoverageSub }}</div>
+                  <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11px; color: #8A96A0; margin-top: 6px;">{{ lgCoverageNot }}</div>
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 26px; margin-top: 30px; border-bottom: 1px solid #E5DFD1;">
+                <sc-for list="{{ lgTabs }}" as="tb" hint-placeholder-count="3">
+                  <button onClick="{{ tb.onClick }}" style="{{ tb.style }}">{{ tb.label }}</button>
+                </sc-for>
+              </div>
+
+              <sc-if value="{{ lgTabRec }}" hint-placeholder-val="{{ true }}">
+                <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; margin-top: 18px; overflow: hidden;">
+                  <sc-for list="{{ lgRecRows }}" as="rr" hint-placeholder-count="4">
+                    <div style="border-bottom: 1px solid #F0EBDF;">
+                      <div onClick="{{ rr.onToggle }}" style="position: relative; display: flex; gap: 14px; align-items: center; padding: 12px 20px; cursor: pointer; background: #FFFFFF;" style-hover="background: #FBF9F3;">
+                        <sc-if value="{{ rr.fresh }}" hint-placeholder-val="{{ false }}"><span style="position: absolute; inset: 0; background: #E5D8BC; pointer-events: none; animation: tallyWash 3.4s ease-out forwards;"></span><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #C9A961; pointer-events: none; animation: tallyTick 4.2s ease-out forwards;"></span></sc-if>
+                        <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12.5px; color: #26313A; width: 110px; position: relative;">{{ rr.id }}</span>
+                        <span style="font-size: 13px; color: #26313A; width: 110px; position: relative;">{{ rr.carrier }}</span>
+                        <span style="font-size: 13px; color: #5C6B76; flex: 1; position: relative;">{{ rr.kind }}</span>
+                        <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 14px; font-weight: 600; color: #2E6E4E; position: relative;">{{ rr.amountF }}</span>
+                        <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #8A96A0; width: 100px; text-align: right; position: relative;">{{ rr.creditedF }}</span>
+                      </div>
+                      <sc-if value="{{ rr.open }}" hint-placeholder-val="{{ false }}">
+                        <div style="display: flex; gap: 18px; padding: 6px 20px 18px 20px; background: #FBF9F3;">
+                          <sc-for list="{{ rr.steps }}" as="rs" hint-placeholder-count="3">
+                            <div style="flex: 1; border: 1px solid #E5DFD1; border-radius: 8px; padding: 12px 16px; background: #FFFFFF;">
+                              <div style="display: flex; align-items: baseline; gap: 10px;"><span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; color: #1F2A33;">{{ rs.tag }}</span><span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 10.5px; color: #8A96A0;">{{ rs.at }}</span></div>
+                              <div style="font-size: 12.5px; color: #26313A; margin-top: 6px; line-height: 1.5;">{{ rs.body }}</div>
+                            </div>
+                          </sc-for>
+                          <sc-if value="{{ rr.canOpen }}" hint-placeholder-val="{{ false }}">
+                            <button onClick="{{ rr.onOpenCase }}" style="align-self: center; font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #26313A; background: #E5D8BC; border: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; white-space: nowrap;">open case →</button>
+                          </sc-if>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ lgTabPaid }}" hint-placeholder-val="{{ false }}">
+                <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; margin-top: 18px; overflow: hidden;">
+                  <div style="padding: 12px 20px; border-bottom: 1px solid #E5DFD1; font-size: 12.5px; color: #5C6B76;">{{ lgPaidSum }}</div>
+                  <sc-for list="{{ lgPaidRows }}" as="pr" hint-placeholder-count="2">
+                    <div style="display: flex; gap: 14px; align-items: center; padding: 12px 20px; border-bottom: 1px solid #F0EBDF;">
+                      <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12.5px; color: #26313A; width: 110px;">{{ pr.id }}</span>
+                      <span style="font-size: 13px; color: #26313A; width: 110px;">{{ pr.carrier }}</span>
+                      <span style="font-size: 13px; color: #5C6B76; flex: 1;">{{ pr.note }}</span>
+                      <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 14px; color: #1F2A33;">{{ pr.amountF }}</span>
+                      <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #8A96A0; width: 100px; text-align: right;">{{ pr.atF }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ lgTabNp }}" hint-placeholder-val="{{ false }}">
+                <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; margin-top: 18px; overflow: hidden;">
+                  <div style="padding: 12px 20px; border-bottom: 1px solid #E5DFD1; font-size: 12.5px; color: #5C6B76;">{{ lgNpSum }}</div>
+                  <sc-for list="{{ lgNpRows }}" as="nr" hint-placeholder-count="1">
+                    <div style="display: flex; gap: 14px; align-items: center; padding: 12px 20px; border-bottom: 1px solid #F0EBDF;">
+                      <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12.5px; color: #26313A; width: 110px;">{{ nr.id }}</span>
+                      <span style="font-size: 13px; color: #26313A; width: 110px;">{{ nr.carrier }}</span>
+                      <span style="font-size: 13px; color: #5C6B76; flex: 1;">{{ nr.reason }} — {{ nr.by }}</span>
+                      <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 14px; color: #1F2A33;">{{ nr.amountF }}</span>
+                      <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #8A96A0; width: 100px; text-align: right;">{{ nr.atF }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isArchive }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="Archive" style="padding: 36px 56px 48px 56px; max-width: 1520px;">
+              <div style="font-size: 26px; font-weight: 700; color: #1F2A33;">The Archive</div>
+              <div style="font-size: 14px; color: #5C6B76; margin-top: 6px;">{{ archCoverage }} <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #8A96A0;">{{ archGloss }}</span></div>
+              <div style="display: flex; gap: 36px; margin-top: 24px; align-items: flex-start;">
+                <div style="flex: 1; min-width: 0;">
+                  <div style="font-size: 13px; font-weight: 700; color: #1F2A33; letter-spacing: 0.04em;">{{ archLogTitle }}</div>
+                  <div ref="{{ archLogRef }}" style="height: 700px; overflow: auto; background: #1F2A33; border-radius: 10px; padding: 18px 22px; margin-top: 12px;">
+                    <sc-for list="{{ archLog }}" as="le" hint-placeholder-count="12">
+                      <sc-if value="{{ le.target }}" hint-placeholder-val="{{ false }}">
+                        <div data-target-commit="1" style="{{ archTargetStyle }}"><span style="color: inherit;">{{ le.line }}</span>  <span style="color: #6E7F8B;">{{ le.commit }}</span></div>
+                      </sc-if>
+                      <sc-if value="{{ le.plain }}" hint-placeholder-val="{{ true }}">
+                        <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; line-height: 2; white-space: pre; color: #C9D4DC; padding: 0 6px;">{{ le.line }}  <span style="color: #6E7F8B;">{{ le.commit }}</span></div>
+                      </sc-if>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="flex: 1.15; min-width: 0;">
+                  <div style="font-size: 13px; font-weight: 700; color: #1F2A33; letter-spacing: 0.04em;">Calendar of seals</div>
+                  <div style="{{ archCalStyle }}">
+                    <sc-for list="{{ archMonths }}" as="mo" hint-placeholder-count="2">
+                      <div style="flex: 1;">
+                        <div style="font-size: 13px; font-weight: 600; color: #26313A;">{{ mo.label }}</div>
+                        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 10px;">
+                          <sc-for list="{{ mo.cells }}" as="dy" hint-placeholder-count="31">
+                            <div onClick="{{ dy.onClick }}" title="{{ dy.title }}" style="{{ dy.style }}">
+                              <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 10.5px; color: #8A96A0;">{{ dy.n }}</div>
+                              <sc-if value="{{ dy.seals }}" hint-placeholder-val="{{ false }}"><div style="font-size: 8px; letter-spacing: 2px; color: #1F2A33; margin-top: 3px;">{{ dy.seals }}</div></sc-if>
+                              <sc-if value="{{ dy.credit }}" hint-placeholder-val="{{ false }}"><div style="width: 7px; height: 7px; border-radius: 50%; background: #2E6E4E; margin-top: 3px;"></div></sc-if>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="font-size: 11.5px; color: #8A96A0; margin-top: 10px; padding-left: 10px;">● seal filed · <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #2E6E4E; vertical-align: baseline;"></span> credit landed · click a day for its snapshots</div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isSystem }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="System" style="padding: 36px 56px 48px 56px; max-width: 1450px;">
+              <div style="font-size: 26px; font-weight: 700; color: #1F2A33;">System</div>
+              <div style="font-size: 14px; color: #5C6B76; margin-top: 6px;">What the agent is allowed to do, how it is tested, and what the record keeps.</div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px;">
+                <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; padding: 20px 24px;">
+                  <div style="font-size: 11px; letter-spacing: 0.12em; color: #8A96A0; font-weight: 600;">EVAL — THE CLERK, UNDER TEST</div>
+                  <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 24px; font-weight: 600; color: #1F2A33; margin-top: 10px;">{{ sysEval }}</div>
+                  <div style="font-size: 12.5px; color: #5C6B76; margin-top: 8px; line-height: 1.6;">{{ sysEvalSub }}</div>
+                </div>
+                <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; padding: 20px 24px;">
+                  <div style="font-size: 11px; letter-spacing: 0.12em; color: #8A96A0; font-weight: 600;">HISTORY RETENTION</div>
+                  <div style="font-size: 15px; font-weight: 600; color: #1F2A33; margin-top: 10px;">{{ sysRetention }}</div>
+                  <pre style="margin: 10px 0 0 0; font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; line-height: 1.7; color: #26313A; background: #F6F3EC; border: 1px solid #E5DFD1; border-radius: 6px; padding: 10px 14px; white-space: pre-wrap;">{{ sysRetentionSql }}</pre>
+                  <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11px; color: #8A96A0; margin-top: 10px;">{{ sysTenant }}</div>
+                  <sc-if value="{{ sysShowFilmLinks }}" hint-placeholder-val="{{ true }}">
+                    <div style="display: flex; gap: 14px; margin-top: 14px;">
+                      <button onClick="{{ sysGoDocket }}" style="font-size: 12px; font-weight: 600; color: #26313A; background: #FFFFFF; border: 1px solid #C9D0D6; border-radius: 6px; padding: 6px 12px; cursor: pointer;">the synthetic docket email</button>
+                      <button onClick="{{ sysGoExhibit }}" style="font-size: 12px; font-weight: 600; color: #26313A; background: #FFFFFF; border: 1px solid #C9D0D6; border-radius: 6px; padding: 6px 12px; cursor: pointer;">the synthetic sealed exhibit</button>
+                    </div>
+                  </sc-if>
+                </div>
+                <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; padding: 20px 24px;">
+                  <div style="font-size: 11px; letter-spacing: 0.12em; color: #8A96A0; font-weight: 600;">RUNTIME</div>
+                  <div style="font-size: 13px; color: #26313A; margin-top: 8px;">{{ sysRuntime }}</div>
+                  <sc-for list="{{ sysRoles }}" as="ro" hint-placeholder-count="3">
+                    <div style="display: flex; gap: 16px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid #F0EBDF;">
+                      <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12.5px; font-weight: 600; color: #1F2A33; width: 110px;">{{ ro.role }}</span>
+                      <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11.5px; color: #26313A; width: 220px;">{{ ro.grants }}</span>
+                      <span style="font-size: 12px; color: #8A96A0; flex: 1;">{{ ro.note }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 10px; padding: 20px 24px;">
+                  <div style="font-size: 11px; letter-spacing: 0.12em; color: #8A96A0; font-weight: 600;">AUDIT LOG</div>
+                  <div style="max-height: 300px; overflow: auto; margin-top: 8px;">
+                    <sc-for list="{{ sysAudit }}" as="au" hint-placeholder-count="4">
+                      <div style="display: flex; gap: 14px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid #F0EBDF;">
+                        <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11px; color: #8A96A0; width: 150px; flex: 0 0 150px;">{{ au.at }}</span>
+                        <span style="font-size: 12px; color: #26313A; width: 110px; flex: 0 0 110px; font-weight: 500;">{{ au.who }}</span>
+                        <span style="font-size: 12px; color: #5C6B76; flex: 1; line-height: 1.5;">{{ au.what }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isExhibit }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="Exhibit" style="position: absolute; inset: 0; z-index: 6; background: #FFFFFF; padding: 0 0 60px 0; overflow: auto;">
+              <div style="display: flex; align-items: center; gap: 14px; background: #F6F3EC; border-bottom: 1px solid #E5DFD1; padding: 12px 56px;">
+                <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12.5px; color: #26313A;">tally.record/exhibit/CASE-0142</span>
+                <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 10.5px; color: #8A96A0; border: 1px solid #C9D0D6; border-radius: 999px; padding: 2px 10px;">read-only · permanent</span>
+                <button onClick="{{ exBack }}" style="margin-left: auto; font-size: 12px; color: #5C6B76; background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 3px;">back to the case</button>
+              </div>
+              <div style="max-width: 860px; margin: 48px auto 0 auto; padding: 0 40px;">
+                <svg width="44" height="30" viewBox="0 0 72 48"><line x1="9" y1="6" x2="9" y2="42" stroke="#1F2A33" stroke-width="5" stroke-linecap="round"></line><line x1="25" y1="6" x2="25" y2="42" stroke="#1F2A33" stroke-width="5" stroke-linecap="round"></line><line x1="41" y1="6" x2="41" y2="42" stroke="#1F2A33" stroke-width="5" stroke-linecap="round"></line><line x1="57" y1="6" x2="57" y2="42" stroke="#1F2A33" stroke-width="5" stroke-linecap="round"></line><line x1="1" y1="40" x2="66" y2="7" stroke="#1F2A33" stroke-width="5" stroke-linecap="round"></line></svg>
+                <div style="font-size: 24px; font-weight: 700; color: #1F2A33; margin-top: 18px;">Sealed evidence — CASE-0142</div>
+                <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #5C6B76; margin-top: 10px; line-height: 1.8;">seal {{ exSeal }} · fixed {{ exSealedAt }}<br>{{ exHash }}<br>{{ exServed }}</div>
+                <div style="margin-top: 30px; border-top: 1px solid #E5DFD1;">
+                  <sc-for list="{{ exItems }}" as="ex" hint-placeholder-count="5">
+                    <div style="display: flex; gap: 24px; padding: 16px 0; border-bottom: 1px solid #E5DFD1;">
+                      <span style="font-size: 14px; font-weight: 600; color: #1F2A33; width: 320px; flex: 0 0 320px;">{{ ex.k }}</span>
+                      <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #5C6B76; flex: 1; line-height: 1.7;">{{ ex.v }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="font-size: 12.5px; color: #8A96A0; margin-top: 26px; line-height: 1.7;">Nothing on this page can be edited — by either side. Items were captured at the timestamps shown, before any dispute existed.</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isDocket }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="Docket" style="padding: 36px 56px 60px 56px;">
+              <button onClick="{{ dkBack }}" style="font-size: 13px; color: #5C6B76; background: none; border: none; cursor: pointer; padding: 0;">← Queue</button>
+              <div style="max-width: 760px; margin: 22px auto 0 auto; background: #FFFFFF; border: 1px solid #E5DFD1; border-radius: 12px; overflow: hidden;">
+                <div style="padding: 18px 28px; border-bottom: 1px solid #E5DFD1; background: #FBF9F3;">
+                  <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11.5px; color: #8A96A0; line-height: 1.9;">From: Tally &lt;docket@tally.example&gt;<br>To: avery@example-mercantile.example</div>
+                  <div style="font-size: 16px; font-weight: 700; color: #1F2A33; margin-top: 8px;">{{ dkSubject }}</div>
+                </div>
+                <div style="padding: 22px 28px;">
+                  <div style="display: flex; align-items: center; gap: 12px; border: 1px solid #2E6E4E; border-radius: 8px; padding: 12px 18px;">
+                    <span style="font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #2E6E4E;">+$700</span>
+                    <span style="font-size: 13px; color: #26313A;">{{ dkRecovery }}</span>
+                  </div>
+                  <sc-for list="{{ dkRows }}" as="dk" hint-placeholder-count="3">
+                    <div style="border: 1px solid #E5DFD1; border-radius: 8px; padding: 14px 18px; margin-top: 12px;">
+                      <div style="font-size: 13.5px; font-weight: 600; color: #1F2A33;">{{ dk.line }}</div>
+                      <div style="font-size: 12.5px; color: #5C6B76; margin-top: 4px;">{{ dk.defect }}</div>
+                      <div style="display: flex; align-items: center; gap: 12px; margin-top: 10px;">
+                        <span style="font-size: 12px; font-weight: 700; color: #F6F3EC; background: #1F2A33; border-radius: 6px; padding: 7px 14px;">{{ dk.action }}</span>
+                        <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 10.5px; color: #8A96A0;">{{ dk.sig }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 10.5px; color: #8A96A0; margin-top: 18px;">signed one-tap actions · rendered email — delivery is not wired in this build</div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!--VIEWS-->
+
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{ inspectorOpen }}" hint-placeholder-val="{{ false }}">
+      <aside style="position: absolute; top: 0; right: 0; bottom: 0; width: 470px; background: #1F2A33; border-left: 1px solid rgba(229,216,188,0.25); box-shadow: -20px 0 50px rgba(0,0,0,0.35); padding: 26px 26px 30px 26px; overflow: auto; font-family: 'IBM Plex Mono',ui-monospace,monospace; animation: tallyFade 0.22s ease-out;">
+        <div style="display: flex; align-items: baseline; gap: 12px;">
+          <div style="color: #E5D8BC; font-size: 14px; font-weight: 600; letter-spacing: 0.08em;">INSPECTOR</div>
+          <div style="color: #6E7F8B; font-size: 11px;">{{ inspHeading }} · press ` to close</div>
+        </div>
+        <sc-for list="{{ inspBlocks }}" as="ib" hint-placeholder-count="2">
+          <div style="{{ ib.style }}">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <span style="color: #E5D8BC; font-size: 11.5px; font-weight: 600;">{{ ib.title }}</span>
+              <sc-if value="{{ ib.tag }}" hint-placeholder-val="{{ false }}">
+                <span style="font-size: 10px; color: #8FA0AC; border: 1px solid rgba(143,160,172,0.5); border-radius: 999px; padding: 1px 8px;">{{ ib.tag }}</span>
+              </sc-if>
+            </div>
+            <pre style="margin: 0; white-space: pre-wrap; font-family: inherit; font-size: 11.5px; line-height: 1.6; color: #C9D4DC;">{{ ib.sql }}</pre>
+            <div style="margin-top: 8px; font-size: 10.5px; color: #6E7F8B;">{{ ib.meta }}</div>
+          </div>
+        </sc-for>
+        <div style="margin-top: 22px; font-size: 10.5px; color: #5C6E7B; line-height: 1.6;">{{ inspDisclosure }}</div>
+      </aside>
+    </sc-if>
+
+    <sc-if value="{{ confirmOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; inset: 0; background: rgba(31,42,51,0.45); display: flex; align-items: center; justify-content: center;">
+        <div style="width: 620px; background: #F6F3EC; border-radius: 12px; padding: 30px 34px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); animation: tallyFade 0.18s ease-out;">
+          <div style="font-size: 19px; font-weight: 700; color: #1F2A33;">{{ confirmTitle }}</div>
+          <sc-for list="{{ confirmLines }}" as="cl" hint-placeholder-count="3">
+            <div style="font-size: 14px; color: #26313A; line-height: 1.65; margin-top: 12px;">{{ cl }}</div>
+          </sc-for>
+          <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #5C6B76; margin-top: 18px; padding-top: 14px; border-top: 1px solid #E5DFD1;">{{ confirmStamp }}</div>
+          <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+            <button onClick="{{ confirmCancel }}" style="font-size: 14px; font-weight: 600; color: #26313A; background: #FFFFFF; border: 1px solid #C9D0D6; border-radius: 8px; padding: 10px 20px; cursor: pointer;">Cancel</button>
+            <button onClick="{{ confirmGo }}" style="font-size: 14px; font-weight: 700; color: #F6F3EC; background: #1F2A33; border: none; border-radius: 8px; padding: 10px 22px; cursor: pointer;">{{ confirmLabel }}</button>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ helpOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeHelp }}" style="position: absolute; inset: 0; background: rgba(31,42,51,0.55); display: flex; align-items: center; justify-content: center;">
+        <div style="width: 480px; background: #1F2A33; border: 1px solid rgba(229,216,188,0.3); border-radius: 12px; padding: 28px 32px; font-family: 'IBM Plex Mono',ui-monospace,monospace; color: #C9D4DC; font-size: 13px; line-height: 2.1;">
+          <div style="color: #E5D8BC; font-weight: 600; letter-spacing: 0.08em; margin-bottom: 10px;">FILM KEYS</div>
+          <div><span style="color: #E5D8BC;">1–8</span> — beats · hook / problem / archive / intake→seal / contest→AS OF / cascade→ledger / system / close</div>
+          <div><span style="color: #E5D8BC;">→ or space</span> — sub-step forward</div>
+          <div><span style="color: #E5D8BC;">←</span> — sub-step back</div>
+          <div><span style="color: #E5D8BC;">esc</span> — return to today</div>
+          <div><span style="color: #E5D8BC;">`</span> — the Inspector</div>
+          <div><span style="color: #E5D8BC;">d</span> — the docket email (also linked from System)</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ dayOpen }}" hint-placeholder-val="{{ false }}">
+      <aside style="position: absolute; top: 0; right: 0; bottom: 0; width: 440px; background: #F6F3EC; border-left: 1px solid #E5DFD1; box-shadow: -20px 0 50px rgba(31,42,51,0.25); padding: 28px 30px; overflow: auto; animation: tallyFade 0.2s ease-out;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 18px; font-weight: 600; color: #1F2A33;">{{ dayTitle }}</span>
+          <span style="font-size: 12px; color: #8A96A0;">what the record holds for this day</span>
+          <button onClick="{{ closeDay }}" style="margin-left: auto; font-size: 16px; color: #5C6B76; background: none; border: none; cursor: pointer;">✕</button>
+        </div>
+        <sc-if value="{{ dayEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size: 13.5px; color: #5C6B76; margin-top: 24px;">{{ dayEmpty }}</div>
+        </sc-if>
+        <sc-for list="{{ dayRows }}" as="dr" hint-placeholder-count="4">
+          <div style="padding: 12px 0; border-bottom: 1px solid #E5DFD1;">
+            <div style="font-size: 13px; font-weight: 600; color: #1F2A33;">{{ dr.k }}</div>
+            <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11.5px; color: #5C6B76; margin-top: 4px; line-height: 1.6;">{{ dr.v }}</div>
+          </div>
+        </sc-for>
+      </aside>
+    </sc-if>
+
+    <sc-if value="{{ reasonOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; inset: 0; background: rgba(31,42,51,0.45); display: flex; align-items: center; justify-content: center;">
+        <div style="width: 560px; background: #F6F3EC; border-radius: 12px; padding: 28px 32px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); animation: tallyFade 0.18s ease-out;">
+          <div style="font-size: 18px; font-weight: 700; color: #1F2A33;">Don't press — log the reason</div>
+          <div style="font-size: 13.5px; color: #5C6B76; margin-top: 8px; line-height: 1.6;">Every pass is a decision. The reason goes to the Ledger and the audit log, under your name.</div>
+          <textarea value="{{ reasonText }}" onChange="{{ onReasonInput }}" placeholder="Why this dispute is not being pressed…" style="width: 100%; height: 90px; margin-top: 16px; font-family: 'Schibsted Grotesk','Helvetica Neue',sans-serif; font-size: 14px; color: #26313A; background: #FFFFFF; border: 1px solid #C9D0D6; border-radius: 8px; padding: 12px 14px; resize: none; outline: none;"></textarea>
+          <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 18px;">
+            <button onClick="{{ reasonCancel }}" style="font-size: 14px; font-weight: 600; color: #26313A; background: #FFFFFF; border: 1px solid #C9D0D6; border-radius: 8px; padding: 10px 20px; cursor: pointer;">Cancel</button>
+            <button onClick="{{ reasonSave }}" disabled="{{ reasonSaveDisabled }}" style="font-size: 14px; font-weight: 700; color: #F6F3EC; background: #1F2A33; border: none; border-radius: 8px; padding: 10px 22px; cursor: pointer;">Log &amp; don't press</button>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ filmHook }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; inset: 0; background: #1F2A33; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+        <svg width="120" height="80" viewBox="0 0 72 48" style="overflow: visible;">
+          <line x1="9" y1="6" x2="9" y2="42" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round" stroke-dasharray="36" stroke-dashoffset="36" style="animation: tallyDraw 0.3s ease-out 0.2s forwards;"></line>
+          <line x1="25" y1="6" x2="25" y2="42" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round" stroke-dasharray="36" stroke-dashoffset="36" style="animation: tallyDraw 0.3s ease-out 0.55s forwards;"></line>
+          <line x1="41" y1="6" x2="41" y2="42" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round" stroke-dasharray="36" stroke-dashoffset="36" style="animation: tallyDraw 0.3s ease-out 0.9s forwards;"></line>
+          <line x1="57" y1="6" x2="57" y2="42" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round" stroke-dasharray="36" stroke-dashoffset="36" style="animation: tallyDraw 0.3s ease-out 1.25s forwards;"></line>
+        </svg>
+        <div style="position: relative; display: inline-block; margin-top: 40px;">
+          <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 170px; font-weight: 600; color: #F6F3EC; letter-spacing: -0.02em; line-height: 1;">$15.4B</div>
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; left: -4%; top: -8%; width: 108%; height: 116%; overflow: visible; pointer-events: none;">
+            <line x1="4" y1="94" x2="96" y2="6" stroke="#C1121F" stroke-width="13" stroke-linecap="round" vector-effect="non-scaling-stroke" stroke-dasharray="140" stroke-dashoffset="140" style="animation: tallyDraw 0.45s cubic-bezier(0.6,0,0.3,1) 1.8s forwards;"></line>
+          </svg>
+        </div>
+        <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 26px; color: #E5D8BC; margin-top: 42px;">collected by nine carriers, 2020–2025</div>
+        <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 14px; color: #6E7F8B; margin-top: 66px; letter-spacing: 0.14em;">TALLY — THE DISPUTE AGENT FOR DEMURRAGE &amp; DETENTION</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ filmProblem }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; inset: 0; background: #1F2A33; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 54px;">
+        <div style="display: flex; gap: 90px;">
+          <div><div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 74px; font-weight: 600; color: #F6F3EC;">1,000s</div><div style="font-size: 18px; color: #8FA0AC; margin-top: 8px;">of containers</div></div>
+          <div><div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 74px; font-weight: 600; color: #F6F3EC;">12</div><div style="font-size: 18px; color: #8FA0AC; margin-top: 8px;">carriers</div></div>
+          <div><div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 74px; font-weight: 600; color: #F6F3EC;">20</div><div style="font-size: 18px; color: #8FA0AC; margin-top: 8px;">ports</div></div>
+        </div>
+        <sc-if value="{{ pSub1 }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; align-items: center; gap: 26px; animation: tallyFade 0.5s ease-out both;">
+            <div style="background: #E5D8BC; border-radius: 8px; padding: 16px 26px; text-align: left;">
+              <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 16px; font-weight: 600; color: #1F2A33;">INV-NOL-085114 · $2,800</div>
+              <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #5C6B76; margin-top: 4px;">demurrage &amp; detention · due on receipt</div>
+            </div>
+            <div style="font-size: 26px; color: #6E7F8B;">→</div>
+            <div style="border: 2px dashed #4A5B67; border-radius: 8px; padding: 22px 34px; font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 15px; color: #8FA0AC; letter-spacing: 0.14em;">AN INBOX</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ pSub2 }}" hint-placeholder-val="{{ false }}">
+          <div style="animation: tallyFade 0.5s ease-out both;">
+            <div style="display: flex; gap: 46px; justify-content: center;">
+              <div style="border: 1.5px solid #4A5B67; border-radius: 8px; padding: 20px 30px; font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 15px; color: #C9D4DC; letter-spacing: 0.12em;">CARRIER</div>
+              <div style="border: 1.5px solid #4A5B67; border-radius: 8px; padding: 20px 30px; font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 15px; color: #C9D4DC; letter-spacing: 0.12em;">TERMINAL</div>
+              <div style="border: 1.5px solid #4A5B67; border-radius: 8px; padding: 20px 30px; font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 15px; color: #C9D4DC; letter-spacing: 0.12em;">IMPORTER</div>
+              <div style="border: 1.5px solid #4A5B67; border-radius: 8px; padding: 20px 30px; font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 15px; color: #C9D4DC; letter-spacing: 0.12em;">TRUCKER</div>
+            </div>
+            <div style="font-size: 20px; color: #8FA0AC; margin-top: 30px;">Four parties. No shared record. Wrong invoices die of paperwork.</div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+    <sc-if value="{{ filmClose }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; inset: 0; background: #1F2A33; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+        <svg width="96" height="64" viewBox="0 0 72 48" style="animation: tallyFade 0.5s ease-out 0.1s both;"><line x1="9" y1="6" x2="9" y2="42" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round"></line><line x1="25" y1="6" x2="25" y2="42" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round"></line><line x1="41" y1="6" x2="41" y2="42" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round"></line><line x1="57" y1="6" x2="57" y2="42" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round"></line><line x1="1" y1="40" x2="66" y2="7" stroke="#E5D8BC" stroke-width="5" stroke-linecap="round"></line></svg>
+        <div style="font-size: 66px; font-weight: 700; color: #F6F3EC; margin-top: 40px; letter-spacing: 0.22em; animation: tallyFade 0.5s ease-out 0.5s both;">TALLY</div>
+        <div style="font-size: 30px; font-weight: 600; color: #C9D4DC; margin-top: 30px; line-height: 1.5; animation: tallyFade 0.5s ease-out 0.9s both;">Every invoice checked. Every fact recorded.<br>Every dispute receipted.</div>
+        <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 16px; color: #E5D8BC; margin-top: 40px; animation: tallyFade 0.5s ease-out 1.3s both;">github.com/meridian-hh/tally · built on CockroachDB</div>
+        <div style="margin-top: 44px; animation: tallyStamp 0.7s cubic-bezier(0.2,1.4,0.4,1) 1.9s both;">
+          <div style="display: inline-block; border: 3px solid #C1121F; color: #C1121F; border-radius: 10px; padding: 10px 22px; transform: rotate(-8deg);">
+            <div style="font-size: 15px; font-weight: 800; letter-spacing: 0.24em;">SEALED</div>
+            <div style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11px; margin-top: 3px;">2026-07-21 17:00 UTC</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showFilmHints }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; left: 18px; bottom: 16px; font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11px; color: #8FA0AC; background: rgba(31,42,51,0.85); border-radius: 6px; padding: 6px 12px;">film: 1–8 beats · →/space sub-step · esc today · ` inspector · ? keys</div>
+    </sc-if>
+
+    <sc-if value="{{ dossOpen }}" hint-placeholder-val="{{ false }}">
+      <aside style="position: absolute; top: 0; right: 0; bottom: 0; width: 460px; background: #F6F3EC; border-left: 1px solid #E5DFD1; box-shadow: -20px 0 50px rgba(31,42,51,0.25); padding: 28px 30px; overflow: auto; animation: tallyFade 0.2s ease-out; z-index: 4;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 20px; font-weight: 700; color: #1F2A33;">{{ dossTitle }}</span>
+          <span style="font-size: 12px; color: #8A96A0;">carrier dossier — conduct on the record</span>
+          <button onClick="{{ closeDoss }}" style="margin-left: auto; font-size: 16px; color: #5C6B76; background: none; border: none; cursor: pointer;">✕</button>
+        </div>
+        <div style="margin-top: 16px;">
+          <sc-for list="{{ dossStats }}" as="dst" hint-placeholder-count="6">
+            <div style="display: flex; gap: 18px; padding: 10px 0; border-bottom: 1px solid #E5DFD1;">
+              <span style="font-size: 12.5px; color: #8A96A0; width: 170px; flex: 0 0 170px;">{{ dst.k }}</span>
+              <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12.5px; color: #26313A; flex: 1;">{{ dst.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size: 13px; font-weight: 600; color: #1F2A33; margin-top: 20px;">{{ dossOpenLine }}</div>
+        <sc-for list="{{ dossCases }}" as="dsc" hint-placeholder-count="3">
+          <div onClick="{{ dsc.onOpen }}" style="display: flex; gap: 14px; align-items: center; padding: 9px 12px; border: 1px solid #E5DFD1; border-radius: 7px; margin-top: 8px; cursor: pointer; background: #FFFFFF;" style-hover="background: #FBF9F3;">
+            <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12px; color: #26313A;">{{ dsc.id }}</span>
+            <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 11.5px; color: #8A96A0;">{{ dsc.st }}</span>
+            <span style="font-family: 'IBM Plex Mono',ui-monospace,monospace; font-size: 12.5px; color: #1F2A33; margin-left: auto;">{{ dsc.amountF }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size: 11.5px; color: #8A96A0; margin-top: 20px; line-height: 1.6;">Conduct and the Ledger tile are two views of one computation. The press / hold / fold line on every case cites this page.</div>
+      </aside>
+    </sc-if>
+
+    <!--OVERLAYS-->
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;reducedMotion&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Behavior&quot;}, &quot;filmHints&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Behavior&quot;}, &quot;inspectorWidth&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 470, &quot;min&quot;: 380, &quot;max&quot;: 620, &quot;step&quot;: 10, &quot;unit&quot;: &quot;px&quot;, &quot;section&quot;: &quot;Layout&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const ts = (s) => Date.parse(s.length > 10 ? s.replace(' ', 'T') + ':00Z' : s + 'T00:00:00Z');
+    this.tsf = ts;
+    this.DAY = 86400000;
+
+    // ============ data provider (B1FE-S2/S3) ============
+    // window.__tallyProvider is set by a module <script> earlier in this
+    // document (mock today; a live provider is a drop-in replacement — see
+    // ui/src/data/mock-provider.js's JSDoc for the interface shape). Every
+    // seed read below goes through it; no seed literal lives in this class
+    // after this session.
+    //
+    // Found live (B1FE-S3): support.js's own DOMContentLoaded-triggered
+    // boot races the module script's top-level assignment — real browser
+    // non-determinism between a classic <script> (support.js, locked, not
+    // hand-edited) and a <script type="module">, confirmed at ~50% failure
+    // in production-build testing, not something import ordering alone
+    // fixes. window.__tallyProvider can genuinely be undefined here.
+    // Fallback: a minimal inline emergency provider so the constructor
+    // never throws; componentDidMount checks __providerWasFallback and
+    // re-reads window.__tallyProvider once mounted (by then the module
+    // script has always finished — this is a construction-time race only).
+    const providerWasFallback = !window.__tallyProvider;
+    const provider = window.__tallyProvider || {
+      getCases: () => [], getCredits: () => [], getPaidSeed: () => [], getNotPressedSeed: () => [],
+      getConduct: () => [], getEvalRun: () => null,
+      getTariffCapture: () => ({ at: null, atS: null, rate: null, carrier: null, lane: null }),
+      getHeroCaseId: () => null,
+      getCommitLog: () => { throw new Error('emergency fallback provider: getCommitLog must never be called'); },
+      getClockMode: () => 'live', getInitialClock: () => Date.now(), getRecordingStart: () => Date.now(),
+      getDisclosure: () => ({ label: 'STARTING — DATA MODE NOT YET SELECTED', detail: 'The data provider is still loading.', tone: 'error' }),
+    };
+    this.providerWasFallback = providerWasFallback;
+    this.provider = provider;
+    this.REC = provider.getRecordingStart();
+    this.T0 = provider.getInitialClock();
+    this.clockMode = provider.getClockMode();
+    this.disclosure = provider.getDisclosure();
+
+    this.inv = provider.getCases();
+    this.heroId = provider.getHeroCaseId();
+    this.credits = provider.getCredits();
+    this.paidSeed = provider.getPaidSeed();
+    this.notPressedSeed = provider.getNotPressedSeed();
+    this.conduct = provider.getConduct();
+    this.evalRun = provider.getEvalRun();
+    this.tariffCapture = provider.getTariffCapture();
+
+    const inv = this.inv;
+    this.state = {
+      clock: this.T0, view: 'queue', caseId: null,
+      queueTab: 'decisions', caseFilter: 'all', origin: 'queue', dossierOpen: null, filmSub: 0,
+      inspector: false, help: false, filmCard: null, beat: null, step: 0,
+      fresh: {}, sel: this.defaultSel(inv),
+      confirm: null, reason: null, dayDrawer: null,
+      approved: {}, accepted: {}, held: {}, notPressed: {}, audit: [],
+      run: null, runNow: 0, runsDone: {},
+      liveReplay: null,
+      playhead: null, asofLanded: false,
+      bulkOpen: false, cascadeIdx: -1,
+      archHi: false, calFocus: false, receiptOpen: null, ledgerTab: 'recovered', dossierFocus: null,
+      inspFlash: false, vw: 1920, vh: 1080,
+    };
+    this.archLogRef = React.createRef();
+    this.onKey = this.onKey.bind(this); this.onResize = this.onResize.bind(this);
+  }
+
+  defaultSel(inv) { const s = {}; inv.forEach(v => { if (v.verdict === 'owe0' || v.verdict === 'valid') s[v.id] = true; }); return s; }
+
+  componentDidMount() {
+    window.addEventListener('keydown', this.onKey); window.addEventListener('resize', this.onResize);
+    this.onResize();
+    requestAnimationFrame(() => this.onResize());
+    setTimeout(() => this.onResize(), 250);
+
+    // Self-heal from the constructor's emergency-provider fallback (see
+    // constructor comment): by mount time the module script has always
+    // finished (this is a construction-time race only), so re-read the
+    // real provider and re-render with it.
+    if (this.providerWasFallback && window.__tallyProvider) {
+      this.provider = window.__tallyProvider;
+      this.providerWasFallback = false;
+      this.REC = this.provider.getRecordingStart();
+      this.T0 = this.provider.getInitialClock();
+      this.clockMode = this.provider.getClockMode();
+      this.disclosure = this.provider.getDisclosure();
+      this.inv = this.provider.getCases();
+      this.heroId = this.provider.getHeroCaseId();
+      this.credits = this.provider.getCredits();
+      this.paidSeed = this.provider.getPaidSeed();
+      this.notPressedSeed = this.provider.getNotPressedSeed();
+      this.conduct = this.provider.getConduct();
+      this.evalRun = this.provider.getEvalRun();
+      this.tariffCapture = this.provider.getTariffCapture();
+      this.setState({ clock: this.T0 });
+    }
+
+    // Live-mode data arrival (B1FE-S3): the provider's getCases() started
+    // empty (no network round trip blocks mount, see provider.js's
+    // onDataChange doc) and fills in asynchronously. onDataChange is a
+    // no-op registration for MockProvider (film mode never calls back).
+    if (typeof this.provider.onDataChange === 'function') {
+      this.provider.onDataChange(() => {
+        this.inv = this.provider.getCases();
+        this.disclosure = this.provider.getDisclosure();
+        this.forceUpdate();
+      });
+    }
+    if (typeof this.provider.subscribeFeed === 'function') {
+      this._unsubscribeFeed = this.provider.subscribeFeed((frame) => this.onFeedEvent(frame));
+    }
+  }
+  componentWillUnmount() { window.removeEventListener('keydown', this.onKey); window.removeEventListener('resize', this.onResize); clearInterval(this._ri); clearInterval(this._ci); clearTimeout(this._ft); if (this._unsubscribeFeed) this._unsubscribeFeed(); }
+
+  // Live-mode WS frames (B1FE-S3): {event, ts, payload} per TDD §3.11.
+  // Only case.sealed exists to react to yet (clerk.step/clerk.filed have no
+  // consumer in this session's scope — Case File's Clerk-run display reads
+  // fetchCase()'s state, not the feed, per the view-triage proposal).
+  onFeedEvent(frame) {
+    if (frame.event === 'case.sealed') {
+      const fresh = Object.assign({}, this.state.fresh);
+      fresh['seal-' + frame.payload.case_id] = true;
+      this.setState({ fresh });
+      clearTimeout(this._ft); this._ft = setTimeout(() => this.setState({ fresh: {} }), 4600);
+    }
+  }
+  onResize() { this.setState({ vw: window.innerWidth, vh: window.innerHeight }); }
+
+  // ---------- format law: YYYY-MM-DD · HH:MM UTC · $1,234 ----------
+  fD(t) { return new Date(t).toISOString().slice(0, 10); }
+  fT(t) { return new Date(t).toISOString().slice(11, 16) + ' UTC'; }
+  fDT(t) { return this.fD(t) + ' ' + this.fT(t); }
+  money(n) { return '$' + n.toLocaleString('en-US'); }
+  h(s) { let x = 7; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) >>> 0; return x.toString(16).padStart(8, '0'); }
+  sealId(id) { if (id === 'CASE-0142') return 's:9f27c4'; return 's:' + this.h('seal' + id).slice(-6); }
+  basisId() { return 'basis:a1afde'; }
+  dayDiff(a, b) { return Math.round((Date.UTC(new Date(a).getUTCFullYear(), new Date(a).getUTCMonth(), new Date(a).getUTCDate()) - Date.UTC(new Date(b).getUTCFullYear(), new Date(b).getUTCMonth(), new Date(b).getUTCDate())) / this.DAY); }
+
+  // ---------- derivation core ----------
+  sealTs(v) { if (v.sT) return v.sT; const a = this.state.approved[v.id]; return a ? a.t : null; }
+  st(v, clock) {
+    if (v.aT > clock) return 'future';
+    if (!v.cT || v.cT > clock) return 'checking';
+    const sT = this.sealTs(v);
+    if (sT && sT <= clock) { if (v.rT && v.rT <= clock) return 'resolved'; if (v.kT && v.kT <= clock) return 'contested'; return 'filed'; }
+    const acc = this.state.accepted[v.id]; if (acc && acc <= clock) return 'accepted';
+    const np = this.state.notPressed[v.id]; if (np && np.t <= clock) return 'notpressed';
+    return 'awaiting';
+  }
+  creditsAt(clock) { return this.credits.filter(c => this.tsf(c.credited) <= clock); }
+  coverageDays(clock) { return this.dayDiff(clock, this.REC) + 1; }
+
+  // Law 2 fence: MockProvider is the only implementation of getCommitLog();
+  // a live provider must never implement it — live mode renders only
+  // feed-delivered lines (see Archive's archiveVals(), which calls this).
+  commitLog(clock) { return this.provider.getCommitLog(clock); }
+  lastCommit(clock) {
+    let m = 0;
+    // Law 2 fence: commitLog() throws in live mode (LiveProvider has no
+    // synthesized log — see live-provider.js). The recording pipeline's
+    // real snapshot.committed feed doesn't exist in this backend scope yet
+    // (a later bundle), so live mode has no source for this line at all —
+    // falls through to the case/credit timestamps below, which are real.
+    if (this.clockMode !== 'live') this.commitLog(clock).forEach(c => { if (c.at > m) m = c.at; });
+    this.inv.forEach(v => { [v.cT, this.sealTs(v), v.rT].forEach(t => { if (t && t <= clock && t > m) m = t; }); });
+    this.creditsAt(clock).forEach(c => { const t = this.tsf(c.credited); if (t > m) m = t; });
+    return m;
+  }
+
+  // ---------- clock & liveness (one mechanic) ----------
+  setClock(next, patch) {
+    // Live-mode clock policy (B1FE-S2): a live provider has no story timeline
+    // to scrub — the clock stays pinned to whatever it was constructed with
+    // (now). Film mode (MockProvider today) is the only mode that scrubs.
+    if (this.clockMode === 'live') return;
+    const prev = this.state.clock;
+    const fresh = {};
+    if (next > prev && next - prev <= 6 * 3600000) {
+      const inWin = (t) => t && t > prev && t <= next;
+      this.inv.forEach(v => {
+        if (inWin(v.aT)) { fresh['row-' + v.id] = true; fresh['badge'] = true; }
+        if (inWin(this.sealTs(v))) fresh['seal-' + v.id] = true;
+        if (inWin(v.kT)) fresh['contest'] = true;
+        if (inWin(v.rT)) fresh['resolved'] = true;
+      });
+      this.creditsAt(next).forEach(c => { if (inWin(this.tsf(c.credited))) fresh['credit-' + c.id] = true; });
+    }
+    this.setState({ clock: next, fresh: Object.assign({}, this.state.fresh, fresh), ...(patch || {}) });
+    if (Object.keys(fresh).length) { clearTimeout(this._ft); this._ft = setTimeout(() => this.setState({ fresh: {} }), 4600); }
+  }
+
+  // ---------- actions ----------
+  go(view, extra) { this.setState({ view, filmCard: null, help: false, dossierOpen: null, ...(extra || {}) }); }
+  openCase(id) {
+    const origin = this.state.view === 'case' ? this.state.origin : this.state.view;
+    this.setState({ view: 'case', caseId: id, origin, filmCard: null, playhead: null, asofLanded: false, dossierOpen: null, liveReplay: this.clockMode === 'live' ? { caseId: id, status: 'loading', data: null } : null });
+    if (this.clockMode === 'live' && typeof this.provider.replayCase === 'function') {
+      this.provider.replayCase(id).then(data => {
+        if (this.state.caseId === id) this.setState({ liveReplay: { caseId: id, status: 'ready', data } });
+      }).catch(() => {
+        if (this.state.caseId === id) this.setState({ liveReplay: { caseId: id, status: 'unavailable', data: null } });
+      });
+    }
+  }
+  toggleSel(id) { const sel = Object.assign({}, this.state.sel); if (sel[id]) delete sel[id]; else sel[id] = true; this.setState({ sel }); }
+  audit(what, extra) { const a = this.state.audit.slice(); a.push(Object.assign({ t: this.state.clock, who: 'Avery Quill (fictional)', role: 'Director, Trade Compliance', what }, extra || {})); return a; }
+
+  openApprove(ids, basis) {
+    const rows = this.inv.filter(v => ids.includes(v.id));
+    const total = rows.reduce((s, v) => s + v.dispute, 0);
+    this.setState({
+      confirm: {
+        title: 'Approve & send — irreversible',
+        lines: [
+          rows.length === 1 ? '1 dispute · ' + this.money(total) + ' — ' + rows[0].id + ' · ' + rows[0].carrier : rows.length + ' disputes · ' + this.money(total) + ' total.',
+          'Shared basis: ' + basis,
+          'Avery Quill (fictional) · Director, Trade Compliance approves. The synthetic dispute files with the fictional carrier. Sealing is permanent in this film — the evidence is fixed as of ' + this.fDT(rows.length === 1 && rows[0].sT ? rows[0].sT : this.state.clock) + '.',
+        ],
+        label: 'Approve & send', ids,
+      },
+    });
+  }
+  doConfirm() {
+    const c = this.state.confirm; if (!c) return;
+    if (c.bulk) { this.runCascade(c.ids); return; }
+    if (this.clockMode === 'live') { this.doConfirmLive(c.ids); return; }
+    const approved = Object.assign({}, this.state.approved);
+    c.ids.forEach(id => { approved[id] = { t: this.state.clock }; });
+    const fresh = Object.assign({}, this.state.fresh); c.ids.forEach(id => { fresh['seal-' + id] = true; });
+    this.setState({ approved, fresh, confirm: null, audit: this.audit('Approve & send — ' + c.ids.length + ' · sealed') });
+    clearTimeout(this._ft); this._ft = setTimeout(() => this.setState({ fresh: {} }), 4600);
+  }
+  // Live-mode seal (B1FE-S3): one real POST /cases/{id}/approve per id —
+  // the export's bulk cascade (runCascade) is a film-only animation over
+  // seed data (this.inv.filter(pattern===...)), out of scope here; live
+  // mode's confirm modal is always single- or multi-select-but-sequential,
+  // never the animated cascade. sealError surfaces a real failure honestly
+  // instead of the optimistic local-only path silently "succeeding."
+  async doConfirmLive(ids) {
+    this.setState({ confirm: null, sealPending: true, sealError: null });
+    try {
+      for (const id of ids) {
+        const result = await this.provider.approveCase(id);
+        const approved = Object.assign({}, this.state.approved);
+        approved[id] = { t: Date.now(), sealedTxnTs: result.sealed_txn_ts, alreadySealed: !!result.already_sealed };
+        const fresh = Object.assign({}, this.state.fresh); fresh['seal-' + id] = true;
+        this.setState({ approved, fresh, audit: this.audit('Approve & send — ' + id + ' · sealed · txn ' + result.sealed_txn_ts) });
+      }
+      this.setState({ sealPending: false });
+      clearTimeout(this._ft); this._ft = setTimeout(() => this.setState({ fresh: {} }), 4600);
+    } catch (err) {
+      this.setState({ sealPending: false, sealError: String(err && err.message || err) });
+    }
+  }
+  acceptSelected(ids) {
+    const accepted = Object.assign({}, this.state.accepted);
+    ids.forEach(id => { accepted[id] = this.state.clock; });
+    this.setState({ accepted, audit: this.audit('Accept — valid, pay — ' + ids.length + ' invoice(s)') });
+  }
+  holdUnver(id) { const held = Object.assign({}, this.state.held); held[id] = this.state.clock; this.setState({ held, audit: this.audit('Hold — ' + id + ' — the synthetic record does not reach Demo Westhaven yet') }); }
+
+  runCascade(ids) {
+    const approved = Object.assign({}, this.state.approved);
+    ids.forEach(id => { approved[id] = { t: this.state.clock }; });
+    this.setState({ approved, confirm: null, cascadeIdx: 0, cascadeIds: ids, audit: this.audit('Approve & send — bulk · PTN-0007 · ' + ids.length + ' disputes · one shared basis') });
+    clearInterval(this._ci);
+    const total = this.inv.filter(v => v.pattern === 'PTN-0007').length;
+    this._ci = setInterval(() => {
+      const n = this.state.cascadeIdx + 1;
+      if (n > ids.length + 2) { clearInterval(this._ci); this.setState({ cascadeIdx: 1e9 }); return; }
+      this.setState({ cascadeIdx: n });
+    }, this.props.reducedMotion ? 1 : 120);
+  }
+  fireRun(caseId) {
+    const v = this.inv.find(x => x.id === caseId); const dur = (v && v.runSecs ? v.runSecs : 4.6) * 1000;
+    clearInterval(this._ri);
+    this.setState({ run: { caseId, t0: Date.now(), dur }, runNow: Date.now() });
+    this._ri = setInterval(() => {
+      const r = this.state.run; if (!r) { clearInterval(this._ri); return; }
+      const now = Date.now();
+      if (now - r.t0 >= r.dur) { clearInterval(this._ri); const rd = Object.assign({}, this.state.runsDone); rd[r.caseId] = true; this.setState({ run: null, runsDone: rd }); }
+      else this.setState({ runNow: now });
+    }, 90);
+  }
+
+  // ---------- film machine ----------
+  beats() {
+    const ts = this.tsf;
+    return {
+      1: [{ film: 'hook' }],
+      2: [{ film: 'problem', sub: 0 }, { film: 'problem', sub: 1 }, { film: 'problem', sub: 2 }],
+      3: [{ view: 'archive', clock: this.T0, fx: 'logTo0403' }, { fx: 'calFocus' }],
+      4: [
+        { view: 'queue', clock: ts('2026-07-08 16:30') },
+        { clock: ts('2026-07-08 16:31') },
+        { view: 'case', caseId: 'CASE-0142', clock: ts('2026-07-08 16:33'), fx: 'fireRun' },
+        { clock: ts('2026-07-08 16:38'), fx: 'inspectorFlash' },
+        { fx: 'openApproveHero' },
+        { clock: ts('2026-07-08 16:42'), fx: 'sealNow' },
+      ],
+      5: [
+        { view: 'case', caseId: 'CASE-0142', clock: ts('2026-07-21 09:13') },
+        { clock: ts('2026-07-21 09:14') },
+        { fx: 'asof' },
+        { clock: ts('2026-07-21 11:05') },
+      ],
+      6: [
+        { view: 'findings', clock: ts('2026-07-21 12:00') },
+        { fx: 'openBulk' },
+        { fx: 'confirmBulk' },
+        { view: 'ledger', clock: ts('2026-07-21 12:01') },
+      ],
+      7: [{ view: 'system', clock: this.T0, fx: 'inspectorOn' }],
+      8: [{ film: 'close' }],
+    };
+  }
+  startBeat(n) { const b = this.beats()[n]; if (!b) return; this.setState({ beat: n, step: 0 }); this.applyStep(b[0]); }
+  stepFwd() {
+    const { beat, step } = this.state; if (beat == null) return;
+    const b = this.beats()[beat];
+    if (step + 1 < b.length) { this.setState({ step: step + 1 }); this.applyStep(b[step + 1]); }
+    else if (this.beats()[beat + 1]) this.startBeat(beat + 1);
+  }
+  stepBack() { const { beat, step } = this.state; if (beat == null || step === 0) return; this.setState({ step: step - 1 }); this.applyStep(this.beats()[beat][step - 1], true); }
+  applyStep(s, back) {
+    const patch = { filmCard: s.film || null, filmSub: s.sub || 0 };
+    if (s.view) { patch.view = s.view; if (s.caseId) patch.caseId = s.caseId; }
+    if (s.clock != null) this.setClock(s.clock, patch); else this.setState(patch);
+    if (s.fx && !back) setTimeout(() => this.doFx(s.fx), 60);
+  }
+  doFx(fx) {
+    if (fx === 'fireRun') this.fireRun(this.state.caseId);
+    if (fx === 'inspectorFlash') this.setState({ inspector: true, inspFlash: true });
+    if (fx === 'openApproveHero') this.setState({ inspector: false, inspFlash: false }, () => this.openApprove(['CASE-0142'], 'tariff snapshot 2026-07-04 08:00 UTC — recorded $250/day, billed $350/day'));
+    if (fx === 'sealNow') this.setState({ confirm: null });
+    if (fx === 'asof') this.animatePlayhead();
+    if (fx === 'openBulk') this.openBulk();
+    if (fx === 'confirmBulk') this.doConfirm();
+    if (fx === 'inspectorOn') this.setState({ inspector: true, inspFlash: false });
+    if (fx === 'logTo0403') this.scrollLogTo0403();
+    if (fx === 'calFocus') this.setState({ calFocus: true });
+  }
+  animatePlayhead() {
+    const cap = this.tariffCapture.at;
+    const from = Math.min(this.state.clock, this.spineD1 || this.tsf('2026-07-22'));
+    if (this.props.reducedMotion) { this.setState({ playhead: cap, asofLanded: true }); return; }
+    const t0 = Date.now(), dur = 1700;
+    clearInterval(this._pi);
+    this._pi = setInterval(() => {
+      const f = Math.min(1, (Date.now() - t0) / dur);
+      const e = 1 - Math.pow(1 - f, 3);
+      const t = from + (cap - from) * e;
+      if (f >= 1) { clearInterval(this._pi); this.setState({ playhead: cap, asofLanded: true }); }
+      else this.setState({ playhead: t, asofLanded: false });
+    }, 28);
+  }
+  openBulk() {
+    const clock = this.state.clock;
+    const ids = this.inv.filter(v => v.pattern === 'PTN-0007' && this.st(v, clock) === 'awaiting').map(v => v.id);
+    if (!ids.length) return;
+    const total = this.inv.filter(v => ids.includes(v.id)).reduce((s, v) => s + v.dispute, 0);
+    this.setState({
+      confirm: {
+        title: 'Approve all ' + ids.length + ' — irreversible',
+        lines: [
+          ids.length + ' disputes · ' + this.money(total) + ' total — one finding, PTN-0007.',
+          'Shared evidence basis ' + this.basisId() + ': tariff snapshot 2026-07-04 08:00 UTC — recorded $250/day; each invoice billed $350/day. Each dispute seals under its own seal id.',
+          'Avery Quill (fictional) · Director, Trade Compliance approves once; ' + ids.length + ' synthetic receipts follow. The disputes file with the fictional carrier and the evidence seals in this film. This cannot be recalled.',
+        ],
+        label: 'Approve all ' + ids.length, ids, bulk: true,
+      },
+    });
+  }
+  scrollLogTo0403() { this.setState({ archHi: true }); setTimeout(() => { const el = this.archLogRef.current; if (el) { const t = el.querySelector('[data-target-commit]'); if (t) el.scrollTop = Math.max(0, t.offsetTop - el.clientHeight / 2); } }, 120); }
+
+  onKey(e) {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key === '`') { e.preventDefault(); this.setState({ inspector: !this.state.inspector, inspFlash: false }); return; }
+    if (e.key === '?') { this.setState({ help: !this.state.help }); return; }
+    if (e.key === 'Escape') { this.setClock(this.T0, { filmCard: null, filmSub: 0, beat: null, step: 0, confirm: null, help: false, dayDrawer: null, reason: null, dossierOpen: null }); return; }
+    if (e.key >= '1' && e.key <= '8') { this.startBeat(parseInt(e.key, 10)); return; }
+    if (e.key === 'd') { this.go('docket'); return; }
+    if (e.key === 'ArrowRight' || e.key === ' ') { if (this.state.beat != null) { e.preventDefault(); this.stepFwd(); } return; }
+    if (e.key === 'ArrowLeft') { if (this.state.beat != null) this.stepBack(); return; }
+  }
+
+  // ---------- view vals ----------
+  stageStyle() {
+    const vw = this.state.vw || 1920, vh = this.state.vh || 1080;
+    const s = Math.min(vw / 1920, vh / 1080);
+    return { position: 'absolute', left: (vw - 1920 * s) / 2 + 'px', top: (vh - 1080 * s) / 2 + 'px', width: '1920px', height: '1080px', transform: 'scale(' + s + ')', transformOrigin: '0 0', background: '#F6F3EC', boxShadow: '0 24px 80px rgba(0,0,0,0.55)', overflow: 'hidden' };
+  }
+
+  navVals() {
+    const clock = this.state.clock;
+    const awaiting = this.inv.filter(v => this.st(v, clock) === 'awaiting' && !this.state.held[v.id]).length;
+    const mk = (key, label, badge) => {
+      const active = this.state.view === key || (key === 'queue' && this.state.view === 'case');
+      return {
+        label, badge: badge || false, onClick: () => this.go(key),
+        style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 22px 9px ' + (active ? '20px' : '22px'), cursor: 'pointer', fontSize: '13.5px', fontWeight: active ? 600 : 400, color: active ? '#E5D8BC' : '#C9D4DC', background: active ? 'rgba(229,216,188,0.08)' : 'transparent', borderLeft: active ? '2px solid #E5D8BC' : 'none' },
+        badgeStyle: { fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: '11px', fontWeight: 600, background: '#E5D8BC', color: '#1F2A33', borderRadius: '999px', padding: '1px 8px', animation: this.state.fresh['badge'] ? 'tallyPulse 1.2s ease-out 1' : 'none' },
+      };
+    };
+    return [
+      { label: 'WORK', items: [mk('queue', 'Queue', awaiting || false)] },
+      { label: 'MEMORY', items: [mk('findings', 'Findings'), mk('ledger', 'Ledger'), mk('archive', 'Archive')] },
+      { label: 'TRUST', items: [mk('system', 'System')] },
+    ];
+  }
+
+  queueVals() {
+    if (this.clockMode === 'live') return this.queueValsLive();
+    const clock = this.state.clock, sel = this.state.sel;
+    const rowsOf = (verdict) => this.inv.filter(v => this.st(v, clock) === 'awaiting' && v.verdict === verdict && !this.state.held[v.id]);
+    const mkRow = (v, selectable, amt) => ({
+      id: v.id, container: v.container, carrier: v.carrier, invoiceNo: v.invoiceNo, defect: v.defect,
+      amountF: this.money(amt), selectable, sel: !!sel[v.id],
+      onToggle: () => this.toggleSel(v.id), stop: (e) => e.stopPropagation(), onOpen: () => this.openCase(v.id),
+      fresh: !!this.state.fresh['row-' + v.id],
+    });
+    const btnStyle = (disabled) => ({ fontSize: '12.5px', fontWeight: 700, color: disabled ? '#8A96A0' : '#F6F3EC', background: disabled ? '#E5DFD1' : '#1F2A33', border: 'none', borderRadius: '7px', padding: '8px 16px', cursor: disabled ? 'default' : 'pointer' });
+    const groups = [];
+
+    const o = rowsOf('owe0'); const oSel = o.filter(v => sel[v.id]);
+    groups.push({
+      key: 'owe0', title: 'Owe $0', sub: 'tier 1–2 defect · full elimination', selectable: true,
+      countTotal: o.length + ' · ' + this.money(o.reduce((s, v) => s + v.amount, 0)),
+      allSel: o.length > 0 && oSel.length === o.length, onToggleAll: () => this.toggleAllIn(o),
+      rows: o.map(v => mkRow(v, true, v.amount)),
+      actBtn: 'Approve & send' + (oSel.length ? ' — ' + oSel.length + ' · ' + this.money(oSel.reduce((s, v) => s + v.dispute, 0)) : ''), actDisabled: oSel.length === 0, actStyle: btnStyle(oSel.length === 0),
+      onAct: () => oSel.length && this.openApprove(oSel.map(v => v.id), 'documentary defects under 46 CFR §541 — invoice invalid on its face'),
+    });
+
+    const ov = rowsOf('over');
+    const ovSum = ov.reduce((s, v) => s + v.dispute, 0);
+    groups.push({
+      key: 'over', title: 'Overcharged', sub: 'recorded tariff disagrees', selectable: false,
+      countTotal: ov.length + ' · ' + this.money(ovSum),
+      rows: ov.map(v => mkRow(v, false, v.dispute)),
+      actBtn: ov.length ? 'Approve all ' + ov.length + ' — ' + this.money(ovSum) : false, actDisabled: ov.length === 0, actStyle: btnStyle(ov.length === 0),
+      onAct: () => ov.length && this.openBulk(),
+      chip: 'Part of one finding — PTN-0007', onChip: () => this.go('findings'),
+    });
+
+    const va = rowsOf('valid'); const vSel = va.filter(v => sel[v.id]);
+    groups.push({
+      key: 'valid', title: 'Valid — pay', sub: 'all four tiers pass', selectable: true,
+      countTotal: va.length + ' · ' + this.money(va.reduce((s, v) => s + v.amount, 0)),
+      allSel: va.length > 0 && vSel.length === va.length, onToggleAll: () => this.toggleAllIn(va),
+      rows: va.map(v => mkRow(v, true, v.amount)),
+      actBtn: 'Accept all' + (vSel.length ? ' — ' + vSel.length + ' · ' + this.money(vSel.reduce((s, v) => s + v.amount, 0)) : ''), actDisabled: vSel.length === 0, actStyle: btnStyle(vSel.length === 0),
+      onAct: () => vSel.length && this.acceptSelected(vSel.map(v => v.id)),
+    });
+
+    const un = rowsOf('unver');
+    groups.push({
+      key: 'unver', title: 'Unverifiable', sub: 'coverage honesty — never a guess', selectable: false,
+      countTotal: un.length + ' · ' + this.money(un.reduce((s, v) => s + v.amount, 0)),
+      rows: un.map(v => mkRow(v, false, v.amount)),
+      note: un.length ? 'Tiers 1–2 passed. The synthetic record doesn\u2019t reach Demo Westhaven yet — recording there begins when coverage expands. Decide manually or hold.' : false,
+      holdLabel: 'Hold', onHold: () => un.length && this.holdUnver(un[0].id), onManual: () => un.length && this.openCase(un[0].id),
+    });
+    return groups;
+  }
+  // Live-mode Queue (B1FE-S3). Deliberately NOT the film taxonomy's
+  // owe0/over/valid/unver split: the real backend computes only
+  // DEFECTIVE/NEEDS_REVIEW/VALID (no tier-3 tariff cross-reference yet —
+  // that's Bundle 2 scope). Forcing DEFECTIVE cases into "Owe $0" or
+  // "Overcharged" would render a claim ("full elimination", "recorded
+  // tariff disagrees") the backend hasn't verified. This copy is a first
+  // draft pending strategy/design review, not frozen — see
+  // ui/docs/s3-view-triage-proposal.md's verdict-mapping note.
+  queueValsLive() {
+    const sel = this.state.sel;
+    const notSealed = (v) => !(this.state.approved[v.id]);
+    const rowsOf = (verdict) => this.inv.filter(v => v.verdict === verdict && notSealed(v));
+    const mkRow = (v, selectable) => ({
+      id: v.id, container: v.container || '—', carrier: v.carrier || '—', invoiceNo: v.invoiceNo, defect: v.citedRule || '—',
+      amountF: v.amount != null ? this.money(v.amount) : '—', selectable, sel: !!sel[v.id],
+      onToggle: () => this.toggleSel(v.id), stop: (e) => e.stopPropagation(), onOpen: () => this.openCase(v.id),
+      fresh: !!this.state.fresh['row-' + v.id],
+    });
+    // Honest group total: (v.amount || 0) would silently render a real
+    // $0.00 claim for cases whose amount is genuinely unknown (the Clerk
+    // doesn't parse dollar amounts from the PDF in this backend session's
+    // scope — confirmed live, every seeded invoice has amount:null). A
+    // group with any unknown amount shows a count only, never a dollar
+    // figure that isn't true.
+    const groupTotal = (rows) => rows.some(v => v.amount == null)
+      ? rows.length + ' · amount not yet parsed'
+      : rows.length + ' · ' + this.money(rows.reduce((s, v) => s + v.amount, 0));
+    const btnStyle = (disabled) => ({ fontSize: '12.5px', fontWeight: 700, color: disabled ? '#8A96A0' : '#F6F3EC', background: disabled ? '#E5DFD1' : '#1F2A33', border: 'none', borderRadius: '7px', padding: '8px 16px', cursor: disabled ? 'default' : 'pointer' });
+    const groups = [];
+
+    const def = rowsOf('DEFECTIVE'); const defSel = def.filter(v => sel[v.id]);
+    groups.push({
+      key: 'defective', title: 'Defective', sub: 'field or timing defect found',
+      selectable: true,
+      countTotal: groupTotal(def),
+      allSel: def.length > 0 && defSel.length === def.length, onToggleAll: () => this.toggleAllIn(def),
+      rows: def.map(v => mkRow(v, true)),
+      actBtn: 'Approve & send' + (defSel.length ? ' — ' + defSel.length : ''), actDisabled: defSel.length === 0, actStyle: btnStyle(defSel.length === 0),
+      onAct: () => defSel.length && this.openApprove(defSel.map(v => v.id), defSel.length === 1 ? (defSel[0].citedRule || 'field/timing defect — 46 CFR §541') : 'field/timing defects — 46 CFR §541'),
+    });
+
+    const nr = rowsOf('NEEDS_REVIEW');
+    groups.push({
+      key: 'needs_review', title: 'Needs review', sub: 'timing window unclear — not auto-decided', selectable: false,
+      countTotal: groupTotal(nr),
+      rows: nr.map(v => mkRow(v, false)),
+      note: nr.length ? 'The Clerk could not confidently place these in a 30-day window. Open each to decide manually.' : false,
+    });
+
+    const va = rowsOf('VALID');
+    groups.push({
+      key: 'valid', title: 'Valid — pay', sub: 'all required fields present, within window', selectable: false,
+      countTotal: groupTotal(va),
+      rows: va.map(v => mkRow(v, false)),
+    });
+
+    return groups;
+  }
+  toggleAllIn(rows) { const sel = Object.assign({}, this.state.sel); const all = rows.every(v => sel[v.id]); rows.forEach(v => { if (all) delete sel[v.id]; else sel[v.id] = true; }); this.setState({ sel }); }
+
+  shiftLine() {
+    const clock = this.state.clock, from = clock - 24 * 3600000;
+    const checked = this.inv.filter(v => v.cT && v.cT > from && v.cT <= clock);
+    const defects = checked.filter(v => v.verdict === 'owe0' || v.verdict === 'over').length;
+    const cr = this.credits.filter(c => { const t = this.tsf(c.credited); return t > from && t <= clock; });
+    let line = 'Since yesterday: ' + checked.length + ' invoice' + (checked.length === 1 ? '' : 's') + ' checked · ' + defects + ' defect' + (defects === 1 ? '' : 's') + ' found';
+    if (cr.length) line += ' · ' + this.money(cr.reduce((s, c) => s + c.amount, 0)) + ' credited (' + cr.map(c => c.id).join(', ') + ')';
+    return line + '.';
+  }
+  quietStrip() {
+    const clock = this.state.clock;
+    const checking = this.inv.filter(v => this.st(v, clock) === 'checking').length;
+    const filed = this.inv.filter(v => ['filed', 'contested'].includes(this.st(v, clock)));
+    return 'Checking — ' + checking + ' · Filed, waiting on carrier — ' + filed.length + ' disputes · ' + this.money(filed.reduce((s, v) => s + v.dispute, 0)) + ' · Recorder — last commit ' + this.fT(this.lastCommit(clock));
+  }
+
+  inspVals() {
+    // Live-mode fence (B1FE-S3, view-triage proposal): every block below is
+    // fabricated SQL text, never executed — the single biggest Law-2
+    // surface in the export (S1 finding), separate from and larger than
+    // the Archive commit-log generator S2 fenced. No real query-log feed
+    // exists yet (WS only broadcasts clerk.step/clerk.filed/case.sealed —
+    // no query_log.line event, confirmed live B1FE-S3), so the honest
+    // live-mode behavior is an empty panel, not fake SQL dressed as real.
+    if (this.clockMode === 'live') return [];
+    const v = this.state.view, clock = this.state.clock;
+    const B = (title, sql, meta, tag) => ({ title, sql, meta: 'synthetic preview · not executed · ' + meta, tag: tag || false, style: { marginTop: '20px', border: '1px solid rgba(229,216,188,' + (this.state.inspFlash && title.indexOf('one transaction') >= 0 ? '0.9' : '0.22') + ')', borderRadius: '8px', padding: '14px 16px', background: 'rgba(246,243,236,0.03)' } });
+    const T = "  AND tenant_id = 'example-mercantile'";
+    const blocks = [];
+    if (v === 'queue' || v === 'cases') {
+      blocks.push(B('feeding SELECT', "SELECT c.case_id, i.invoice_no, i.carrier,\n       i.amount_cents, f.verdict, f.dispute_cents\nFROM cases c\nJOIN invoices i USING (tenant_id, invoice_id)\nJOIN findings f USING (tenant_id, case_id)\nWHERE c.status = 'awaiting_decision'\n" + T + "\nORDER BY f.verdict, f.checked_at DESC;", (this.inv.filter(x => this.st(x, clock) === 'awaiting').length) + ' illustrative rows'));
+      blocks.push(B('shift report', "SELECT count(*) FILTER (WHERE checked_at > now() - '24h'),\n       count(*) FILTER (WHERE verdict IN ('owe_zero','overcharged')\n                        AND checked_at > now() - '24h')\nFROM findings\nWHERE tenant_id = 'example-mercantile';", '1 illustrative row'));
+    }
+    if (v === 'case') {
+      blocks.push(B('feeding SELECT', "SELECT * FROM case_file\nWHERE case_id = '" + (this.state.caseId || '') + "'\n" + T + ";", '1 illustrative row'));
+      blocks.push(B('agent evidence fetch', "mcp.tariff_lookup(carrier => 'Fictional Northstar Lines', lane => 'DEMO-NP-SP')\nmcp.terminal_availability(container => 'SYN-CONT-0142')", '2 illustrative calls', 'read-only example'));
+      if (this.state.playhead && this.state.playhead < clock) blocks.push(B('time travel', "SELECT rate_per_day, captured_at\nFROM tariff_snapshots\nAS OF SYSTEM TIME '" + this.fD(this.state.playhead) + " " + new Date(this.state.playhead).toISOString().slice(11, 16) + "'\nWHERE carrier = 'Fictional Northstar Lines' AND lane = 'DEMO-NP-SP'\n" + T + ";", '1 illustrative row'));
+      blocks.push(B('one transaction — finding, evidence, case', "BEGIN;\nINSERT INTO findings (tenant_id, case_id, verdict,\n  dispute_cents, basis) VALUES (...);\nINSERT INTO evidence (tenant_id, case_id, kind,\n  captured_at, sha256) VALUES (...), (...), (...);\nUPDATE cases SET status = 'sealed', sealed_at = now()\nWHERE case_id = '" + (this.state.caseId || '') + "'\n" + T + ";\nCOMMIT;", 'illustrative transaction shape'));
+    }
+    if (v === 'findings') {
+      blocks.push(B('pattern aggregate', "SELECT pattern_id, count(*), sum(dispute_cents)\nFROM findings\nWHERE pattern_id = 'PTN-0007'\n" + T + "\nGROUP BY pattern_id;", '1 illustrative row'));
+      blocks.push(B('shared evidence basis — ' + this.basisId(), "SELECT captured_at, rate_per_day FROM tariff_snapshots\nAS OF SYSTEM TIME '2026-07-04 08:00'\nWHERE carrier = 'Fictional Northstar Lines' AND lane = 'DEMO-NP-SP'\n" + T + ";", '1 illustrative row'));
+    }
+    if (v === 'ledger') blocks.push(B('feeding SELECT', "SELECT outcome, count(*), sum(amount_cents)\nFROM outcomes\nWHERE tenant_id = 'example-mercantile'\nGROUP BY outcome;", '4 illustrative rows'));
+    if (v === 'archive') {
+      blocks.push(B('commit log', "SELECT committed_at, kind, source, txn_id\nFROM record_commits\nWHERE tenant_id = 'example-mercantile'\nORDER BY committed_at ASC;", this.commitLog(clock).length + ' illustrative rows'));
+      if (this.state.dayDrawer) blocks.push(B('day snapshot — time travel', "SELECT * FROM tariff_snapshots\nAS OF SYSTEM TIME '" + this.state.dayDrawer + " 23:59'\nWHERE tenant_id = 'example-mercantile';", '2 illustrative rows'));
+    }
+    if (v === 'dossiers') blocks.push(B('conduct aggregate', "SELECT carrier, count(*),\n       count(*) FILTER (WHERE defective),\n       count(*) FILTER (WHERE outcome = 'fold'),\n       count(*) FILTER (WHERE outcome = 'rebill')\nFROM findings\nWHERE tenant_id = 'example-mercantile'\nGROUP BY carrier;", '5 illustrative rows'));
+    if (v === 'system') {
+      blocks.push(B('illustrative runtime roles', "SHOW GRANTS ON DATABASE tally FOR tally_app;\nSHOW GRANTS FOR tally_agent;", '2 illustrative statements; grants not read back'));
+      blocks.push(B('illustrative retention policy', "ALTER TABLE tariff_snapshots CONFIGURE ZONE\nUSING gc.ttlseconds = 7776000;  -- 90 days", 'policy example; not applied by this UI'));
+    }
+    return blocks;
+  }
+
+  filmVals() {
+    const fc = this.state.filmCard, sub = this.state.filmSub || 0;
+    return { filmHook: fc === 'hook', filmProblem: fc === 'problem', filmClose: fc === 'close', pSub1: sub >= 1, pSub2: sub >= 2 };
+  }
+
+  // ---------- case file ----------
+  runSecsOf(v) { return v.runSecs || (parseInt(this.h(v.id).slice(0, 4), 16) % 21 + 35) / 10; }
+  basisOf(v) {
+    if (v.kind === 'rate') return 'tariff snapshot 2026-07-04 08:00 UTC — recorded $250/day, billed $350/day';
+    if (v.kind === 'late') return '§541.7 — issued outside the 30-day window';
+    if (v.kind === 'missing') return '§541.6 — required field absent from the invoice';
+    return v.defect;
+  }
+  tiersOf(v) {
+    const t = [];
+    const P = { chip: 'PASS', chipC: '#2E6E4E' }, D = { chip: 'DEFECT', chipC: '#1F2A33' }, U = { chip: 'UNVERIFIED', chipC: '#8A96A0' };
+    t.push(Object.assign({ n: '1', title: 'Complete?', lines: v.kind === 'missing' ? ['12 of 13 required fields present', 'Availability date absent — §541.6, field 9'] : ['13 of 13 required fields present — §541.6'] }, v.kind === 'missing' ? D : P));
+    t.push(Object.assign({ n: '2', title: 'Valid on its face?', lines: v.kind === 'late' ? ['Issued day 34 of a 30-day window — §541.7', 'Re-bill lineage: not evaluated in this build'] : ['Issued day ' + (1 + parseInt(this.h(v.id).slice(2, 3), 16) % 5) + ' of a 30-day window — §541.7', 'Re-bill lineage: not evaluated in this build'] }, v.kind === 'late' ? D : P));
+    if (v.kind === 'rate') t.push(Object.assign({ n: '3', title: 'True against the record?', lines: ['Timeline reconciles — the defect is the rate, not the clock', 'Tariff pinned: recorded $250/day vs applied $350/day'] }, D));
+    else if (v.kind === 'small') t.push(Object.assign({ n: '3', title: 'True against the record?', lines: [v.defect, 'Recorded terminal + tariff snapshots disagree with the bill'] }, D));
+    else if (v.kind === 'unver') t.push(Object.assign({ n: '3', title: 'True against the record?', lines: ['No synthetic tariff at Demo Westhaven', 'The synthetic record doesn\u2019t reach here yet'] }, U));
+    else if (v.carrier === 'Fictional Horizon Lines' || v.carrier === 'Fictional Seabrook Lines' || v.carrier === 'Fictional Crescent Lines') t.push(Object.assign({ n: '3', title: 'True against the record?', lines: ['Synthetic record does not cover ' + v.carrier + ' — rate not verified', v.dispute ? 'The defect stands on tiers 1–2' : ''] }, U));
+    else t.push(Object.assign({ n: '3', title: 'True against the record?', lines: ['Rate matches the recorded tariff', 'Timeline reconciles against availability records'] }, P));
+    const vmap = { owe0: 'Owe $0 — full elimination', over: 'Overcharged — dispute ' + this.money(v.dispute), valid: 'Valid — pay ' + this.money(v.amount), unver: 'Unverifiable — decide manually or hold' };
+    t.push({ n: '4', title: 'Verdict', lines: [vmap[v.verdict]], chip: v.verdict === 'valid' ? 'VERIFIED' : 'VERDICT', chipC: v.verdict === 'valid' ? '#2E6E4E' : '#1F2A33' });
+    return t.map(x => Object.assign(x, { lines: x.lines.filter(Boolean) }));
+  }
+
+  liveCaseVals(v) {
+    const s = this.state;
+    const result = s.liveReplay && s.liveReplay.caseId === v.id ? s.liveReplay : { status: 'loading', data: null };
+    const data = result.data || {};
+    const then = data.then || {}, now = data.now || {}, retention = data.retention || {};
+    const ready = result.status === 'ready' && then.state && now.state;
+    const stateLine = ready ? then.state + ' at filing → ' + now.state + ' now' : (result.status === 'unavailable' ? 'exact replay unavailable' : 'loading exact replay');
+    const msgs = ready ? [{
+      who: 'LIVE COCKROACH REPLAY', at: this.fDT(this.state.clock),
+      body: 'Executed the stored transaction timestamp: state ' + then.state + ' at filing and ' + now.state + ' now. Recorded tariff ' + then.tariff_rate + '; current tariff ' + now.tariff_rate + '. Tamper check: ' + (data.tamper_check && data.tamper_check.match === true ? 'match' : 'mismatch') + '.',
+      hi: false, res: true, chip: false, exhibit: false, fresh: false, b1: false, bHi: false, b2: false,
+      meta: retention.language || 'Retention state not returned.', notRes: false, noHi: true,
+      style: { position: 'relative', marginTop: '14px', background: '#FFFFFF', border: '1px solid #E5DFD1', borderRadius: '10px', padding: '16px 22px' },
+    }] : [];
+    const evidence = ready ? [
+      { k: 'Historical source', v: 'AS OF SYSTEM TIME · stored sealed_txn_ts · target queryable', seal: false },
+      { k: 'Retention', v: retention.ttl_days + ' days · live route readback', seal: false },
+      { k: 'Current comparison', v: now.state + ' · sealed evidence ' + (data.tamper_check && data.tamper_check.match === true ? 'matches' : 'does not match'), seal: false },
+    ] : [];
+    const pillStyle = { fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: '11px', fontWeight: 600, letterSpacing: '0.08em', color: ready ? '#2E6E4E' : '#8A96A0', border: '1.5px solid ' + (ready ? '#2E6E4E' : '#C9D0D6'), borderRadius: '5px', padding: '4px 10px' };
+    return {
+      isCase: true, spineRef: this.archLogRef,
+      cs: {
+        id: v.id, sub: [v.container, v.carrier, v.invoiceNo].filter(Boolean).join(' · '),
+        billedF: 'not reported', correctF: 'not reported', disputedF: 'not reported',
+        pill: stateLine, pillStyle, press: false, onDossier: () => {}, showAmounts: false, evidence,
+        backLabel: '← Queue', statusLine: stateLine, onBack: () => this.go('queue'),
+        runLine: ready ? 'real replay route executed' : stateLine, runLive: false, tiers: [], committed: false, commitLine: '',
+        sealed: false, sealId: '', sealAt: '', sealWrapStyle: {}, hasSpine: false, segs: [], above: [], below: [],
+        phStyle: {}, phLabel: '', phLabelStyle: {}, onSpineDown: () => {}, rewound: false, onPhReset: () => {},
+        rateBig: ready ? String(then.tariff_rate) + ' / day' : '—', rateCap: ready ? 'real stored-HLC replay' : stateLine, rateStyle: {}, asofOn: false, asofSql: '',
+        msgs, hasThread: msgs.length > 0, showDraft: false, draftTo: '', draftBody: '',
+        onApprove: () => {}, onDontPress: () => {}, showAccept: false, onAccept: () => {}, showHold: false, onHold: () => {}, onExhibit: () => {},
+      },
+    };
+  }
+
+  caseVals() {
+    const s = this.state, clock = s.clock, id = s.caseId;
+    const v = this.inv.find(x => x.id === id);
+    const isCase = s.view === 'case' && !!v && !s.filmCard;
+    if (!isCase) return { isCase: false, cs: null, spineRef: this.archLogRef };
+    if (this.clockMode === 'live') return this.liveCaseVals(v);
+    const st = this.st(v, clock);
+    const sealT = this.sealTs(v); const sealed = !!(sealT && sealT <= clock);
+    const hero = v.id === this.heroId;
+
+    // clerk's run
+    let runLine, tiersShown = 4, committed = false;
+    const live = s.run && s.run.caseId === id;
+    if (live) {
+      const el = Math.max(0, s.runNow - s.run.t0);
+      tiersShown = Math.min(4, Math.floor((el / s.run.dur) * 4.6));
+      runLine = 'checking — ' + (el / 1000).toFixed(1) + ' s';
+    } else if (v.cT && v.cT <= clock) { runLine = 'run took ' + this.runSecsOf(v).toFixed(1) + ' s'; committed = true; }
+    else { runLine = 'checking — in progress'; tiersShown = 1; }
+    const undecided = !!live || !(v.cT && v.cT <= clock);
+    const tiers = this.tiersOf(v).map((t, i) => Object.assign(t, {
+      shown: i < tiersShown,
+      chipStyle: { fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: '10px', fontWeight: 600, letterSpacing: '0.08em', color: t.chipC === '#2E6E4E' ? '#2E6E4E' : (t.chipC === '#8A96A0' ? '#8A96A0' : '#F6F3EC'), background: t.chipC === '#1F2A33' ? '#1F2A33' : 'transparent', border: '1px solid ' + t.chipC, borderRadius: '4px', padding: '2px 7px' },
+    }));
+
+    // press / hold / fold
+    const press = { rate: 'Press — synthetic documentary scenario; Fictional Northstar Lines exposure noted →', late: 'Press — invalid on its face; §541 controls →', missing: 'Press — invalid on its face; §541 controls →', small: 'Press — small, documented, cheap to file →', valid: 'Fold — the synthetic record agrees with the carrier; pay. Conduct noted →', unver: 'Hold — the synthetic record doesn\u2019t reach Demo Westhaven; decide on commercial grounds →' }[v.kind];
+
+    // spine (hero)
+    const d0 = this.tsf('2026-07-01'), d1 = this.tsf('2026-07-22');
+    this.spineD0 = d0; this.spineD1 = d1;
+    const pct = (t) => ((t - d0) / (d1 - d0)) * 100;
+    const segs = hero ? [
+      { style: { position: 'absolute', left: pct(this.tsf('2026-07-02')) + '%', width: (pct(this.tsf('2026-07-04')) - pct(this.tsf('2026-07-02'))) + '%', top: '0', bottom: '0', background: '#E5D8BC', borderRadius: '3px' }, label: 'free time' },
+      { style: { position: 'absolute', left: pct(this.tsf('2026-07-04')) + '%', width: (pct(this.tsf('2026-07-07')) - pct(this.tsf('2026-07-04'))) + '%', top: '0', bottom: '0', background: '#93A2AD', borderRadius: '3px' }, label: 'chargeable · 7 days' },
+    ] : [];
+    const mk = (tS, label, color) => { const t = this.tsf(tS); return t <= clock ? [{ t, label, color: color || '#5C6B76', style: { position: 'absolute', left: pct(t) + '%', transform: 'translateX(-50%)', textAlign: 'center', color: color || '#5C6B76' } }] : []; };
+    const stagger = (list, side) => list.map((m, i) => {
+      const off = ((side === 'above' ? 24 : 26) + (i % 2) * 18) + 'px';
+      m.lblStyle = side === 'above'
+        ? { position: 'absolute', bottom: off, left: '50%', transform: 'translateX(-50%)', fontSize: '11px', whiteSpace: 'nowrap', color: '#5C6B76' }
+        : { position: 'absolute', top: off, left: '50%', transform: 'translateX(-50%)', fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: '10.5px', whiteSpace: 'nowrap', color: m.color };
+      m.tickStyle = side === 'above'
+        ? { position: 'absolute', bottom: '12px', left: '50%', transform: 'translateX(-50%)', width: '1px', height: (parseInt(off, 10) - 11) + 'px', background: '#B4BDC4' }
+        : { position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)', width: '1px', height: (parseInt(off, 10) - 13) + 'px', background: '#B4BDC4' };
+      return m;
+    });
+    const above = hero ? stagger([].concat(mk('2026-07-07 09:00', 'invoice · $350/day claimed'), mk('2026-07-21 09:14', 'contest — \u201cper our tariff: $350\u201d')), 'above') : [];
+    const below = hero ? stagger([].concat(mk('2026-07-04 08:00', 'tariff recorded · $250/day'), mk('2026-07-05 12:00', 'availability records'), mk('2026-07-08 16:42', 'dispute sealed'), mk('2026-07-21 11:04', 'sealed memory recalled', '#2E6E4E')), 'below') : [];
+
+    const cap = this.tariffCapture.at;
+    const ph = s.playhead != null ? s.playhead : Math.min(clock, d1);
+    const rewound = s.playhead != null && s.playhead < clock - 3600000;
+    const asofOn = rewound && Math.abs(ph - cap) < 12 * 3600000;
+    const rate = ph >= cap ? { big: '$250 / day', cap: 'captured 2026-07-04 08:00 UTC · seal ' + this.sealId('CASE-0142') } : { big: '—', cap: 'no tariff recorded yet — capture began 2026-07-04 08:00 UTC' };
+
+    const evidence = [];
+    evidence.push({ k: 'Invoice — ' + v.invoiceNo, v: 'captured ' + this.fDT(v.aT), seal: false });
+    if (!undecided) {
+      if (v.kind === 'rate') {
+        evidence.push({ k: 'Synthetic tariff snapshot — Fictional Northstar Lines · DEMO-NP-SP', v: 'demurrage $250/day · fictional capture 2026-07-04 08:00 UTC', seal: false });
+        evidence.push({ k: 'Synthetic terminal availability', v: 'fictional daily records · Fictional Pier Alpha · 14:36 UTC each day', seal: false });
+        evidence.push({ k: 'Shared evidence basis', v: this.basisId() + ' · PTN-0007', seal: false });
+      }
+      if (v.kind === 'late' || v.kind === 'missing') evidence.push({ k: 'Issuance record', v: 'received ' + this.fDT(v.aT) + ' · §541 field map, 13 fields', seal: false });
+      if (v.kind === 'small') evidence.push({ k: 'Recorded sources', v: 'tariff + terminal snapshots on the incident dates', seal: false });
+      if (v.kind === 'valid') evidence.push({ k: 'Tariff match', v: 'billed rate equals the recorded tariff on the incident dates', seal: false });
+      if (v.kind === 'unver') evidence.push({ k: 'Coverage', v: 'no synthetic tariff at Demo Westhaven — demo capture not yet begun', seal: false });
+      if (sealed) evidence.push({ k: 'Seal', v: this.sealId(v.id) + ' · ' + this.fDT(sealT), seal: true });
+    }
+
+    // thread (hero)
+    const msgs = [];
+    if (hero) {
+      const M = (tS, who, body, o) => { const t = this.tsf(tS); if (t <= clock) msgs.push(Object.assign({ who, at: this.fDT(t), body, hi: false, res: false, chip: false, exhibit: false, fresh: false, b1: false, bHi: false, b2: false, meta: false }, o)); };
+      M('2026-07-08 16:42', 'Tally — for Example Mercantile (fictional)', 'Synthetic dispute filed with Fictional Northstar Lines under demo seal ' + this.sealId('CASE-0142') + '. Evidence: synthetic invoice INV-NOL-084213 · synthetic tariff snapshot 2026-07-04 08:00 UTC · fictional terminal availability 2026-07-04 → 2026-07-06. Business-day/LFD arithmetic is not evaluated in this build. Demand: credit $700 — the synthetic recorded rate is $250/day.', { exhibit: true });
+      M('2026-07-21 09:14', 'Fictional Northstar Lines Dispute Desk', '', { b1: 'We have reviewed the synthetic dispute. Per the fictional tariff, the applicable rate is ', bHi: '$350 per day', b2: '. The charge stands as billed.', chip: 'day ' + this.dayDiff(this.tsf('2026-07-21'), sealT || this.tsf('2026-07-08')), fresh: !!s.fresh['contest'] });
+      M('2026-07-21 11:04', 'Tally — for Example Mercantile (fictional)', 'The synthetic record on the incident dates says otherwise. Rate captured 2026-07-04 08:00 UTC: $250 per day — sealed under ' + this.sealId('CASE-0142') + ' before the fictional invoice was issued. Demo rebuttal attached to the synthetic exhibit.', {});
+      M('2026-07-21 11:05', 'MEMORY REPLAY', 'The seal-time $250 record rejects the later $350 rate as temporally inapplicable. The case remains contested; no carrier credit or external resolution is claimed.', { res: true, meta: 'synthetic demonstration outcome · no external send · no recovered money', fresh: !!s.fresh['contest'] });
+    }
+
+    msgs.forEach(m => { m.notRes = !m.res; m.noHi = !m.bHi; m.style = { position: 'relative', marginTop: '14px', background: '#FFFFFF', border: '1px solid #E5DFD1', borderRadius: '10px', padding: '16px 22px' }; });
+
+    const showDraft = st === 'awaiting' && v.dispute > 0;
+    const statusLine = { awaiting: 'awaiting decision', checking: 'checking', filed: sealed ? 'filed ' + this.fD(sealT) + ' · waiting on carrier' : '', contested: 'contested — day ' + (v.kT ? this.dayDiff(v.kT, sealT) : ''), resolved: v.rT ? 'resolved ' + this.fDT(v.rT) : '', accepted: 'accepted — scheduled to pay', notpressed: 'not pressed — reason logged' }[st] || st;
+    const pillMap = { owe0: ['OWE $0', '#1F2A33'], over: ['OVERCHARGED', '#1F2A33'], valid: ['VALID — PAY', '#2E6E4E'], unver: ['UNVERIFIABLE', '#8A96A0'] };
+
+    return {
+      isCase: true, spineRef: this.spineRef || (this.spineRef = React.createRef()),
+      cs: {
+        id: v.id, sub: v.container + ' · ' + v.carrier + ' · ' + v.invoiceNo + ' · ' + v.port,
+        billedF: this.money(v.amount), correctF: this.money(v.amount - v.dispute), disputedF: this.money(v.dispute),
+        pill: undecided ? '—' : pillMap[v.verdict][0], pillStyle: { fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', color: undecided ? '#8A96A0' : pillMap[v.verdict][1], border: '1.5px solid ' + (undecided ? '#C9D0D6' : pillMap[v.verdict][1]), borderRadius: '5px', padding: '4px 10px' },
+        press: undecided ? false : press, onDossier: () => this.setState({ dossierOpen: v.carrier }),
+        showAmounts: !undecided, evidence,
+        backLabel: '← ' + ({ queue: 'Queue', findings: 'Findings', ledger: 'Ledger', archive: 'Archive' }[s.origin] || 'Queue'),
+        statusLine,
+        onBack: () => this.go(({ queue: 1, findings: 1, ledger: 1, archive: 1 }[s.origin]) ? s.origin : 'queue'),
+        runLine, runLive: !!live, tiers, committed,
+        commitLine: 'finding, evidence, and draft committed in one transaction · txn ' + this.h('txn' + v.id).slice(0, 8) + ' · 6.1 ms',
+        sealed, sealId: this.sealId(v.id), sealAt: sealed ? this.fDT(sealT) : '',
+        sealWrapStyle: { animation: s.fresh['seal-' + v.id] && !this.props.reducedMotion ? 'tallyStamp 0.7s cubic-bezier(0.2,1.4,0.4,1) both' : 'none' },
+        hasSpine: hero, segs, above, below,
+        phStyle: { position: 'absolute', left: pct(Math.max(d0, Math.min(d1, ph))) + '%', top: '-14px', bottom: '-14px', width: '2px', background: '#1F2A33', cursor: 'ew-resize' },
+        phLabel: this.fD(ph) + ' ' + new Date(ph).toISOString().slice(11, 16) + ' UTC',
+        phLabelStyle: { position: 'absolute', left: pct(Math.max(d0, Math.min(d1, ph))) + '%', transform: 'translateX(-50%)', top: '-38px', fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: '11px', color: '#26313A', background: '#E5D8BC', borderRadius: '4px', padding: '2px 8px', whiteSpace: 'nowrap' },
+        onSpineDown: (e) => this.onSpineDown(e), rewound,
+        onPhReset: () => this.setState({ playhead: null, asofLanded: false }),
+        rateBig: rate.big, rateCap: rate.cap,
+        rateStyle: { fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: '28px', fontWeight: 600, color: '#1F2A33', background: asofOn ? '#E5D8BC' : 'transparent', borderRadius: '6px', padding: asofOn ? '4px 10px' : '4px 0', transition: 'background 0.4s' },
+        asofOn,
+        asofSql: "-- SYNTHETIC EXAMPLE — NOT EXECUTED\nSELECT rate_per_day FROM tariff_snapshots\nAS OF SYSTEM TIME '2026-07-04 08:00'\nWHERE carrier='Fictional Northstar Lines' AND lane='DEMO-NP-SP';",
+        msgs, hasThread: msgs.length > 0,
+        showDraft,
+        draftTo: 'To: ' + v.carrier + ' — disputes desk · Re: ' + v.invoiceNo + ' · ' + v.container,
+        draftBody: 'Demand: withdraw or credit ' + this.money(v.dispute) + '. Basis: ' + this.basisOf(v) + '. Sealed evidence will accompany filing at a permanent, read-only exhibit.',
+        onApprove: () => this.openApprove([v.id], this.basisOf(v)),
+        onDontPress: () => this.setState({ reason: { id: v.id, text: '' } }),
+        showAccept: st === 'awaiting' && v.verdict === 'valid',
+        onAccept: () => this.acceptSelected([v.id]),
+        showHold: st === 'awaiting' && v.verdict === 'unver',
+        onHold: () => this.holdUnver(v.id),
+        onExhibit: () => this.go('exhibit'),
+      },
+    };
+  }
+  onSpineDown(e) {
+    const el = this.spineRef && this.spineRef.current; if (!el) return;
+    e.preventDefault();
+    const rect = el.getBoundingClientRect();
+    const setFrom = (x) => {
+      let f = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+      let t = this.spineD0 + f * (this.spineD1 - this.spineD0);
+      const cap = this.tariffCapture.at;
+      if (Math.abs(t - cap) < (this.spineD1 - this.spineD0) * 0.018) t = cap;
+      this.setState({ playhead: t, asofLanded: t === cap });
+    };
+    setFrom(e.clientX);
+    const mv = (ev) => setFrom(ev.clientX);
+    const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+  }
+
+  queueMetaVals() {
+    const s = this.state;
+    const mk = (key, label) => ({ label, onClick: () => this.setState({ queueTab: key }), style: { fontSize: '14px', fontWeight: s.queueTab === key ? 700 : 500, color: s.queueTab === key ? '#1F2A33' : '#8A96A0', background: 'none', border: 'none', borderBottom: s.queueTab === key ? '2px solid #1F2A33' : '2px solid transparent', padding: '8px 2px', cursor: 'pointer' } });
+    return { qtDec: s.queueTab === 'decisions', qtAll: s.queueTab === 'all', isCasesPage: s.view === 'queue' && !s.filmCard && s.queueTab === 'all', qTabs: [mk('decisions', 'Decisions'), mk('all', 'All cases')] };
+  }
+
+  allCasesVals() {
+    if (this.clockMode === 'live') return this.allCasesValsLive();
+    const s = this.state, clock = s.clock;
+    const vm = { owe0: 'Owe $0', over: 'Overcharged', valid: 'Valid — pay', unver: 'Unverifiable' };
+    const rows = [];
+    this.inv.forEach(v => {
+      const st = this.st(v, clock); if (st === 'future') return;
+      const upd = Math.max(v.aT, v.cT || 0, Math.min(this.sealTs(v) || 0, clock), v.rT && v.rT <= clock ? v.rT : 0);
+      const key = st === 'accepted' ? 'paid' : st;
+      rows.push({ id: v.id, container: v.container, carrier: v.carrier, verdict: st === 'checking' ? '—' : vm[v.verdict], status: { notpressed: 'not pressed', accepted: 'paid — valid', filed: 'sealed — filed' }[st] || st, key, amountF: this.money(v.dispute > 0 ? v.dispute : v.amount), updatedF: this.fD(upd), upd, onOpen: () => this.openCase(v.id) });
+    });
+    this.credits.forEach(c => {
+      if (this.inv.find(x => x.id === c.id)) return;
+      const t = this.tsf(c.credited); if (t > clock) return;
+      rows.push({ id: c.id, container: c.container, carrier: c.carrier, verdict: 'Overcharged', status: 'resolved — credited', key: 'resolved', amountF: this.money(c.amount), updatedF: this.fD(t), upd: t, onOpen: () => this.go('ledger', { receiptOpen: c.id, ledgerTab: 'recovered' }) });
+    });
+    this.paidSeed.forEach(p => { const t = this.tsf(p.at); if (t <= clock) rows.push({ id: p.id, container: p.container, carrier: p.carrier, verdict: 'Valid — pay', status: 'paid — valid', key: 'paid', amountF: this.money(p.amount), updatedF: this.fD(t), upd: t, onOpen: () => this.go('ledger', { ledgerTab: 'paid' }) }); });
+    this.notPressedSeed.forEach(n => { const t = this.tsf(n.at); if (t <= clock) rows.push({ id: n.id, container: n.container, carrier: n.carrier, verdict: 'Overcharged', status: 'not pressed', key: 'notpressed', amountF: this.money(n.amount), updatedF: this.fD(t), upd: t, onOpen: () => this.go('ledger', { ledgerTab: 'notpressed' }) }); });
+    rows.sort((a, b) => b.upd - a.upd);
+    const pills = [['all', 'All'], ['checking', 'Checking'], ['awaiting', 'Awaiting'], ['filed', 'Sealed — filed'], ['contested', 'Contested'], ['resolved', 'Resolved'], ['rebilled', 'Re-billed'], ['notpressed', 'Not pressed'], ['paid', 'Paid-valid']];
+    const filtered = s.caseFilter === 'all' ? rows : rows.filter(r => r.key === s.caseFilter);
+    return {
+      caseRows: filtered,
+      caseCount: filtered.length + ' of ' + rows.length + ' cases',
+      casePills: pills.map(p => ({ label: p[1], onClick: () => this.setState({ caseFilter: p[0] }), style: { fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: '11.5px', fontWeight: 600, color: s.caseFilter === p[0] ? '#F6F3EC' : '#5C6B76', background: s.caseFilter === p[0] ? '#1F2A33' : '#FFFFFF', border: '1px solid ' + (s.caseFilter === p[0] ? '#1F2A33' : '#C9D0D6'), borderRadius: '999px', padding: '5px 13px', cursor: 'pointer' } })),
+      caseEmpty: filtered.length === 0 ? (s.caseFilter === 'rebilled' ? 'No re-billed invoices in the record — when a carrier reissues a \u201ccorrected\u201d bill, it lands here with its lineage.' : 'The record holds no cases here right now.') : false,
+    };
+  }
+  // Live-mode All cases (B1FE-S3): real verdict vocabulary
+  // (DEFECTIVE/NEEDS_REVIEW/VALID), amount may be null (not every real
+  // invoice has a parsed amount yet - honest em-dash, never a fabricated
+  // number). No rebilled/notpressed/paid rows: those come from routes
+  // that don't exist yet (see contract-gap-list.md gaps 1-2, 8).
+  allCasesValsLive() {
+    const s = this.state;
+    const vm = { DEFECTIVE: 'Defective', NEEDS_REVIEW: 'Needs review', VALID: 'Valid — pay' };
+    const rows = this.inv.map(v => ({
+      id: v.id, container: v.container || '—', carrier: v.carrier || '—',
+      verdict: vm[v.verdict] || v.verdict, status: this.state.approved[v.id] ? 'sealed — filed' : 'awaiting',
+      key: this.state.approved[v.id] ? 'filed' : 'awaiting',
+      amountF: v.amount != null ? this.money(v.amount) : '—',
+      updatedF: v.aT ? this.fD(v.aT) : '—', upd: v.aT || 0,
+      onOpen: () => this.openCase(v.id),
+    }));
+    rows.sort((a, b) => b.upd - a.upd);
+    const pills = [['all', 'All'], ['awaiting', 'Awaiting'], ['filed', 'Sealed — filed']];
+    const filtered = s.caseFilter === 'all' || !pills.some(p => p[0] === s.caseFilter) ? rows : rows.filter(r => r.key === s.caseFilter);
+    return {
+      caseRows: filtered,
+      caseCount: filtered.length + ' of ' + rows.length + ' cases',
+      casePills: pills.map(p => ({ label: p[1], onClick: () => this.setState({ caseFilter: p[0] }), style: { fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: '11.5px', fontWeight: 600, color: s.caseFilter === p[0] ? '#F6F3EC' : '#5C6B76', background: s.caseFilter === p[0] ? '#1F2A33' : '#FFFFFF', border: '1px solid ' + (s.caseFilter === p[0] ? '#1F2A33' : '#C9D0D6'), borderRadius: '999px', padding: '5px 13px', cursor: 'pointer' } })),
+      caseEmpty: filtered.length === 0 ? 'The record holds no cases here right now.' : false,
+    };
+  }
+
+  // ---------- findings ----------
+  findingsVals() {
+    const s = this.state, clock = s.clock;
+    const isFindings = s.view === 'findings' && !s.filmCard;
+    const all = this.inv.filter(v => v.pattern === 'PTN-0007');
+    const order = { resolved: 0, contested: 1, filed: 2, awaiting: 3, checking: 4 };
+    const rows0 = all.map(v => ({ v, st: this.st(v, clock) })).sort((a, b) => ((order[a.st] !== undefined ? order[a.st] : 9) - (order[b.st] !== undefined ? order[b.st] : 9)) || a.v.id.localeCompare(b.v.id));
+    const cascActive = s.cascadeIdx >= 0 && s.cascadeIdx < 1e9;
+    const sums = { resolved: 0, filed: 0, awaiting: 0, checking: 0, nf: 0, na: 0, nc: 0 };
+    const chip = (label, kind) => ({
+      label, style: {
+        fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.06em', borderRadius: '4px', padding: '3px 9px', whiteSpace: 'nowrap',
+        color: kind === 'green' ? '#2E6E4E' : kind === 'seal' ? '#F6F3EC' : kind === 'wait' ? '#26313A' : '#8A96A0',
+        background: kind === 'seal' ? '#1F2A33' : kind === 'wait' ? '#E5D8BC' : 'transparent',
+        border: kind === 'green' ? '1px solid #2E6E4E' : kind === 'gray' ? '1px solid #C9D0D6' : 'none',
+      },
+    });
+    const rows = rows0.map((r, i) => {
+      let st = r.st;
+      const casPos = cascActive && s.cascadeIds ? s.cascadeIds.indexOf(r.v.id) : -1;
+      if (casPos >= 0 && casPos >= s.cascadeIdx) st = 'awaiting';
+      if (st === 'resolved') sums.resolved += r.v.dispute;
+      else if (st === 'filed' || st === 'contested') { sums.filed += r.v.dispute; sums.nf++; }
+      else if (st === 'awaiting') { sums.awaiting += r.v.dispute; sums.na++; }
+      else if (st === 'checking') { sums.checking += r.v.dispute; sums.nc++; }
+      const c = st === 'resolved' ? chip('CREDITED ' + this.money(r.v.dispute), 'green')
+        : (st === 'filed' || st === 'contested') ? chip('SEALED · ' + this.sealId(r.v.id), 'seal')
+        : st === 'awaiting' ? chip('AWAITING', 'wait') : chip('CHECKING', 'gray');
+      return {
+        id: r.v.id, container: r.v.container, invoiceNo: r.v.invoiceNo, days: r.v.days + ' days',
+        overF: this.money(r.v.dispute), chipLabel: c.label, chipStyle: c.style,
+        onOpen: () => this.openCase(r.v.id),
+        rowStyle: { display: 'flex', gap: '14px', alignItems: 'center', padding: '10px 20px', borderBottom: '1px solid #F0EBDF', cursor: 'pointer', background: 'transparent', animation: casPos >= 0 && casPos === s.cascadeIdx - 1 && !this.props.reducedMotion ? 'tallyRowFlip 0.9s ease-out both' : 'none' },
+      };
+    });
+    const exposure = sums.resolved + sums.filed + sums.awaiting + sums.checking;
+    return {
+      isFindings,
+      fRows: rows,
+      fExposure: this.money(exposure) + ' synthetic scenario exposure',
+      fSplit: '= resolved (unclaimed) ' + this.money(sums.resolved) + ' + filed ' + this.money(sums.filed) + ' (' + sums.nf + ') + awaiting ' + this.money(sums.awaiting) + ' (' + sums.na + ') + checking ' + this.money(sums.checking) + ' (' + sums.nc + ')',
+      fBasis: 'Synthetic shared evidence basis ' + this.basisId() + ' — fictional tariff snapshot 2026-07-04 08:00 UTC · recorded $250/day · Fictional Northstar Lines · DEMO-NP-SP · each demo dispute seals under its own id',
+      fBulkBtn: sums.na > 0 ? 'Approve all ' + sums.na + ' awaiting — ' + this.money(sums.awaiting) : false,
+      onBulk: () => this.openBulk(),
+      fDone: sums.na === 0 && !cascActive ? 'Every invoice in this finding is decided — ' + (17 - sums.nc) + ' receipts, one human decision.' : false,
+    };
+  }
+
+  // ---------- ledger ----------
+  ledgerVals() {
+    const s = this.state, clock = s.clock;
+    const isLedger = s.view === 'ledger' && !s.filmCard;
+    const credits = this.creditsAt(clock).slice().sort((a, b) => this.tsf(b.credited) - this.tsf(a.credited));
+    const recSum = credits.reduce((x, c) => x + c.amount, 0);
+    const small = this.inv.filter(v => v.kind === 'small' && this.sealTs(v) && this.sealTs(v) <= clock);
+    const smallSum = small.reduce((x, v) => x + v.dispute, 0);
+    const maxN = Math.max.apply(null, this.conduct.map(c => c.rebills + c.folds));
+    const conduct = this.conduct.map(c => ({
+      carrier: c.carrier, folds: c.folds + ' fold' + (c.folds === 1 ? '' : 's'), rebills: c.rebills + ' re-bill' + (c.rebills === 1 ? '' : 's'),
+      onOpen: () => this.setState({ dossierOpen: c.carrier }),
+      foldStyle: { height: '10px', width: (c.folds / maxN) * 130 + 'px', background: '#E5D8BC', borderRadius: '2px' },
+      rebillStyle: { height: '10px', width: (c.rebills / maxN) * 130 + 'px', background: '#1F2A33', borderRadius: '2px' },
+    }));
+    const tab = s.ledgerTab;
+    const tabBtn = (key, label) => ({ label, onClick: () => this.setState({ ledgerTab: key }), style: { fontSize: '13px', fontWeight: tab === key ? 700 : 500, color: tab === key ? '#1F2A33' : '#8A96A0', background: 'none', border: 'none', borderBottom: tab === key ? '2px solid #1F2A33' : '2px solid transparent', padding: '8px 2px', cursor: 'pointer' } });
+    const recRows = credits.map(c => ({
+      id: c.id, carrier: c.carrier, kind: c.kind, amountF: '+' + this.money(c.amount), creditedF: this.fD(this.tsf(c.credited)),
+      open: s.receiptOpen === c.id, fresh: !!s.fresh['credit-' + c.id],
+      onToggle: () => this.setState({ receiptOpen: s.receiptOpen === c.id ? null : c.id }),
+      canOpen: !!this.inv.find(x => x.id === c.id),
+      onOpenCase: () => this.openCase(c.id),
+      steps: [
+        { tag: 'FLAG', at: this.fDT(this.tsf(c.flagged)), body: c.kind },
+        { tag: 'DISPUTE', at: this.fDT(this.tsf(c.disputed)), body: 'filed · sealed ' + this.sealId(c.id) },
+        { tag: 'CREDIT', at: this.fDT(this.tsf(c.credited)), body: this.money(c.amount) + ' credited by ' + c.carrier },
+      ],
+    }));
+    const paid = this.paidSeed.filter(p => this.tsf(p.at) <= clock).map(p => ({ id: p.id, carrier: p.carrier, note: p.note, amountF: this.money(p.amount), atF: this.fD(this.tsf(p.at)) }));
+    this.inv.forEach(v => { const t = s.accepted[v.id]; if (t && t <= clock) paid.push({ id: v.id, carrier: v.carrier, note: 'Valid — all four tiers passed · accepted', amountF: this.money(v.amount), atF: this.fD(t) }); });
+    const np = this.notPressedSeed.filter(n => this.tsf(n.at) <= clock).map(n => ({ id: n.id, carrier: n.carrier, reason: n.reason, by: n.by, amountF: this.money(n.amount), atF: this.fD(this.tsf(n.at)) }));
+    this.inv.forEach(v => { const n = s.notPressed[v.id]; if (n && n.t <= clock) np.push({ id: v.id, carrier: v.carrier, reason: n.reason || 'reason logged', by: 'Avery Quill (fictional)', amountF: this.money(v.dispute || v.amount), atF: this.fD(n.t) }); });
+    return {
+      isLedger,
+      lgRecovered: credits.length ? this.money(recSum) : 'No recovered money claimed', lgRecoveredSub: credits.length ? credits.length + ' externally confirmed credits' : 'Recovery did not execute external sending or confirm a carrier credit.',
+      lgUnlocked: small.length + ' disputes under $500', lgUnlockedSub: this.money(smallSum) + ' filed — the tier nobody used to fight',
+      lgCoverage: this.coverageDays(clock) + ' synthetic days', lgCoverageSub: 'Fictional Northstar Lines + Fictional Bluehaven Lines · DEMO-NP–SP', lgCoverageNot: 'not yet: Demo Westhaven · Demo Eastbay · Demo Gulfport',
+      lgConduct: conduct,
+      lgTabs: [tabBtn('recovered', 'Recovered'), tabBtn('paid', 'Paid'), tabBtn('notpressed', 'Not pressed')],
+      lgTabRec: tab === 'recovered', lgTabPaid: tab === 'paid', lgTabNp: tab === 'notpressed',
+      lgRecRows: recRows, lgPaidRows: paid, lgNpRows: np,
+      lgPaidSum: 'Paid — ' + this.money(paid.reduce((x, p) => x + parseInt(p.amountF.replace(/[^0-9]/g, ''), 10), 0)) + ' · every payment carries its four passed tiers',
+      lgNpSum: 'Not pressed — every pass is a decision with a logged reason',
+    };
+  }
+
+  // ---------- dossier drawer (one data source: this.conduct + live case list) ----------
+  dossierDrawerVals() {
+    const s = this.state, clock = s.clock, car = s.dossierOpen;
+    if (!car) return { dossOpen: false };
+    const c = this.conduct.find(x => x.carrier === car);
+    if (!c) return { dossOpen: false };
+    const open = this.inv.filter(v => v.carrier === car && ['awaiting', 'filed', 'contested'].includes(this.st(v, clock)));
+    const openSum = open.reduce((x, v) => x + (v.dispute || v.amount), 0);
+    const concl = c.folds + c.rebills;
+    return {
+      dossOpen: true, dossTitle: car,
+      dossStats: [
+        { k: 'Checked', v: c.checked + ' invoices' },
+        { k: 'Defective', v: Math.round((c.defective / c.checked) * 100) + '% — ' + c.defective + ' of ' + c.checked },
+        { k: 'Folds', v: Math.round((c.folds / concl) * 100) + '% of concluded disputes' },
+        { k: 'Re-bills', v: Math.round((c.rebills / concl) * 100) + '% of concluded disputes' },
+        { k: 'Median days to concede', v: c.median + ' days' },
+        { k: 'Your exposure', v: c.exposure },
+      ],
+      dossOpenLine: open.length ? 'Open now — ' + open.length + ' case' + (open.length === 1 ? '' : 's') + ' · ' + this.money(openSum) : 'Open now — none',
+      dossCases: open.slice(0, 6).map(v => ({ id: v.id, amountF: this.money(v.dispute || v.amount), st: this.st(v, clock), onOpen: () => this.openCase(v.id) })),
+      closeDoss: () => this.setState({ dossierOpen: null }),
+    };
+  }
+
+  // ---------- archive ----------
+  archiveVals() {
+    const s = this.state, clock = s.clock;
+    const isArchive = s.view === 'archive' && !s.filmCard;
+    // Live-mode fence: no recording-pipeline feed exists in this backend
+    // scope (a later bundle) — Archive is fixture-disclosed/film-only per
+    // the S3 view-triage proposal, never synthesized live.
+    const log = this.clockMode === 'live' ? [] : this.commitLog(clock).map(c => ({ line: c.line, commit: '→ COMMIT ' + c.hash, target: c.target, plain: !c.target, hi: c.target && s.archHi }));
+    const sealsByDay = {}, creditsByDay = {};
+    this.inv.forEach(v => { const t = this.sealTs(v); if (t && t <= clock) { const d = this.fD(t); sealsByDay[d] = (sealsByDay[d] || 0) + 1; } });
+    this.credits.forEach(c => { const dT = this.tsf(c.disputed); if (dT <= clock) { const d = this.fD(dT); sealsByDay[d] = (sealsByDay[d] || 0) + 1; } const kT = this.tsf(c.credited); if (kT <= clock) { const d = this.fD(kT); creditsByDay[d] = (creditsByDay[d] || 0) + 1; } });
+    const months = [];
+    [['2026-07', 'July 2026', 31]].forEach(m => {
+      const first = new Date(m[0] + '-01T00:00:00Z').getUTCDay();
+      const cells = [];
+      for (let i = 0; i < first; i++) cells.push({ blank: true, n: '', style: {}, onClick: () => {}, seals: false, credit: false });
+      for (let d = 1; d <= m[2]; d++) {
+        const dateS = m[0] + '-' + String(d).padStart(2, '0');
+        const t = this.tsf(dateS);
+        const covered = t >= this.REC && t <= clock;
+        const nSeals = sealsByDay[dateS] || 0;
+        cells.push({
+          blank: false, n: String(d), dateS, seals: nSeals ? '●'.repeat(Math.min(nSeals, 4)) : false, credit: !!creditsByDay[dateS],
+          title: covered ? dateS + ' — recorded' : 'no record — capture began 2026-07-03',
+          onClick: () => this.setState({ dayDrawer: dateS }),
+          style: { minHeight: '52px', border: '1px solid ' + (covered ? '#DCCFA9' : '#F0EBDF'), borderRadius: '6px', padding: '5px 7px', cursor: 'pointer', background: covered ? '#EFE4C9' : '#F6F3EC', opacity: covered ? 1 : 0.5 },
+        });
+      }
+      months.push({ label: m[1], cells });
+    });
+    return {
+      isArchive, archLogRef: this.archLogRef,
+      archLog: log,
+      archLogTitle: this.clockMode === 'live' ? 'Live commit log unavailable — no feed connected' : 'Synthetic generated commit log — not executed',
+      archTargetStyle: { fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: '12px', lineHeight: '2', whiteSpace: 'pre', color: '#1F2A33', background: '#E5D8BC', borderRadius: '4px', padding: '0 6px' },
+      archMonths: months,
+      archCalStyle: { display: 'flex', gap: '26px', marginTop: '16px', border: s.calFocus ? '2px solid #1F2A33' : '2px solid transparent', borderRadius: '12px', padding: '10px', transition: 'border 0.5s' },
+      archCoverage: 'Synthetic recording since 2026-07-03 — ' + this.coverageDays(clock) + ' days · Fictional Northstar Lines + Fictional Bluehaven Lines · DEMO-NP–SP · illustrative retention 90 days. Not yet: Demo Westhaven · Demo Eastbay · Demo Gulfport.',
+      archGloss: 'tariff = the carrier\u2019s published price rules',
+    };
+  }
+
+  dayDrawerVals() {
+    const s = this.state, d = s.dayDrawer;
+    if (!d) return { dayOpen: false };
+    const t = this.tsf(d);
+    const covered = t >= this.REC && t <= s.clock;
+    const rows = [];
+    if (covered) {
+      if (t >= this.tsf('2026-07-04')) rows.push({ k: 'Synthetic tariff — Fictional Northstar Lines · DEMO-NP-SP', v: 'demurrage $250/day · fictional capture ' + d + ' 08:00 UTC' });
+      else rows.push({ k: 'Synthetic tariff — Fictional Northstar Lines · DEMO-NP-SP', v: 'no demo capture yet — first synthetic snapshot 2026-07-04 08:00 UTC' });
+      rows.push({ k: 'Synthetic tariff — Fictional Bluehaven Lines · DEMO-NP-SP', v: 'demurrage $225/day · fictional capture ' + d + ' 08:01 UTC' });
+      rows.push({ k: 'Fictional Pier Alpha', v: 'demo gate hours + availability · recorded ' + d + ' 14:36 UTC' });
+      rows.push({ k: 'Fictional Terminal Beta', v: 'demo gate hours + availability · recorded ' + d + ' 14:36 UTC' });
+      this.inv.forEach(v => { const sT = this.sealTs(v); if (sT && sT <= s.clock && this.fD(sT) === d) rows.push({ k: 'Seal — ' + v.id, v: this.sealId(v.id) + ' · ' + this.fT(sT) }); });
+      this.credits.forEach(c => { if (this.fD(this.tsf(c.disputed)) === d && this.tsf(c.disputed) <= s.clock) rows.push({ k: 'Seal — ' + c.id, v: this.sealId(c.id) + ' · ' + this.fT(this.tsf(c.disputed)) }); if (this.fD(this.tsf(c.credited)) === d && this.tsf(c.credited) <= s.clock) rows.push({ k: 'Credit — ' + c.id, v: '+' + this.money(c.amount) + ' · ' + this.fT(this.tsf(c.credited)) }); });
+    }
+    return {
+      dayOpen: true, dayTitle: d, dayRows: rows,
+      dayEmpty: covered ? false : 'No record — capture began 2026-07-03.',
+      closeDay: () => this.setState({ dayDrawer: null }),
+    };
+  }
+
+  // ---------- system ----------
+  systemVals() {
+    const s = this.state, clock = s.clock;
+    const isLive = this.clockMode === 'live';
+    const run = this.evalRun;
+    const countFields = ['invoices_total', 'invoices_passed', 'assertions_total', 'assertions_passed'];
+    const hasEval = !!run && run.synthetic === true && countFields.every(k => Number.isInteger(run[k]) && run[k] >= 0) && run.invoices_passed <= run.invoices_total && run.assertions_passed <= run.assertions_total;
+    const evaluatedFamilies = hasEval && Array.isArray(run.evaluated_families) && run.evaluated_families.length ? run.evaluated_families.join(' · ') : 'not reported';
+    const evalDate = hasEval && run.finished_at && Number.isFinite(Date.parse(run.finished_at)) ? this.fD(Date.parse(run.finished_at)) : 'date not reported';
+    // Live-mode fence: seedAudit's entries are seed-specific (2026-07
+    // dates, CASE-0142/0134 that don't exist live) and evalRun has no
+    // backing route (GET /evals/latest isn't wired this session — see
+    // s3-view-triage-proposal.md, System is fixture-disclosed/film-only
+    // beyond what's real). Live mode shows only this.state.audit's real
+    // entries (populated by doConfirmLive's actual seal audit lines) and
+    // an honest "not available" eval line instead of crashing on nulls.
+    const seedAudit = this.clockMode === 'live' ? [] : [
+      { t: this.tsf('2026-07-03 08:00'), who: 'synthetic film', what: 'illustrative event — not executed · retention policy example: 90 days' },
+      { t: this.tsf('2026-07-08 16:42'), who: 'synthetic film', what: 'illustrative event — not executed · CASE-0142 sealed in the fictional timeline' },
+      { t: this.tsf('2026-07-16 15:02'), who: 'synthetic film', what: 'illustrative event — not executed · a fictional do-not-press reason is shown' },
+    ];
+    const audit = seedAudit.concat(this.state.audit.map(a => ({ t: a.t, who: a.who, what: a.what }))).filter(a => a.t <= clock).sort((a, b) => b.t - a.t);
+    return {
+      isSystem: s.view === 'system' && !s.filmCard,
+      sysEval: hasEval ? (run.invoices_passed + '/' + run.invoices_total + ' synthetic cases pass · ' + run.assertions_passed + '/' + run.assertions_total + ' assertions pass') : 'Evaluation unavailable',
+      sysEvalSub: hasEval ? ('computed harness result · ' + evalDate + ' · evaluated: ' + evaluatedFamilies + ' · not evaluated: re-bill lineage · business-day/LFD arithmetic') : 'No computed public harness result is connected to this UI. Re-bill lineage and business-day/LFD arithmetic are not evaluated in this build.',
+      sysAudit: audit.map(a => ({ at: this.fDT(a.t), who: a.who, what: a.what })),
+      sysRoles: isLive ? [
+        { role: 'live grants', grants: 'not reported by this UI', note: 'No grant read-back route is available; no database role claim is made here.' },
+      ] : [
+        { role: 'tally_app', grants: 'SELECT · INSERT · UPDATE — no DELETE', note: 'writes only through the one-transaction commit' },
+        { role: 'tally_agent', grants: 'SELECT only', note: 'the Clerk\u2019s MCP surface — evidence reads, tagged read-only' },
+        { role: 'tally_exhibit', grants: 'SELECT on sealed views', note: 'what the carrier\u2019s link can see — nothing else' },
+      ],
+      sysRetention: isLive ? 'Live retention state not reported by this UI' : 'synthetic policy example: 90 days',
+      sysRetentionSql: isLive ? 'unavailable — no live retention read-back route' : 'ILLUSTRATIVE ONLY — NOT EXECUTED\nALTER TABLE tariff_snapshots CONFIGURE ZONE\nUSING gc.ttlseconds = 7776000;',
+      sysRuntime: isLive ? 'Configured live API session · infrastructure controls not asserted by this UI' : 'synthetic architecture illustration — no live service execution',
+      sysShowFilmLinks: !isLive,
+      sysGoDocket: () => this.go('docket'),
+      sysGoExhibit: () => this.go('exhibit'),
+      sysTenant: 'Application queries include a tenant_id filter. Credentials are not tenant-restricted; this is not database-enforced tenant isolation.',
+    };
+  }
+
+  // ---------- exhibit & docket ----------
+  exhibitVals() {
+    const s = this.state;
+    // Live-mode fence: this view is entirely hardcoded to the film hero
+    // (CASE-0142, fixed 2026-07 dates) with no route backing it yet
+    // (GET /cases/{id}/evidence has no worked shape in the TDD - see
+    // contract-gap-list.md gap 6). Never open live - film-only.
+    if (this.clockMode === 'live') return { isExhibit: false };
+    const heroCase = this.inv.find(v => v.id === this.heroId);
+    const sealT = this.sealTs(heroCase);
+    return {
+      isExhibit: s.view === 'exhibit' && !s.filmCard,
+      exBack: () => this.openCase('CASE-0142'),
+      exSeal: this.sealId('CASE-0142'), exHash: 'sha256 ' + this.h('exhibit-CASE-0142') + this.h('chain').slice(0, 8),
+      exSealedAt: sealT ? this.fDT(sealT) : '',
+      exServed: 'served by tally_exhibit — SELECT on sealed views, nothing else',
+      exItems: [
+        { k: 'Invoice — INV-NOL-084213', v: 'PDF · sha256 ' + this.h('inv084213').slice(0, 12) + ' · captured 2026-07-08 16:31 UTC' },
+        { k: 'Synthetic tariff snapshot — Fictional Northstar Lines · DEMO-NP–SP', v: 'fictional per-diem $250/day · captured 2026-07-04 08:00 UTC' },
+        { k: 'Synthetic terminal availability — Fictional Pier Alpha', v: 'fictional daily records, 2026-07-04 → 2026-07-06 · captured 14:36 UTC each day' },
+        { k: 'Date scenario', v: 'illustrative dates only · business-day/LFD arithmetic is not evaluated in this build' },
+        { k: 'Dispute letter', v: 'demand: credit $700 · filed 2026-07-08 16:42 UTC' },
+      ],
+    };
+  }
+  docketVals() {
+    const s = this.state, clock = s.clock;
+    const dec = this.inv.filter(v => this.st(v, clock) === 'awaiting' && (v.verdict === 'owe0' || v.verdict === 'unver')).slice(0, 3);
+    return {
+      isDocket: s.view === 'docket' && !s.filmCard,
+      dkBack: () => this.go('queue'),
+      dkSubject: 'Docket — ' + this.fD(clock) + ' · ' + dec.length + ' synthetic decisions · no external recovery claimed',
+      dkRecovery: 'MEMORY REPLAY — sealed $250 evidence rejects the later $350 rate as temporally inapplicable · CASE-0142 remains contested · no carrier credit claimed',
+      dkRows: dec.map(v => ({
+        id: v.id, line: v.id + ' · ' + v.carrier + ' · ' + this.money(v.verdict === 'owe0' ? v.amount : v.amount), defect: v.defect,
+        action: v.verdict === 'owe0' ? 'Approve & send' : 'Hold',
+        sig: 'sig=' + this.h('sig' + v.id).slice(0, 10) + ' · expires ' + this.fD(clock + this.DAY) + ' 17:00 UTC',
+      })),
+    };
+  }
+
+  reasonVals() {
+    const r = this.state.reason;
+    return {
+      reasonOpen: !!r,
+      reasonText: r ? r.text : '',
+      onReasonInput: (e) => this.setState({ reason: Object.assign({}, this.state.reason, { text: e.target.value }) }),
+      reasonCancel: () => this.setState({ reason: null }),
+      reasonSave: () => {
+        const rr = this.state.reason; if (!rr || !rr.text.trim()) return;
+        const np = Object.assign({}, this.state.notPressed); np[rr.id] = { t: this.state.clock, reason: rr.text.trim() };
+        this.setState({ notPressed: np, reason: null, audit: this.audit('Don\u2019t press — ' + rr.id + ' · reason logged: ' + rr.text.trim()) });
+      },
+      reasonSaveDisabled: !r || !r.text.trim(),
+    };
+  }
+
+  /*@@METHODS*/
+
+  renderVals() {
+    const s = this.state, clock = s.clock;
+    const c = s.confirm;
+    const disclosure = this.disclosure || { label: 'DATA MODE UNKNOWN', detail: 'No data-mode disclosure is available.', tone: 'error' };
+    const isLive = this.clockMode === 'live';
+    const badgePalette = disclosure.tone === 'synthetic' ? { background: '#E5D8BC', color: '#1F2A33', border: '#B89C5A' } : disclosure.tone === 'live' ? { background: '#DDECE3', color: '#24573E', border: '#6E9A82' } : { background: '#F5D9D5', color: '#7D2D24', border: '#C77D73' };
+    const lastCommitAt = disclosure.tone === 'error' ? 0 : this.lastCommit(clock);
+    return {
+      stageStyle: this.stageStyle(),
+      navGroups: this.navVals(),
+      modeLabel: disclosure.label,
+      modeDetail: disclosure.detail,
+      modeBadgeStyle: { marginRight: 'auto', fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.05em', padding: '7px 11px', borderRadius: '5px', border: '1px solid ' + badgePalette.border, background: badgePalette.background, color: badgePalette.color, whiteSpace: 'nowrap' },
+      recorderDotStyle: { width: '8px', height: '8px', borderRadius: '50%', background: disclosure.tone === 'error' ? '#A84C41' : '#2E6E4E', animation: disclosure.tone === 'error' ? 'none' : 'tallyHb 3.2s ease-in-out infinite' },
+      recorderStatus: disclosure.tone === 'error' ? 'recorder unavailable' : (isLive ? (lastCommitAt ? 'live recorder · last observed case change ' + this.fT(lastCommitAt) : 'live recorder · no commit feed connected') : 'synthetic recorder · generated last commit ' + this.fT(lastCommitAt)),
+      tenantName: isLive ? 'Configured live API' : 'Example Mercantile (fictional)',
+      tenantScope: isLive ? 'application tenant filter only' : 'synthetic tenant example-mercantile',
+      operatorName: isLive ? 'Live API session' : 'Avery Quill (fictional)',
+      operatorInitials: isLive ? 'API' : 'AQ',
+      clockDate: this.fD(clock), clockTime: this.fT(clock),
+      isQueue: s.view === 'queue' && !s.filmCard,
+      shiftLine: this.shiftLine(),
+      queueGroups: this.queueVals(),
+      quietStrip: this.quietStrip(),
+      goDocket: () => this.go('docket'),
+      inspectorOpen: s.inspector && !s.filmCard,
+      inspBlocks: this.inspVals(),
+      inspHeading: isLive ? 'live query-log feed unavailable' : 'synthetic query examples · illustrative and not executed',
+      inspDisclosure: isLive ? 'No executed query-log feed is connected to this UI.' : "Synthetic query examples include an application tenant_id filter; they do not prove credential scoping or database-enforced isolation.",
+      confirmOpen: !!c,
+      confirmTitle: c ? c.title : '', confirmLines: c ? c.lines : [], confirmLabel: c ? c.label : '',
+      confirmStamp: c ? (isLive ? 'Live API user' : 'Avery Quill (fictional)') + ' · Director, Trade Compliance · ' + this.fDT(clock) : '',
+      confirmCancel: () => this.setState({ confirm: null }),
+      confirmGo: () => this.doConfirm(),
+      helpOpen: s.help, closeHelp: () => this.setState({ help: false }),
+      ...this.filmVals(),
+      ...this.caseVals(),
+      ...this.queueMetaVals(),
+      ...this.allCasesVals(),
+      ...this.findingsVals(),
+      ...this.ledgerVals(),
+      ...this.dossierDrawerVals(),
+      ...this.archiveVals(),
+      ...this.dayDrawerVals(),
+      ...this.systemVals(),
+      ...this.exhibitVals(),
+      ...this.docketVals(),
+      ...this.reasonVals(),
+      showFilmHints: !!this.props.filmHints,
+      /*@@VALS*/
+    };
+  }
+}
+</script>
+<script type="module">
+  // Data-provider seam (B1FE-S2/S3). window.__tallyProvider must exist by
+  // the time Component's constructor runs. Static top-level imports (not
+  // dynamic import()) are resolved as part of the module graph during
+  // document parsing, which DOES block DOMContentLoaded — a dynamic
+  // import() here raced support.js's boot and lost (found live, B1FE-S3):
+  // Component's constructor ran before the awaited import resolved and
+  // window.__tallyProvider was still undefined. Both providers are
+  // imported unconditionally; only the choice of which factory to call
+  // is deferred, never the module load itself.
+  //
+  // getCases() still starts empty for LiveProvider even with this fix —
+  // the GET /invoices network round trip itself is real async work no
+  // import timing trick can avoid, hence onDataChange (provider.js).
+  //
+  // ?live=1 selects LiveProvider; default is MockProvider (film mode).
+  // Live credentials may be supplied only through an operator-injected,
+  // ephemeral runtime object. A VITE_* bearer would be compiled into public
+  // browser assets, so build-time token configuration is deliberately absent.
+  // An incomplete live request renders unavailable and never substitutes film data.
+  import { selectProvider } from './src/data/provider-selection.js';
+
+  const params = new URLSearchParams(location.search);
+  const wantsLive = params.has('live');
+  const runtimeConfig = window.__TALLY_RUNTIME_CONFIG__ || {};
+  const apiBase = runtimeConfig.apiBase;
+  const bearerToken = runtimeConfig.bearerToken;
+
+  window.__tallyProvider = selectProvider({ wantsLive, apiBase, bearerToken });
+</script>
+</body>
+</html>

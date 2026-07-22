@@ -1,0 +1,20 @@
+{
+  "classification": "sanitized aggregate evidence",
+  "capture_window_days": 17,
+  "source": {
+    "recordings": 51,
+    "tariff_snapshots": 51
+  },
+  "isolated_replay_after_first_run": {
+    "recordings": 51,
+    "tariff_snapshots": 51
+  },
+  "isolated_replay_after_second_run": {
+    "recordings": 51,
+    "tariff_snapshots": 51
+  },
+  "symmetric_row_differences": {
+    "recordings": 0,
+    "tariff_snapshots": 0
+  }
+}

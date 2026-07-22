@@ -1,0 +1,30 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SSMReadTallyParameters",
+      "Effect": "Allow",
+      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
+      "Resource": "arn:aws:ssm:us-east-1:000000000000:parameter/example/tally/*"
+    },
+    {
+      "Sid": "KMSDecryptForSSM",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "arn:aws:kms:us-east-1:000000000000:key/00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "Sid": "BedrockInvokeClaudeSonnetCrossRegionUs",
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeModel",
+      "Resource": [
+        "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6*",
+        "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6*",
+        "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6*",
+        "arn:aws:bedrock:us-east-1:000000000000:inference-profile/us.anthropic.claude-sonnet-4-6*",
+        "arn:aws:bedrock:us-east-2:000000000000:inference-profile/us.anthropic.claude-sonnet-4-6*",
+        "arn:aws:bedrock:us-west-2:000000000000:inference-profile/us.anthropic.claude-sonnet-4-6*"
+      ]
+    }
+  ]
+}

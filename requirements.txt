@@ -1,0 +1,20 @@
+httpx==0.28.1
+psycopg[binary]==3.3.4
+fastapi==0.139.0
+uvicorn[standard]==0.51.0
+# FastAPI's UploadFile (POST /invoices' multipart file upload) requires
+# this at import time - surfaced only by actually running the app, not
+# foreseeable from the plan's dependency list alone.
+python-multipart==0.0.32
+pdfplumber==0.11.10
+pypdfium2==5.11.0
+pydantic==2.13.4
+# TDD §4 step 3 names dateutil explicitly for whitelisted date-format
+# parsing - was already resolving transitively (via pdfplumber/fastapi's
+# own deps) but a direct dependency this load-bearing needs its own pin,
+# not an implicit ride on someone else's requirement.
+python-dateutil==2.9.0.post0
+# boto3 moves here (was dev-only, Lambda-provided) because src/platform's
+# FastAPI service is not a Lambda - it needs boto3 itself for the Bedrock
+# extraction call (src/external/bedrock_extract.py).
+boto3==1.43.40

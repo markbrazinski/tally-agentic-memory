@@ -1,0 +1,2 @@
+Synthetic Harborview Terminal tariff observation.
+Gate status source: demonstration only.

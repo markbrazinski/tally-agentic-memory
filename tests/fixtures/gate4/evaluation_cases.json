@@ -1,0 +1,99 @@
+{
+  "classification": "synthetic demonstration data",
+  "fixture_version": 1,
+  "identities": {
+    "tenant_id": "74000000-0000-4000-8000-000000000001",
+    "wrong_tenant_id": "74000000-0000-4000-8000-000000000002",
+    "carrier_id": "74000000-0000-4000-8000-000000000003",
+    "missing_coverage_carrier_id": "74000000-0000-4000-8000-000000000004",
+    "seal_case_id": "74000000-0000-4000-8000-000000000005",
+    "seal_invoice_id": "74000000-0000-4000-8000-000000000006",
+    "seal_finding_id": "74000000-0000-4000-8000-000000000007",
+    "seal_evidence_id": "74000000-0000-4000-8000-000000000008",
+    "seal_reviewer_id": "74000000-0000-4000-8000-000000000009"
+  },
+  "retrieval": {
+    "document_family": "synthetic-demurrage-tariff",
+    "equipment": "SYNTHETIC-CONTAINER",
+    "route": "FICTIONAL-NORTHPORT-SOUTHPORT",
+    "service": "DEMURRAGE",
+    "charge_date": "2026-07-10",
+    "query_embedding": [1.0, 0.0, 0.0],
+    "documents": [
+      {
+        "clause_id": "GATE4-SYNTHETIC-CLAUSE-RECORDED-250",
+        "capture_id": "GATE4-SYNTHETIC-CAPTURE-RECORDED-250",
+        "source_version_id": "GATE4-SYNTHETIC-VERSION-RECORDED-250",
+        "effective_from": "2026-07-01",
+        "effective_to": "2026-07-31",
+        "rate_amount": "250.00",
+        "clause_text": "Asterline Demo Shipping tariff: USD $250.00 per day for fictional import demurrage.",
+        "source_text": "SYNTHETIC DEMONSTRATION DATA. Effective 2026-07-01 through 2026-07-31. Asterline Demo Shipping tariff: USD $250.00 per day for fictional import demurrage.",
+        "embedding": [0.98, 0.2, 0.0]
+      },
+      {
+        "clause_id": "GATE4-SYNTHETIC-CLAUSE-LATER-350",
+        "capture_id": "GATE4-SYNTHETIC-CAPTURE-LATER-350",
+        "source_version_id": "GATE4-SYNTHETIC-VERSION-LATER-350",
+        "effective_from": "2026-08-01",
+        "effective_to": "2026-12-31",
+        "rate_amount": "350.00",
+        "clause_text": "Asterline Demo Shipping tariff: USD $350.00 per day for fictional import demurrage.",
+        "source_text": "SYNTHETIC DEMONSTRATION DATA. Effective 2026-08-01 through 2026-12-31. Asterline Demo Shipping tariff: USD $350.00 per day for fictional import demurrage.",
+        "embedding": [1.0, 0.0, 0.0]
+      }
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "GATE4-SYNTHETIC-DEMO-01-VALID-RECORDED-RATE",
+      "criterion": "valid_recorded_rate",
+      "expected": "PASS"
+    },
+    {
+      "case_id": "GATE4-SYNTHETIC-DEMO-02-LATER-WRONG-RATE",
+      "criterion": "later_wrong_rate",
+      "expected": "FLAG"
+    },
+    {
+      "case_id": "GATE4-SYNTHETIC-DEMO-03-LATE-INVOICE",
+      "criterion": "late_invoice",
+      "expected": "FLAG"
+    },
+    {
+      "case_id": "GATE4-SYNTHETIC-DEMO-04-REQUIRED-FIELD",
+      "criterion": "required_field_failure",
+      "expected": "FLAG"
+    },
+    {
+      "case_id": "GATE4-SYNTHETIC-DEMO-05-INVENTED-CITATION",
+      "criterion": "invented_citation_abstains",
+      "expected": "ABSTAIN"
+    },
+    {
+      "case_id": "GATE4-SYNTHETIC-DEMO-06-MISSING-COVERAGE",
+      "criterion": "missing_coverage_abstains",
+      "expected": "ABSTAIN"
+    },
+    {
+      "case_id": "GATE4-SYNTHETIC-DEMO-07-CROSS-TENANT",
+      "criterion": "cross_tenant_retrieval_fails",
+      "expected": "FAIL_CLOSED"
+    },
+    {
+      "case_id": "GATE4-SYNTHETIC-DEMO-08-DUPLICATE-SEAL",
+      "criterion": "duplicate_filing_seal_idempotent",
+      "expected": "IDEMPOTENT"
+    },
+    {
+      "case_id": "GATE4-SYNTHETIC-DEMO-09-CORRUPTED-SOURCE",
+      "criterion": "corrupted_source_hash_fails",
+      "expected": "VERIFICATION_FAILED"
+    },
+    {
+      "case_id": "GATE4-SYNTHETIC-DEMO-10-TEMPORALLY-INAPPLICABLE",
+      "criterion": "temporally_inapplicable_similar_source_rejected",
+      "expected": "REJECTED_TEMPORALLY"
+    }
+  ]
+}

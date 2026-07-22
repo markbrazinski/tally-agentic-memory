@@ -1,0 +1,8 @@
+{
+  "classification": "synthetic demonstration contract example",
+  "invoice_id": "…",
+  "clerk_run_id": "…",
+  "status": "RECEIVED",
+  "sha256": "…",
+  "s3_key": "invoices/2026/08/….pdf"
+}

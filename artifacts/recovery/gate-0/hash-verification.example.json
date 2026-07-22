@@ -1,0 +1,24 @@
+{
+  "classification": "synthetic executable example; production hashes are private",
+  "algorithm": "SHA-256 over exact object-version bytes without transformation",
+  "samples": [
+    {
+      "version_id": "fixture-version-northstar-001",
+      "fixture": "tests/fixtures/gate0/northstar-2026-01-01.txt",
+      "expected_sha256": "493e388c79adec6d713784600d379cf3b38773c821ba4b572e8bdc856c981216",
+      "expected_size": 90
+    },
+    {
+      "version_id": "fixture-version-bluehaven-009",
+      "fixture": "tests/fixtures/gate0/bluehaven-2026-01-09.txt",
+      "expected_sha256": "3b35034aab4d202c87f74b707b5f81c0244d8b96fea9d1ee65cf25dbc994eb78",
+      "expected_size": 82
+    },
+    {
+      "version_id": "fixture-version-harborview-017",
+      "fixture": "tests/fixtures/gate0/harborview-2026-01-17.txt",
+      "expected_sha256": "68ac5716999285efcb39e07841468f3eb2c5e5a508396b660ae9f464c3dfa029",
+      "expected_size": 90
+    }
+  ]
+}

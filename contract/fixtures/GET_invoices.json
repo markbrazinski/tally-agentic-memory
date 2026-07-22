@@ -1,0 +1,18 @@
+{
+  "classification": "synthetic demonstration contract example",
+  "items": [
+    {
+      "id": "SYN-INVOICE-0001",
+      "carrier": {"scac": "DEMO", "name": "Asterline Demo Shipping (fictional)"},
+      "container_no": "SYN-DEMO-0001",
+      "amount": 1050.00,
+      "verdict": "DEFECTIVE",
+      "cited_rule": "541.6(a)(7)",
+      "window": {"days": 34, "within_30": false},
+      "evidence_inventory": {"timeline_events": 9, "tariff": "pinned"},
+      "received_at": "2026-08-02T14:11:00Z",
+      "case_id": "SYN-CASE-0001"
+    }
+  ],
+  "next_cursor": null
+}
