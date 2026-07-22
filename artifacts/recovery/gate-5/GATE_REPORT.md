@@ -27,7 +27,7 @@ noncritical limitation.
   and remote SHA is verified in the post-commit handoff because a commit cannot
   embed its own SHA.
 - Designated repository:
-  `https://github.com/markbrazinski/tally-agentice-memory`
+  `https://github.com/markbrazinski/tally-agentic-memory`
 - Repository visibility at the gate boundary: **PRIVATE**
 - Deployed judge URL:
   `https://x69yr3tibq.us-east-1.awsapprunner.com/`
