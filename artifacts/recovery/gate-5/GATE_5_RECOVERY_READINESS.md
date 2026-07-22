@@ -1,6 +1,6 @@
 # Gate 5 recovery release-readiness report
 
-Verdict: **DEMO PASS WITH LIMITATIONS; REPOSITORY PUBLICATION NOT AUTHORIZED**
+Verdict: **DEMO PASS WITH LIMITATIONS; PUBLICATION VERIFIED**
 
 Executed on July 22, 2026 under recovery lineage
 `16c798f2-3bb4-4cfc-ac44-72c7011f13e5`. This is a new fictional demonstration
@@ -51,7 +51,8 @@ Each clean-client response from
 unchanged bindings, exact-version S3 verification, and MCP `verified_read`.
 
 The deployed code image is commit `b5ef407f99b299f3d2c8f539969b54f8fba07d70`.
-The implementation commit was scanned and pushed to the private repository.
+The implementation commit was scanned and pushed while the repository was
+private. Publication was separately authorized and verified afterward.
 
 ## Limitations and publication readiness
 
@@ -63,12 +64,14 @@ The implementation commit was scanned and pushed to the private repository.
   the full judging period. Failure remains fail-closed with no substitute data.
 - The accepted MCP write denial is the exact observed in-band denial shape,
   not an HTTP 403. No generic MCP proxy is browser-accessible.
-- The repository remains private as required. Its reachable content scan found
-  no credential, DSN, infrastructure identifier, private object identity,
-  source body, or live token. Four historical commits contain ordinary author
-  email metadata; publication therefore still requires the owner's separate
-  approval and an explicit decision that this metadata is acceptable. No ref
-  was deleted, rewritten, or force-pushed.
+- The repository is public at
+  <https://github.com/markbrazinski/tally-agentic-memory>. Immediately before
+  publication, its reachable-history and worktree scan found no credential,
+  DSN, infrastructure identifier, private object identity, source body, live
+  token, or curated private value. The owner explicitly accepted four ordinary
+  historical author-email findings. An unauthenticated clone, installation,
+  README/license read, full test/build run, and link check passed after
+  publication. No ref was deleted, rewritten, squashed, or force-pushed.
 
 ## Cost and teardown
 
