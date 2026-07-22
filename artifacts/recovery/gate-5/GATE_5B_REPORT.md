@@ -78,10 +78,11 @@ No bearer token is mapped into App Runner environment variables.
 
 ## Verification
 
-The final verification matrix includes the full Python and UI suites, ten
-evaluation fixtures, changed-file lint, linux/amd64 container build, live
-logged-out hero response, exact-token scan, and reachable-history scan. Exact
-counts and the final commit/remote SHA are recorded in the Gate 5 report.
+The final verification matrix includes 663 passing Python tests, 23 passing UI
+tests, 10/10 evaluation fixtures, changed-file lint/compile, linux/amd64
+container build, three stable live logged-out hero responses, a zero-finding
+exact-token scan, and the reachable-history scan. The implementation SHA and
+overall publication blocker are recorded in the Gate 5 report.
 
 ## Limitations
 
