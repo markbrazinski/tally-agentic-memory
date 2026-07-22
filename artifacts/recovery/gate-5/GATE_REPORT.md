@@ -1,4 +1,9 @@
-# Gate 5 Report — AWS deployment and judge access
+# Gate 5 Report — original AWS deployment and judge access
+
+> **Historical report preserved.** This `BLOCKED` verdict applies to the
+> expired original lineage evaluated here. It has not been edited or described
+> as recovered. A separately authorized new synthetic execution is documented
+> in `GATE_5_RECOVERY_READINESS.md` and now supplies the deployed hero.
 
 Overall verdict: **BLOCKED**
 

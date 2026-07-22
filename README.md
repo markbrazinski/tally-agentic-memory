@@ -10,6 +10,20 @@ All public names, invoices, cases, tariffs, dates, and amounts are fictional.
 
 Demo URL: **https://x69yr3tibq.us-east-1.awsapprunner.com/**
 
+## Current verified status
+
+On July 22, 2026, the separately authorized recovery execution
+`16c798f2-3bb4-4cfc-ac44-72c7011f13e5` passed the complete deployed hero path
+three consecutive times from clean, logged-out clients. Each response reported
+`FILED` at sealing, `CONTESTED` now, unchanged receipt bindings, exact-version
+S3 verification, Managed MCP `verified_read`, and `mock_fallback: false`.
+
+This is a new synthetic execution from the retained exact tariff and invoice
+objects. The earlier lineage whose CockroachDB history expired was not changed,
+recreated, or represented as recovered. Its historical blocked report remains
+preserved; the current bounded result is recorded in
+`artifacts/recovery/gate-5/GATE_5_RECOVERY_READINESS.md`.
+
 ## What the judge path proves
 
 The fixed public hero shows one fictional Northstar/Asterline case. The sealed
@@ -64,7 +78,7 @@ only a fixed `select_query` that loads and revalidates the sealed receipt for
 the server-selected later contest. It is application-filtered, not database
 RLS.
 
-Before deployment, the private Gate 5B proof must show repeated refresh,
+The private Gate 5B proof showed repeated refresh,
 real-time near-expiry renewal, the fixed hero read after refresh, and explicit
 server denial for a safely shaped `insert_rows` probe against a fresh
 nonexistent table. Any ambiguous or executable write path stops publication.
@@ -183,7 +197,9 @@ OAuth grant is server-side material and must be revoked on teardown.
 
 ## Expected cost and teardown
 
-Gate 5 has a hard owner-authorized AWS ceiling of **$10 total**. The design uses
+Gate 5 has a hard owner-authorized AWS ceiling of **$10 total**. The live budget
+is one `CUSTOM` period covering July 1 through the September 22 teardown; it
+does not reset monthly. The design uses
 one minimum-size App Runner service, a small ECR image, existing versioned S3
 objects, and bounded requests. Before deployment, the service-scoped budget
 must be read back with alerts at $8 and $10; unrelated account spend must not
@@ -191,11 +207,13 @@ be presented as Gate 5 spend. It is monitoring, not a guarantee that AWS
 automatically stops every charge.
 No paid CockroachDB plan or AWS purchase is required.
 
-At current us-east-1 pricing, the fixed App Runner idle-memory floor for 0.5 GB
-from July 22 through September 22 is about $5.21 (`0.5 × $0.007 × 24 × 62`).
-With the service capped at one instance, low judge traffic, a small ECR image,
-standard SSM parameters, and bounded model calls, the working estimate is
-$5.25–$6.50 total. See the official [App Runner pricing](https://aws.amazon.com/apprunner/pricing/),
+Readback on July 22 showed $4.484 already accumulated and an AWS-generated
+custom-period forecast of $5.248. A more conservative bottom-up estimate adds
+$5.25–$6.50 through teardown, producing $9.734–$10.984 cumulative. The upper
+case exceeds the authorization, so the alerts and actual spend must be watched
+and the service paused or removed early if it approaches $10. The budget is
+service-filtered rather than resource-tag isolated, so it may conservatively
+include other account use of the same seven services. See the official [App Runner pricing](https://aws.amazon.com/apprunner/pricing/),
 [ECR pricing](https://aws.amazon.com/ecr/pricing/), [Parameter Store
 pricing](https://aws.amazon.com/systems-manager/pricing/), and [AWS Budgets
 pricing](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/).

@@ -9,6 +9,8 @@ PROFILE="${AWS_PROFILE:?set AWS_PROFILE to the scoped Gate 5 deployer profile}"
 ALERT_EMAIL="${TALLY_GATE5_BUDGET_EMAIL:?set the private budget-alert recipient}"
 SERVICE_NAME="${TALLY_GATE5_SERVICE_NAME:-tally-gate5-demo}"
 BUDGET_NAME="tally-gate5-total-10-usd"
+BUDGET_START="2026-07-01T00:00:00Z"
+BUDGET_END="2026-09-23T00:00:00Z"
 SCHEDULE_NAME="tally-gate5-teardown-2026-09-22"
 SCHEDULER_ROLE_NAME="tally-gate5-teardown-scheduler"
 
@@ -29,7 +31,8 @@ cat >"$TMP_DIR/budget.json" <<JSON
 {
   "BudgetName":"${BUDGET_NAME}",
   "BudgetLimit":{"Amount":"10","Unit":"USD"},
-  "TimeUnit":"MONTHLY",
+  "TimeUnit":"CUSTOM",
+  "TimePeriod":{"Start":"${BUDGET_START}","End":"${BUDGET_END}"},
   "BudgetType":"COST",
   "CostFilters":{"Service":[
     "AWS App Runner",
@@ -92,11 +95,14 @@ ensure_notification 100
 
 BUDGET_AMOUNT=$(aws budgets describe-budget --profile "$PROFILE" --account-id "$ACCOUNT_ID" \
   --budget-name "$BUDGET_NAME" --query 'Budget.BudgetLimit.Amount' --output text)
+BUDGET_TIME_UNIT=$(aws budgets describe-budget --profile "$PROFILE" --account-id "$ACCOUNT_ID" \
+  --budget-name "$BUDGET_NAME" --query 'Budget.TimeUnit' --output text)
 BUDGET_FILTERS=$(aws budgets describe-budget --profile "$PROFILE" --account-id "$ACCOUNT_ID" \
   --budget-name "$BUDGET_NAME" --query 'Budget.CostFilters.Service' --output json)
 NOTIFICATIONS=$(aws budgets describe-notifications-for-budget --profile "$PROFILE" \
   --account-id "$ACCOUNT_ID" --budget-name "$BUDGET_NAME" --output json)
 if ! jq -en --arg amount "$BUDGET_AMOUNT" '($amount | tonumber) == 10' >/dev/null \
+  || [ "$BUDGET_TIME_UNIT" != "CUSTOM" ] \
   || ! jq -e '
     sort == [
       "AWS App Runner",
