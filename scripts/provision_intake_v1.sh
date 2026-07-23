@@ -70,7 +70,7 @@ RUNTIME_POLICY="$(jq -n \
     {
       Sid:"IsolatedIntakeSecrets",
       Effect:"Allow",
-      Action:["ssm:GetParameter"],
+      Action:["ssm:GetParameter","ssm:GetParameters"],
       Resource:[("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/*")]
     }
   ]
