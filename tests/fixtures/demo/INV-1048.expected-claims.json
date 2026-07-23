@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "classification": "SYNTHETIC DEMO — FICTIONAL DATA",
+  "invoice_number": "INV-1048",
+  "container_number": "TLLU-482931-7",
+  "bill_of_lading": "OAK-77421",
+  "charge_type": "DEMURRAGE",
+  "charge_period": {
+    "start": "2026-06-08",
+    "end": "2026-06-14"
+  },
+  "charged_days": 7,
+  "daily_rate": {
+    "amount_minor": 35000,
+    "currency": "USD"
+  },
+  "total": {
+    "amount_minor": 245000,
+    "currency": "USD"
+  },
+  "issued_date": "2026-06-22"
+}

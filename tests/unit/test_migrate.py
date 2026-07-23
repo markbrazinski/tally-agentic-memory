@@ -106,6 +106,51 @@ def test_gate1_migration_persists_exact_version_fact_and_canonical_manifest_fiel
     assert "ALTER COLUMN embedding DROP NOT NULL" in sql
 
 
+def test_intake_migration_has_one_shared_durable_orchestration_spine():
+    from src.external.migrate import MIGRATIONS_DIR
+
+    sql = (Path(MIGRATIONS_DIR) / "007_intake_orchestration.sql").read_text()
+
+    for required in (
+        "invoice_sources",
+        "ingestion_requests",
+        "extraction_runs",
+        "claim_sets",
+        "extracted_claims",
+        "workflow_tasks",
+        "workflow_task_attempts",
+        "invoice_events",
+        "event_outbox",
+        "status_sequence",
+        "amount_minor",
+        "s3_version_id_private",
+        "provenance_classification",
+        "initiated_by",
+        "actor_display",
+        "knowledge_cutoff_at",
+        "input_object_refs",
+        "produced_object_refs",
+    ):
+        assert required in sql
+
+    assert "DROP TABLE" not in sql
+    assert "DROP COLUMN" not in sql
+    assert "UNIQUE INDEX invoice_events_sequence_idx" in sql
+    assert "UNIQUE INDEX workflow_tasks_identity_idx" in sql
+
+
+def test_intake_retry_migration_is_additive_and_idempotent():
+    from src.external.migrate import MIGRATIONS_DIR
+
+    sql = (Path(MIGRATIONS_DIR) / "008_intake_retry_idempotency.sql").read_text()
+
+    assert "workflow_retry_requests" in sql
+    assert "idempotency_key" in sql
+    assert "request_hash" in sql
+    assert "DROP TABLE" not in sql
+    assert "DROP COLUMN" not in sql
+
+
 class _FakeCursor:
     def __init__(self, conn):
         self._conn = conn
