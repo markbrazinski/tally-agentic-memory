@@ -1,0 +1,12 @@
+{
+  "classification": "SYNTHETIC DEMO \u2014 FICTIONAL DATA",
+  "database": "tally_gate2_iso (negative-case tenant; defaultdb untouched)",
+  "scenario": "GATE_OUT source version UNAVAILABLE",
+  "view_rows_returned": 4,
+  "gate_out_excluded_by_view": true,
+  "boundary_formed": false,
+  "terminal_state": "NEEDS_EVIDENCE",
+  "days_source_complete": 0,
+  "no_complete_reconstruction": true,
+  "mock_fallback": false
+}

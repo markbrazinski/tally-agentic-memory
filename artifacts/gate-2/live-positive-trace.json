@@ -1,0 +1,28 @@
+{
+  "classification": "SYNTHETIC DEMO \u2014 FICTIONAL DATA",
+  "database": "tally_gate2_iso (isolated; defaultdb untouched)",
+  "read_path": "driver-diagnostic (isolated Managed MCP endpoint not provisioned; MCP sponsor trace deferred)",
+  "seed_counts": {
+    "source_artifacts": 2,
+    "shipment_events": 5
+  },
+  "memory_rows_returned": 9,
+  "events_accepted": 5,
+  "events_rejected": 4,
+  "reconstruction": {
+    "version": 1,
+    "state": "COMPLETE",
+    "event_count": 5,
+    "days_total": 7,
+    "days_complete": 7
+  },
+  "readback": {
+    "reconstruction_event_rows": 5,
+    "charged_day_rows": 7,
+    "charged_days_source_complete": 7,
+    "public_reconstruction_events": 1,
+    "outbox_rows": 1
+  },
+  "terminal_state": "COMPLETE",
+  "mock_fallback": false
+}

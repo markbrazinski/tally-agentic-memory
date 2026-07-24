@@ -44,6 +44,7 @@ from src.platform.intake_repository import (
     reserve_ingestion,
 )
 from src.platform.intake_tasks import retry_extraction_task
+from src.platform.reconstruction_api import register_reconstruction_routes
 
 MAX_PDF_PAGES = 10
 MAX_PDF_PARSE_SECONDS = 5.0
@@ -231,6 +232,9 @@ def make_router(*, require_auth) -> APIRouter:
                 "X-Accel-Buffering": "no",
             },
         )
+
+    # Gate 2 downstream projection — the one reconstruction contract for Gate 3/4.
+    register_reconstruction_routes(router, tenant_id_getter=_tenant_id)
 
     return router
 
