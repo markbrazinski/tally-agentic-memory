@@ -21,9 +21,33 @@ from src.core.applicable_rule import (
     RuleCandidate,
     RuleValidationState,
 )
+from src.core.intake import TaskType, task_input_fingerprint
 from src.external.dal import DAL
 from src.platform.intake_tasks import MAX_AUTOMATIC_ATTEMPTS, TaskLeaseLostError
 from src.platform.reconstruction_repository import _lock_invoice_and_advance
+
+
+def _emit_judgment_task(cur, *, tenant_id, lease, reconstruction_id) -> None:
+    """Create the durable JUDGE_DAYS task for Gate 4 (idempotent)."""
+    refs = [{"type": "reconstruction", "id": reconstruction_id, "version": 1}]
+    fingerprint = task_input_fingerprint(
+        task_type=TaskType.JUDGE_DAYS, input_refs=refs
+    )
+    cur.execute(
+        """
+        INSERT INTO workflow_tasks
+            (tenant_id, id, invoice_id, task_type, task_version, state,
+             initiated_by, actor_display, knowledge_cutoff_at, input_fingerprint,
+             input_object_refs, public_summary)
+        VALUES (%s, %s, %s, 'JUDGE_DAYS', 1, 'PENDING', %s, %s, %s, %s, %s,
+                'Waiting to compute the deterministic judgment')
+        ON CONFLICT (tenant_id, invoice_id, task_type, task_version, input_fingerprint)
+        DO NOTHING;
+        """,
+        (tenant_id, str(uuid4()), lease.invoice_id, lease.initiated_by,
+         lease.actor_display, lease.knowledge_cutoff_at, fingerprint,
+         json.dumps(refs)),
+    )
 
 
 @dataclass(frozen=True)
@@ -255,6 +279,12 @@ def complete_rule(
                 )
 
             _finish_task(cur, tenant_id, lease)
+            # Hand off to Gate 4 only when a rule was verified.
+            if applicable_rule_id is not None:
+                _emit_judgment_task(
+                    cur, tenant_id=tenant_id, lease=lease,
+                    reconstruction_id=lease.reconstruction_id,
+                )
             sequence = _lock_invoice_and_advance(
                 cur, tenant_id=tenant_id, invoice_id=lease.invoice_id,
                 intake_state="READY_FOR_RECONSTRUCTION", aggregate_status=aggregate,
