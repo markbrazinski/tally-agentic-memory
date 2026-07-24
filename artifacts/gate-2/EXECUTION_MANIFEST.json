@@ -5,7 +5,7 @@
   "scope": {
     "included": "Sourced reconstruction: consume START_RECONSTRUCTION task, validate MCP-derived pre-invoice events, persist immutable reconstruction version with seven charged days, coverage, events, outbox; public projection for Gate 3/4",
     "excluded": ["applicable rule / vector retrieval", "deterministic judgment", "approval", "seal", "correspondence", "send"],
-    "environment": "isolated CockroachDB database tally_gate2_iso on cluster worn-whale-28643 (same cluster as the protected hero defaultdb, which was verified UNCHANGED)",
+    "environment": "isolated CockroachDB database tally_gate2_iso (same cluster as the protected hero defaultdb, which was verified UNCHANGED; cluster identifier retained privately)",
     "release_binding": "feature branch feat/sourced-reconstruction-v1"
   },
   "source_fixture": {
