@@ -20,6 +20,7 @@ import os
 import threading
 import time
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
@@ -42,6 +43,8 @@ from src.external.oauth_tokens import (
 )
 from src.platform.auth import AuthedActor, make_require_bearer_auth
 from src.platform.clerk_pipeline import file_case, run_extraction_steps
+from src.platform.intake_api import make_router as make_intake_router
+from src.platform.intake_runtime import run_runtime_iteration
 from src.platform.public_demo import (
     PublicDemoConfig,
     PublicDemoUnavailableError,
@@ -56,12 +59,41 @@ from src.platform.temporal_replay import (
     replay_case,
 )
 
+_intake_runtime_task: asyncio.Task | None = None
+
+
+async def _run_intake_runtime() -> None:
+    while True:
+        try:
+            did_work = await asyncio.to_thread(run_runtime_iteration)
+        except Exception:
+            did_work = False
+        await asyncio.sleep(0.25 if did_work else 1.0)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    global _intake_runtime_task
+    if os.environ.get("TALLY_INTAKE_WORKER_ENABLED", "").lower() == "true":
+        _intake_runtime_task = asyncio.create_task(_run_intake_runtime())
+    try:
+        yield
+    finally:
+        if _intake_runtime_task is not None:
+            _intake_runtime_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await _intake_runtime_task
+            _intake_runtime_task = None
+
+
 PUBLIC_DEMO_ENABLED = os.environ.get("TALLY_PUBLIC_DEMO_ENABLED", "").lower() == "true"
+INTAKE_DEMO_ENABLED = os.environ.get("TALLY_INTAKE_DEMO_ENABLED", "").lower() == "true"
 app = FastAPI(
     title="Tally",
-    docs_url=None if PUBLIC_DEMO_ENABLED else "/docs",
-    redoc_url=None if PUBLIC_DEMO_ENABLED else "/redoc",
-    openapi_url=None if PUBLIC_DEMO_ENABLED else "/openapi.json",
+    docs_url=None if PUBLIC_DEMO_ENABLED or INTAKE_DEMO_ENABLED else "/docs",
+    redoc_url=None if PUBLIC_DEMO_ENABLED or INTAKE_DEMO_ENABLED else "/redoc",
+    openapi_url=None if PUBLIC_DEMO_ENABLED or INTAKE_DEMO_ENABLED else "/openapi.json",
+    lifespan=lifespan,
 )
 
 DEMO_TENANT_ID = os.environ.get(
@@ -70,6 +102,7 @@ DEMO_TENANT_ID = os.environ.get(
 DEMO_ACTOR = "rachel.martinez"
 
 require_auth = make_require_bearer_auth(DEMO_TENANT_ID)
+app.include_router(make_intake_router(require_auth=require_auth))
 
 
 def _cors_allowed_origins() -> list[str]:
@@ -102,18 +135,34 @@ app.add_middleware(
 _PUBLIC_HTTP_EXACT_PATHS = frozenset(
     {"/", "/healthz", "/readyz", "/public/demo/hero"}
 )
+_INTAKE_PUBLIC_EXACT_PATHS = frozenset({"/", "/healthz", "/readyz", "/api/stream"})
 
 
 @app.middleware("http")
 async def restrict_public_demo_surface(request: Request, call_next):
     """Expose only the judge UI, health, readiness, and fixed hero in public mode."""
     path = request.url.path
+    method = request.method.upper()
     if (
         PUBLIC_DEMO_ENABLED
         and path not in _PUBLIC_HTTP_EXACT_PATHS
         and not path.startswith("/assets/")
     ):
         return JSONResponse(status_code=404, content={"detail": "not found"})
+    if INTAKE_DEMO_ENABLED:
+        allowed = (
+            path in _INTAKE_PUBLIC_EXACT_PATHS
+            or path.startswith("/assets/")
+            or (method == "GET" and path.startswith("/api/invoices"))
+            or (method == "POST" and path == "/api/demo/invoices")
+            or (
+                method == "POST"
+                and path.startswith("/api/invoices/")
+                and path.endswith("/intake/retry")
+            )
+        )
+        if not allowed:
+            return JSONResponse(status_code=404, content={"detail": "not found"})
     return await call_next(request)
 
 # invoices.s3_key is STRING NOT NULL (migrations/002_bundle0_schema.sql,
