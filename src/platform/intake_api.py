@@ -383,11 +383,17 @@ def load_invoice_projection(invoice_id: str) -> tuple[dict[str, Any], int]:
                     "amount_minor": claim[3],
                     "currency": claim[4],
                     "validation_state": claim[5],
-                    "anchor": {
-                        "page_number": int(claim[6]),
-                        "bounding_box": _json_value(claim[7]),
-                        "text_excerpt": claim[8],
-                    },
+                    # A claim may have no PDF anchor (e.g. a synthetic/seeded
+                    # claim); expose anchor:null rather than crashing.
+                    "anchor": (
+                        {
+                            "page_number": int(claim[6]),
+                            "bounding_box": _json_value(claim[7]),
+                            "text_excerpt": claim[8],
+                        }
+                        if claim[6] is not None
+                        else None
+                    ),
                 }
                 for claim in cur.fetchall()
             }
