@@ -1,0 +1,21 @@
+{
+  "classification": "SYNTHETIC DEMO \u2014 FICTIONAL DATA",
+  "database": "tally_gate2_iso (gate5 tenant; defaultdb untouched)",
+  "sealed": {
+    "revision": 1,
+    "seal_digest": "sha256:9c169e1e2a999befa33d5d9c6dbc7f37588ded418aa4ec4ecc5544a477c4589e",
+    "type": "DISPUTE"
+  },
+  "bound_input_types": [
+    "applicable_rule",
+    "claim_set",
+    "recommendation",
+    "reconstruction"
+  ],
+  "seal_count_after_replay": 1,
+  "idempotent_replay_same_seal": true,
+  "stale_rejected": true,
+  "in_transaction_audit_rows": 2,
+  "invoice_status": "DISPUTED",
+  "mock_fallback": false
+}
