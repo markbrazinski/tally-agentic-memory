@@ -135,6 +135,37 @@ def load_reconstruction_projection(
             for row in cur.fetchall()
         ]
 
+        # Gate 3 applicable rule (public-safe: no private source_locator).
+        cur.execute(
+            """
+            SELECT public_ref, clause_ref, display_excerpt, rate_minor, currency,
+                   unit, effective_from, effective_to, scope_code, validation_state
+            FROM applicable_rules
+            WHERE tenant_id=%s AND reconstruction_id=%s AND validation_state='VERIFIED';
+            """,
+            (tenant_id, reconstruction_id),
+        )
+        rule_row = cur.fetchone()
+
+    applicable_rule = None
+    if rule_row is not None:
+        applicable_rule = {
+            "rule_ref": rule_row[0],
+            "clause_ref": rule_row[1],
+            "display_excerpt": rule_row[2],
+            "rate_minor": int(rule_row[3]),
+            "currency": rule_row[4],
+            "unit": rule_row[5],
+            "effective_from": rule_row[6].isoformat(),
+            "effective_to": rule_row[7].isoformat() if rule_row[7] else None,
+            "scope_code": rule_row[8],
+            "validation_state": rule_row[9],
+            "retrieval": {
+                "tool": "CockroachDB Distributed Vector Indexing",
+                "state": "RETRIEVED",
+            },
+        }
+
     missing = sorted(
         {
             requirement
@@ -152,6 +183,7 @@ def load_reconstruction_projection(
         "summary": head[8],
         "timeline": timeline,
         "charged_days": charged_days,
+        "applicable_rule": applicable_rule,
         "coverage": {
             "days_complete": int(head[7]),
             "days_total": int(head[6]),

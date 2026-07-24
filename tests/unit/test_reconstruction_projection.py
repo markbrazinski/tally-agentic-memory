@@ -53,9 +53,10 @@ class _ProjCursor:
 
     def execute(self, sql, params=None):
         n = " ".join(sql.split())
+        self.one = None
+        self._rows = []
         if n.startswith("SELECT id, version, state, knowledge_cutoff_at"):
             self.one = self.conn.head
-            self._rows = []
         elif n.startswith("SELECT public_ref, event_type, occurred_at"):
             self._rows = self.conn.timeline
         elif n.startswith("SELECT id, charge_date, chargeability"):
@@ -64,6 +65,8 @@ class _ProjCursor:
             self._rows = self.conn.bindings
         elif n.startswith("SELECT requirement_code, coverage_state, detail"):
             self._rows = self.conn.coverage
+        elif n.startswith("SELECT public_ref, clause_ref, display_excerpt"):
+            self.one = self.conn.applicable_rule
         return self
 
     def fetchone(self):
@@ -89,6 +92,7 @@ class _ProjConn:
         ]
         self.bindings = [("day-1", "SE-005", "CHARGE_END")]
         self.coverage = [("GATE_OUT", "PRESENT_VERIFIED", None)]
+        self.applicable_rule = None  # Gate 3 fills this; None until verified
 
     def cursor(self):
         return _ProjCursor(self)
@@ -132,6 +136,26 @@ def test_projection_has_no_private_identifiers():
         "mcp_query_ref", "correlation", "private", "select ",
     ):
         assert forbidden not in blob, f"private token leaked: {forbidden}"
+
+
+def test_projection_includes_applicable_rule_when_verified():
+    conn = _ProjConn()
+    conn.applicable_rule = (
+        "RULE-Clause 4.2", "Clause 4.2", "Demurrage rate: $250 per calendar day",
+        25000, "USD", "CALENDAR_DAY", date(2026, 6, 1), None,
+        "DEMURRAGE:USOAK:DRY", "VERIFIED",
+    )
+    projection = load_reconstruction_projection(_dal(conn), invoice_id="invoice-1")
+    rule = projection["applicable_rule"]
+    assert rule["rate_minor"] == 25000
+    assert rule["validation_state"] == "VERIFIED"
+    assert rule["retrieval"]["tool"] == "CockroachDB Distributed Vector Indexing"
+    assert rule["retrieval"]["state"] == "RETRIEVED"  # retrieval != applicability
+
+
+def test_projection_applicable_rule_none_until_gate3():
+    projection = load_reconstruction_projection(_dal(_ProjConn()), invoice_id="invoice-1")
+    assert projection["applicable_rule"] is None
 
 
 def test_projection_missing_returns_none():
