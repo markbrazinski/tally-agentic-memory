@@ -56,6 +56,7 @@ SOURCE_CONFIG="$(jq -n \
 SERVICE_ARN="$(aws apprunner list-services --profile "$PROFILE" --region "$REGION" \
   --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn | [0]" \
   --output text)"
+PREVIOUS_UPDATED_AT=""
 if [ "$SERVICE_ARN" = "None" ] || [ -z "$SERVICE_ARN" ]; then
   SERVICE_ARN="$(aws apprunner create-service --profile "$PROFILE" --region "$REGION" \
     --service-name "$SERVICE_NAME" \
@@ -66,9 +67,12 @@ if [ "$SERVICE_ARN" = "None" ] || [ -z "$SERVICE_ARN" ]; then
       'Protocol=HTTP,Path=/readyz,Interval=10,Timeout=5,HealthyThreshold=1,UnhealthyThreshold=3' \
     --network-configuration \
       'IngressConfiguration={IsPubliclyAccessible=true}' \
-    --tags Key=Project,Value=Tally Key=Environment,Value=intake-v1-isolated \
-    --query Service.ServiceArn --output text)"
+      --tags Key=Project,Value=Tally Key=Environment,Value=intake-v1-isolated \
+      --query Service.ServiceArn --output text)"
 else
+  PREVIOUS_UPDATED_AT="$(aws apprunner describe-service \
+    --profile "$PROFILE" --region "$REGION" --service-arn "$SERVICE_ARN" \
+    --query Service.UpdatedAt --output text)"
   aws apprunner update-service --profile "$PROFILE" --region "$REGION" \
     --service-arn "$SERVICE_ARN" \
     --source-configuration "$SOURCE_CONFIG" \
@@ -77,9 +81,16 @@ else
 fi
 
 for _ in $(seq 1 60); do
-  STATUS="$(aws apprunner describe-service --profile "$PROFILE" --region "$REGION" \
-    --service-arn "$SERVICE_ARN" --query Service.Status --output text)"
-  [ "$STATUS" = "RUNNING" ] && break
+  SERVICE_STATE="$(aws apprunner describe-service --profile "$PROFILE" \
+    --region "$REGION" --service-arn "$SERVICE_ARN" \
+    --query 'Service.[Status,UpdatedAt]' --output text)"
+  STATUS="${SERVICE_STATE%%[[:space:]]*}"
+  UPDATED_AT="${SERVICE_STATE##*[[:space:]]}"
+  if [ "$STATUS" = "RUNNING" ] && {
+    [ -z "$PREVIOUS_UPDATED_AT" ] || [ "$UPDATED_AT" != "$PREVIOUS_UPDATED_AT" ]
+  }; then
+    break
+  fi
   case "$STATUS" in
     CREATE_FAILED|UPDATE_FAILED|DELETE_FAILED)
       echo "STOP: isolated App Runner service failed" >&2
