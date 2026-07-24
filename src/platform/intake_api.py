@@ -37,7 +37,9 @@ from src.platform.intake_repository import (
     FinalizeReceipt,
     IdempotencyConflictError,
     IngestionStateError,
+    complete_duplicate_ingestion,
     finalize_received_invoice,
+    find_invoice_by_sha,
     record_source_stored,
     reserve_ingestion,
 )
@@ -276,6 +278,23 @@ def receive_invoice(
             return reservation.response_snapshot, True
         if reservation.state == "RESERVED" and not reservation.is_new:
             raise IngestionStateError("REQUEST_IN_PROGRESS")
+
+        duplicate = find_invoice_by_sha(dal, envelope.sha256)
+        if duplicate is not None:
+            duplicate_invoice_id, duplicate_source_id = duplicate
+            snapshot, _ = load_invoice_projection(duplicate_invoice_id)
+            if snapshot["invoice"]["invoice_source"]["source_id"] != duplicate_source_id:
+                raise IngestionStateError("DUPLICATE_SOURCE_BINDING_MISMATCH")
+            snapshot = complete_duplicate_ingestion(
+                dal,
+                idempotency_key=idempotency_key,
+                request_hash=request_hash,
+                invoice_id=duplicate_invoice_id,
+                source_id=duplicate_source_id,
+                source_sha256=envelope.sha256,
+                response_snapshot=snapshot,
+            )
+            return snapshot, True
 
         source = reservation.stored_source
         if source is None:

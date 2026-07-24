@@ -10,7 +10,9 @@ from src.external.invoice_source_store import StoredInvoiceSource
 from src.platform.intake_repository import (
     FinalizeReceipt,
     IdempotencyConflictError,
+    complete_duplicate_ingestion,
     finalize_received_invoice,
+    find_invoice_by_sha,
     record_source_stored,
     reserve_ingestion,
 )
@@ -69,6 +71,20 @@ class FakeCursor:
         elif normalized.startswith("SELECT request_hash, state FROM ingestion_requests"):
             value = self.conn.ingestions[(params[0], params[1])]
             self.one = (value["request_hash"], value["state"])
+        elif normalized.startswith("SELECT i.id, s.id"):
+            self.one = self.conn.invoice_by_sha.get((params[0], params[1]))
+        elif normalized.startswith(
+            "SELECT request_hash, state, response_snapshot"
+        ):
+            value = self.conn.ingestions[(params[0], params[1])]
+            self.one = (
+                value["request_hash"],
+                value["state"],
+                value["snapshot"],
+            )
+        elif normalized.startswith("SELECT 1 FROM invoices i"):
+            expected = self.conn.invoice_by_sha.get((params[0], params[3]))
+            self.one = (1,) if expected == (params[1], params[2]) else None
         elif normalized.startswith("UPDATE ingestion_requests") and (
             "SOURCE_STORED_DB_PENDING" in normalized
         ):
@@ -81,7 +97,11 @@ class FakeCursor:
             table = normalized.removeprefix("INSERT INTO ").split()[0]
             self.conn.insert_counts[table] = self.conn.insert_counts.get(table, 0) + 1
         elif normalized.startswith("UPDATE ingestion_requests") and "COMPLETED" in normalized:
-            value = self.conn.ingestions[(params[2], params[3])]
+            if "deduplicated_invoice_id" in normalized:
+                value = self.conn.ingestions[(params[3], params[4])]
+                value["duplicate"] = (params[1], params[2])
+            else:
+                value = self.conn.ingestions[(params[2], params[3])]
             value["state"] = "COMPLETED"
             value["snapshot"] = json.loads(params[0])
         return self
@@ -93,6 +113,7 @@ class FakeCursor:
 class FakeConnection:
     def __init__(self):
         self.ingestions = {}
+        self.invoice_by_sha = {}
         self.insert_counts = {}
         self.executed = []
 
@@ -206,3 +227,43 @@ def test_finalize_creates_one_invoice_source_task_event_and_outbox():
         "invoice_events": 1,
         "event_outbox": 1,
     }
+
+
+def test_duplicate_source_completes_request_without_new_domain_records():
+    dal = _dal()
+    invoice_id = "10000000-0000-4000-8000-000000000020"
+    source_id = "10000000-0000-4000-8000-000000000021"
+    dal.conn.invoice_by_sha[(TENANT_ID, "a" * 64)] = (invoice_id, source_id)
+    reserve_ingestion(
+        dal,
+        idempotency_key="upload-duplicate",
+        request_hash="request-duplicate",
+        actor_id=None,
+        actor_display="reviewer",
+    )
+    snapshot = {"invoice": {"invoice_id": invoice_id}}
+
+    assert find_invoice_by_sha(dal, "a" * 64) == (invoice_id, source_id)
+    result = complete_duplicate_ingestion(
+        dal,
+        idempotency_key="upload-duplicate",
+        request_hash="request-duplicate",
+        invoice_id=invoice_id,
+        source_id=source_id,
+        source_sha256="a" * 64,
+        response_snapshot=snapshot,
+    )
+    replay = complete_duplicate_ingestion(
+        dal,
+        idempotency_key="upload-duplicate",
+        request_hash="request-duplicate",
+        invoice_id=invoice_id,
+        source_id=source_id,
+        source_sha256="a" * 64,
+        response_snapshot=snapshot,
+    )
+
+    assert result == replay == snapshot
+    ingestion = dal.conn.ingestions[(TENANT_ID, "upload-duplicate")]
+    assert ingestion["duplicate"] == (invoice_id, source_id)
+    assert dal.conn.insert_counts == {}

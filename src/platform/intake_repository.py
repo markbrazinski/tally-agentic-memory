@@ -45,6 +45,104 @@ class FinalizeReceipt:
     public_disclosure: str
 
 
+def find_invoice_by_sha(dal: DAL, sha256: str) -> tuple[str, str] | None:
+    """Return the tenant-scoped immutable invoice/source already bound to a hash."""
+    with dal.conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT i.id, s.id
+            FROM invoices i
+            JOIN invoice_sources s
+              ON s.tenant_id=i.tenant_id AND s.invoice_id=i.id
+             AND s.source_type='INVOICE_PDF'
+            WHERE i.tenant_id=%s AND i.sha256=%s
+            ORDER BY i.received_at, i.id
+            LIMIT 1;
+            """,
+            (dal.tenant.tenant_id, sha256),
+        )
+        row = cur.fetchone()
+    return None if row is None else (str(row[0]), str(row[1]))
+
+
+def complete_duplicate_ingestion(
+    dal: DAL,
+    *,
+    idempotency_key: str,
+    request_hash: str,
+    invoice_id: str,
+    source_id: str,
+    source_sha256: str,
+    response_snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    """Complete a fresh request by linking it to an existing immutable source."""
+    tenant_id = dal.tenant.tenant_id
+
+    def _complete(conn):
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT request_hash, state, response_snapshot
+                FROM ingestion_requests
+                WHERE tenant_id=%s AND idempotency_key=%s
+                FOR UPDATE;
+                """,
+                (tenant_id, idempotency_key),
+            )
+            request = cur.fetchone()
+            if request is None:
+                raise IngestionStateError("INGESTION_REQUEST_NOT_FOUND")
+            if request[0] != request_hash:
+                raise IdempotencyConflictError("IDEMPOTENCY_CONFLICT")
+            if request[1] == "COMPLETED":
+                return (
+                    request[2]
+                    if isinstance(request[2], dict)
+                    else json.loads(request[2])
+                )
+
+            cur.execute(
+                """
+                SELECT 1
+                FROM invoices i
+                JOIN invoice_sources s
+                  ON s.tenant_id=i.tenant_id AND s.invoice_id=i.id
+                 AND s.source_type='INVOICE_PDF'
+                WHERE i.tenant_id=%s AND i.id=%s AND s.id=%s
+                  AND i.sha256=%s AND s.sha256=%s;
+                """,
+                (
+                    tenant_id,
+                    invoice_id,
+                    source_id,
+                    source_sha256,
+                    source_sha256,
+                ),
+            )
+            if cur.fetchone() is None:
+                raise IngestionStateError("DUPLICATE_SOURCE_BINDING_MISMATCH")
+
+            cur.execute(
+                """
+                UPDATE ingestion_requests
+                SET state='COMPLETED', response_snapshot=%s,
+                    deduplicated_invoice_id=%s, deduplicated_source_id=%s,
+                    updated_at=now()
+                WHERE tenant_id=%s AND idempotency_key=%s;
+                """,
+                (
+                    json.dumps(response_snapshot),
+                    invoice_id,
+                    source_id,
+                    tenant_id,
+                    idempotency_key,
+                ),
+            )
+            return response_snapshot
+
+    return dal.run_with_retry(_complete)
+
+
 def reserve_ingestion(
     dal: DAL,
     *,
