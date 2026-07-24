@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
+from src.core.intake import TaskType, task_input_fingerprint
 from src.core.reconstruction import (
     ChargedDayResult,
     CoverageState,
@@ -35,6 +36,29 @@ from src.platform.intake_tasks import (
 )
 
 EFFECTIVE_TIMEZONE = "America/Los_Angeles"
+
+
+def _emit_rule_task(cur, *, tenant_id, lease, reconstruction_id, version) -> None:
+    """Create the durable FIND_APPLICABLE_RULE task for Gate 3 (idempotent)."""
+    refs = [{"type": "reconstruction", "id": reconstruction_id, "version": version}]
+    fingerprint = task_input_fingerprint(
+        task_type=TaskType.FIND_APPLICABLE_RULE, input_refs=refs
+    )
+    cur.execute(
+        """
+        INSERT INTO workflow_tasks
+            (tenant_id, id, invoice_id, task_type, task_version, state,
+             initiated_by, actor_display, knowledge_cutoff_at, input_fingerprint,
+             input_object_refs, public_summary)
+        VALUES (%s, %s, %s, 'FIND_APPLICABLE_RULE', 1, 'PENDING', %s, %s, %s, %s, %s,
+                'Waiting to find the governing tariff clause')
+        ON CONFLICT (tenant_id, invoice_id, task_type, task_version, input_fingerprint)
+        DO NOTHING;
+        """,
+        (tenant_id, str(uuid4()), lease.invoice_id, lease.initiated_by,
+         lease.actor_display, lease.knowledge_cutoff_at, fingerprint,
+         json.dumps(refs)),
+    )
 
 
 @dataclass(frozen=True)
@@ -400,6 +424,15 @@ def complete_reconstruction(
                 )
 
             _finish_task(cur, tenant_id, lease, terminal_state.value)
+
+            # On a complete reconstruction, hand off to Gate 3 by creating one
+            # durable FIND_APPLICABLE_RULE task bound to this reconstruction
+            # version (mirrors intake's START_RECONSTRUCTION handoff).
+            if terminal_state is ReconstructionState.COMPLETE:
+                _emit_rule_task(
+                    cur, tenant_id=tenant_id, lease=lease,
+                    reconstruction_id=reconstruction_id, version=version,
+                )
 
             aggregate = (
                 "RECONSTRUCTING"

@@ -1,0 +1,23 @@
+{
+  "classification": "SYNTHETIC DEMO \u2014 FICTIONAL DATA",
+  "database": "tally_gate2_iso (gate3 tenant; defaultdb untouched)",
+  "sponsor_path": "REAL: Amazon Titan embed + CockroachDB Distributed Vector Indexing + deterministic validation",
+  "embedding_model": "amazon.titan-embed-text-v2:0",
+  "vector_index_selected": true,
+  "candidates_retrieved": 2,
+  "candidate_refs_by_rank": [
+    "Clause 9.9",
+    "Clause 4.2"
+  ],
+  "decision_state": "VERIFIED",
+  "accepted_clause_ref": "Clause 4.2",
+  "accepted_rate_minor": 25000,
+  "rejected_candidates": [
+    {
+      "clause_ref": "Clause 9.9",
+      "rejection": "REJECTED_WRONG_DATE"
+    }
+  ],
+  "wrong_date_distractor_rejected": true,
+  "mock_fallback": false
+}
