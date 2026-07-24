@@ -147,6 +147,37 @@ def load_reconstruction_projection(
         )
         rule_row = cur.fetchone()
 
+        # Gate 4 frozen recommendation (public-safe amounts + coverage).
+        cur.execute(
+            """
+            SELECT id, version, recommendation_type, disputed_amount_minor,
+                   supported_amount_minor, claimed_amount_minor, currency,
+                   days_total, days_covered, evidence_coverage, state, public_summary
+            FROM recommendations
+            WHERE tenant_id=%s AND reconstruction_id=%s AND superseded_by IS NULL
+            ORDER BY version DESC LIMIT 1;
+            """,
+            (tenant_id, reconstruction_id),
+        )
+        rec_row = cur.fetchone()
+
+    recommendation = None
+    if rec_row is not None:
+        recommendation = {
+            "recommendation_id": str(rec_row[0]),
+            "version": int(rec_row[1]),
+            "recommendation_type": rec_row[2],
+            "disputed_amount_minor": int(rec_row[3]),
+            "supported_amount_minor": int(rec_row[4]),
+            "claimed_amount_minor": int(rec_row[5]),
+            "currency": rec_row[6],
+            "days_total": int(rec_row[7]),
+            "days_covered": int(rec_row[8]),
+            "evidence_coverage": rec_row[9],
+            "state": rec_row[10],
+            "summary": rec_row[11],
+        }
+
     applicable_rule = None
     if rule_row is not None:
         applicable_rule = {
@@ -184,6 +215,7 @@ def load_reconstruction_projection(
         "timeline": timeline,
         "charged_days": charged_days,
         "applicable_rule": applicable_rule,
+        "recommendation": recommendation,
         "coverage": {
             "days_complete": int(head[7]),
             "days_total": int(head[6]),
