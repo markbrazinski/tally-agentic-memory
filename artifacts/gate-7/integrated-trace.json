@@ -1,0 +1,45 @@
+{
+  "classification": "SYNTHETIC DEMO \u2014 FICTIONAL DATA",
+  "database": "tally_gate2_iso (gate7 tenant; defaultdb untouched)",
+  "pipeline": {
+    "reconstruction": {
+      "state": "COMPLETE",
+      "days_complete": 7
+    },
+    "applicable_rule": {
+      "state": "VERIFIED",
+      "vector_index_selected": true,
+      "rate_minor": 25000,
+      "accepted": "Clause 4.2"
+    },
+    "judgment": {
+      "type": "DISPUTE",
+      "disputed_minor": 70000,
+      "days": 7
+    },
+    "seal": {
+      "revision": 1,
+      "digest": "sha256:9298e0c56386395..."
+    },
+    "send": {
+      "state": "SENT",
+      "message_id": "demo-5c4239be0a7a7d2f",
+      "recipient": "CONTROLLED_DEMONSTRATION_INBOX"
+    }
+  },
+  "final_invoice_status": "DISPUTED",
+  "public_event_count": 5,
+  "sponsor_tech_live": [
+    "CockroachDB persistence",
+    "CockroachDB Distributed Vector Indexing (index selected)",
+    "Amazon Titan embeddings",
+    "Amazon Bedrock"
+  ],
+  "deferred": [
+    "live Managed MCP read (isolated MCP endpoint not provisioned)",
+    "frontend queue/workbench UI",
+    "video/Devpost artifacts",
+    "real external send to owner-approved recipient"
+  ],
+  "mock_fallback": false
+}

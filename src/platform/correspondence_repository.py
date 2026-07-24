@@ -309,8 +309,14 @@ def _emit_send_event(cur, tenant_id, invoice_id, event_type, state, actor,
 
     cur.execute("SELECT now();")
     now = cur.fetchone()[0]
-    aggregate = "READY_TO_SEND" if event_type == "correspondence.sent" else "SEND_FAILED"
-    if event_type == "correspondence.send_blocked":
+    if event_type == "correspondence.sent":
+        # A successful send preserves the sealed outcome (DISPUTED /
+        # APPROVED_FOR_PAYMENT) — sending does not regress the invoice state.
+        cur.execute("SELECT status FROM invoices WHERE tenant_id=%s AND id=%s;",
+                    (tenant_id, invoice_id))
+        current = cur.fetchone()
+        aggregate = current[0] if current else "READY_TO_SEND"
+    else:
         aggregate = "SEND_FAILED"
     sequence = _lock_invoice_and_advance(
         cur, tenant_id=tenant_id, invoice_id=invoice_id,
