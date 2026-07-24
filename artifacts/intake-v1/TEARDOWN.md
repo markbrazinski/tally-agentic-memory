@@ -48,5 +48,6 @@ repository:
 
 ## Current state
 
-Teardown is **NOT EXECUTED**. This document is a controlled checklist, not proof
+The isolated application service is **PAUSED** after evidence capture. Resource
+deletion is **NOT EXECUTED**. This document is a controlled checklist, not proof
 of deletion. Every destructive step remains separately approval-gated.

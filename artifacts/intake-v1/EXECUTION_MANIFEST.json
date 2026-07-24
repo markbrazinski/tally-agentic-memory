@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "classification": "PUBLIC-SAFE SYNTHETIC INTAKE V1 EXECUTION",
-  "report_state": "DRAFT_PENDING_FINAL_LIVE_READBACK",
+  "report_state": "VERIFIED_BACKEND_DEPLOYED_PATH",
   "scope": {
     "included": "Intake and orchestration through the atomic reconstruction handoff",
     "excluded": [
@@ -12,7 +12,7 @@
       "action gating"
     ],
     "environment": "isolated Intake v1 deployment",
-    "release_binding": "RETAINED_IN_PRIVATE_EXECUTION_RECORD"
+    "release_binding": "deployed from clean feature-branch commit 3fc489e"
   },
   "source_fixture": {
     "classification": "clearly fictional representative invoice",
@@ -23,44 +23,44 @@
   "verification": [
     {
       "requirement": "idempotent multipart intake",
-      "status": "PENDING_FINAL_LIVE_READBACK",
-      "public_evidence": "PLACEHOLDER"
+      "status": "PASS",
+      "public_evidence": "Fresh committed fixture returned 201; same-key replay returned 200 with replay=true; different payload returned 409. The successful receipt response completed in 1.735 seconds."
     },
     {
       "requirement": "exact-version source preservation and retrieval",
-      "status": "PENDING_FINAL_LIVE_READBACK",
-      "public_evidence": "PLACEHOLDER",
+      "status": "PASS",
+      "public_evidence": "Private database readback found exactly one verified exact-version binding. Deployed source retrieval returned 200 in 0.688 seconds and matched the committed PDF byte for byte.",
       "private_binding": "RETAINED_IN_PRIVATE_EXECUTION_RECORD"
     },
     {
       "requirement": "real model extraction with validated PDF anchors",
-      "status": "PENDING_FINAL_LIVE_READBACK",
-      "public_evidence": "PLACEHOLDER"
+      "status": "PASS",
+      "public_evidence": "One real model extraction run produced one immutable validated claim set containing all 10 expected claims, each with a validated page, region, and excerpt binding."
     },
     {
       "requirement": "durable leased worker and bounded retries",
-      "status": "PENDING_FINAL_LIVE_READBACK",
-      "public_evidence": "PLACEHOLDER"
+      "status": "PASS",
+      "public_evidence": "The positive extraction completed through one durable attempt. An unavailable exact version failed closed after one non-retryable attempt. A temporary isolated model denial produced exactly three durable attempts and terminal failure."
     },
     {
       "requirement": "durable event history, outbox, and SSE reconciliation",
-      "status": "PENDING_FINAL_LIVE_READBACK",
-      "public_evidence": "PLACEHOLDER"
+      "status": "PASS",
+      "public_evidence": "Four contiguous persisted events had four delivered outbox rows. Last-Event-ID replay returned the three missed events once; an unknown cursor emitted reconcile_required."
     },
     {
       "requirement": "atomic reconstruction handoff bound to the exact source and immutable claim set",
-      "status": "PENDING_FINAL_LIVE_READBACK",
-      "public_evidence": "PLACEHOLDER"
+      "status": "PASS",
+      "public_evidence": "The deployed workflow reached RECONSTRUCTING 6.185 seconds after receipt and created exactly one pending reconstruction task referencing source version 1 and immutable claim-set version 1."
     },
     {
       "requirement": "negative, privacy, and logged-out deployment checks",
-      "status": "PENDING_FINAL_LIVE_READBACK",
-      "public_evidence": "PLACEHOLDER"
+      "status": "PASS",
+      "public_evidence": "Anonymous mutation returned 401; invalid input returned 415; invalid bindings returned 404; logged-out queue, invoice, event, and source reads returned 200. Public responses, SSE captures, and 82 application log events had zero private-pattern, token, or database-connection matches. Both exact-source and model dependency failures produced zero claims and zero reconstruction tasks."
     },
     {
       "requirement": "complete execution and teardown manifest",
-      "status": "PARTIAL",
-      "public_evidence": "This draft manifest and TEARDOWN.md are present; final live readback and later approved teardown remain outstanding."
+      "status": "PASS",
+      "public_evidence": "This completed public-safe execution manifest and the separately approval-gated TEARDOWN.md are present. The isolated application service was paused after evidence capture."
     }
   ],
   "public_safety": {
@@ -74,10 +74,10 @@
     "private_details_location": "operator-retained private execution record"
   },
   "protected_existing_system": {
-    "hero_database_modified": "PENDING_FINAL_READBACK",
-    "hero_lineage_modified": "PENDING_FINAL_READBACK",
-    "hero_objects_modified": "PENDING_FINAL_READBACK",
-    "judged_routing_modified": "PENDING_FINAL_READBACK"
+    "hero_database_modified": false,
+    "hero_lineage_modified": false,
+    "hero_objects_modified": false,
+    "judged_routing_modified": false
   },
   "explicit_deferrals": [
     {
@@ -92,8 +92,12 @@
     }
   ],
   "teardown": {
-    "status": "NOT_EXECUTED",
+    "status": "SERVICE_PAUSED_RESOURCES_RETAINED",
     "checklist": "artifacts/intake-v1/TEARDOWN.md",
     "approval_required": true
+  },
+  "dependencies": {
+    "backend_live_delivery_contract": "PASS",
+    "browser_queue_and_workbench_rendering": "OPEN_FRONTEND_WORKSTREAM"
   }
 }
