@@ -32,6 +32,7 @@ from src.external.invoice_source_store import (
     VersionedInvoiceSourceStore,
 )
 from src.platform.auth import AuthedActor
+from src.platform.authority_seal_api import register_authority_seal_routes
 from src.platform.intake_events import load_event_history, sse_stream
 from src.platform.intake_repository import (
     FinalizeReceipt,
@@ -235,6 +236,10 @@ def make_router(*, require_auth) -> APIRouter:
 
     # Gate 2 downstream projection — the one reconstruction contract for Gate 3/4.
     register_reconstruction_routes(router, tenant_id_getter=_tenant_id)
+    # Gate 5 human approval + atomic seal.
+    register_authority_seal_routes(
+        router, tenant_id_getter=_tenant_id, require_auth=require_auth
+    )
 
     return router
 
