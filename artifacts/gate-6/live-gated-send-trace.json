@@ -1,0 +1,20 @@
+{
+  "classification": "SYNTHETIC DEMO \u2014 FICTIONAL DATA",
+  "database": "tally_gate2_iso (gate6 tenant; defaultdb untouched)",
+  "sponsor_verification": {
+    "note": "EXACT_S3_SOURCE + VECTOR_CLAUSE_BINDING are real isolated-DB reads; APPROVED_MEMORY_MCP is a bounded reconstruction-state check (isolated Managed MCP endpoint not provisioned)"
+  },
+  "sent": {
+    "state": "SENT",
+    "gate_state": "PASSED",
+    "message_id": "demo-55e7ec6f6681a3ec",
+    "recipient": "CONTROLLED_DEMONSTRATION_INBOX"
+  },
+  "idempotent_replay_duplicate": true,
+  "replay_same_message": true,
+  "forced_source_failure_blocked": true,
+  "blocked_reason": "SEND_BLOCKED_SOURCE",
+  "distinct_provider_messages": 1,
+  "external_send_note": "Controlled demonstration inbox only. A real external send to an owner-approved recipient/provider is a separate authorized step and was NOT performed.",
+  "mock_fallback": false
+}

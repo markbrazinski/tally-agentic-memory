@@ -1,0 +1,142 @@
+"""Pure Gate 6 contracts: sealed-record fact pack, locked-field draft
+validation, and the send-gate evaluation. Zero external I/O.
+
+The draft's financial and identifier fields are LOCKED to the sealed record — a
+model may write prose but never a locked field. The send gate is all-or-nothing:
+MCP, vector binding, exact source, no-fallback, second authorization, and
+locked-field integrity must every one be VERIFIED, or the send is blocked.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import StrEnum
+
+from src.core.receipt import canonical_json_bytes, prefixed_sha256
+
+
+class GateState(StrEnum):
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+    NOT_RUN = "NOT_RUN"
+
+
+# Every gate that must pass before a controlled send. Order is display order.
+SEND_GATES = (
+    "SECOND_AUTHORIZATION",
+    "LOCKED_FIELDS",
+    "APPROVED_MEMORY_MCP",
+    "VECTOR_CLAUSE_BINDING",
+    "EXACT_S3_SOURCE",
+    "NO_FALLBACK",
+)
+
+
+@dataclass(frozen=True)
+class SealedFactPack:
+    """The only inputs a draft may use — copied from the sealed decision."""
+
+    invoice_id: str
+    decision_seal_id: str
+    seal_digest: str
+    recommendation_type: str
+    disputed_amount_minor: int
+    supported_amount_minor: int
+    currency: str
+    charged_period_start: str
+    charged_period_end: str
+    container_ref: str
+    invoice_no: str
+    rule_ref: str
+
+
+def locked_fields(pack: SealedFactPack) -> dict:
+    """The fields a draft must reproduce verbatim from the seal."""
+    return {
+        "recommendation_type": pack.recommendation_type,
+        "disputed_amount_minor": pack.disputed_amount_minor,
+        "supported_amount_minor": pack.supported_amount_minor,
+        "currency": pack.currency,
+        "charged_period_start": pack.charged_period_start,
+        "charged_period_end": pack.charged_period_end,
+        "container_ref": pack.container_ref,
+        "invoice_no": pack.invoice_no,
+        "rule_ref": pack.rule_ref,
+    }
+
+
+def locked_fields_digest(pack: SealedFactPack) -> str:
+    return prefixed_sha256(canonical_json_bytes(locked_fields(pack)))
+
+
+@dataclass(frozen=True)
+class DraftValidation:
+    ok: bool
+    issues: tuple[str, ...]
+
+
+def validate_draft_locked_fields(
+    pack: SealedFactPack, draft_locked_fields: dict
+) -> DraftValidation:
+    """A draft is valid only if its locked fields equal the sealed fact pack's.
+
+    Compared via canonical serialization (never dict ==). Any drift — a changed
+    amount, date, identifier, or decision type — invalidates the draft.
+    """
+    expected = locked_fields(pack)
+    if canonical_json_bytes(expected) != canonical_json_bytes(draft_locked_fields):
+        issues = tuple(
+            f"LOCKED_FIELD_DRIFT:{k}"
+            for k in sorted(expected)
+            if expected[k] != draft_locked_fields.get(k)
+        ) or ("LOCKED_FIELD_SET_MISMATCH",)
+        return DraftValidation(False, issues)
+    return DraftValidation(True, ())
+
+
+@dataclass(frozen=True)
+class GateResult:
+    gate_code: str
+    state: GateState
+    detail: str | None
+
+
+@dataclass(frozen=True)
+class SendDecision:
+    permitted: bool
+    gate_results: tuple[GateResult, ...]
+    blocked_reason: str | None
+
+
+def evaluate_send_gates(results: dict[str, GateResult]) -> SendDecision:
+    """Send is permitted only if EVERY gate is VERIFIED. First failing (or
+    missing) gate is the blocked reason. No gate may be skipped."""
+    ordered: list[GateResult] = []
+    blocked_reason: str | None = None
+    for code in SEND_GATES:
+        result = results.get(code) or GateResult(code, GateState.NOT_RUN, "gate not run")
+        ordered.append(result)
+        if result.state is not GateState.VERIFIED and blocked_reason is None:
+            blocked_reason = _blocked_code(code, result.state)
+    return SendDecision(
+        permitted=blocked_reason is None,
+        gate_results=tuple(ordered),
+        blocked_reason=blocked_reason,
+    )
+
+
+def _blocked_code(gate_code: str, state: GateState) -> str:
+    if state is GateState.NOT_RUN:
+        return f"GATE_NOT_RUN:{gate_code}"
+    return {
+        "SECOND_AUTHORIZATION": "SEND_BLOCKED_AUTHORIZATION",
+        "LOCKED_FIELDS": "SEND_BLOCKED_LOCKED_FIELDS",
+        "APPROVED_MEMORY_MCP": "SEND_BLOCKED_MEMORY",
+        "VECTOR_CLAUSE_BINDING": "SEND_BLOCKED_VECTOR",
+        "EXACT_S3_SOURCE": "SEND_BLOCKED_SOURCE",
+        "NO_FALLBACK": "SEND_BLOCKED_FALLBACK",
+    }.get(gate_code, f"SEND_BLOCKED:{gate_code}")
+
+
+def build_subject(pack: SealedFactPack) -> str:
+    return f"Adjustment request · {pack.invoice_no} · {pack.container_ref}"
