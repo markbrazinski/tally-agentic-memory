@@ -12,13 +12,16 @@ correct.
 
 From the repo, with the deployer profile:
 
+Run these as modules (`-m`, dots, no `.py`) from the repo root so the internal
+`scripts.*` imports resolve:
+
 ```bash
 # 1. Re-authorize — opens a browser; approve the read-only (mcp:read) grant.
 #    Writes a fresh renewable token bundle to SSM.
-AWS_PROFILE=gate5-deployer python scripts/gate5b_oauth_bootstrap.py
+AWS_PROFILE=gate5-deployer ./.venv/bin/python -m scripts.gate5b_oauth_bootstrap
 
 # 2. Run the LIVE Managed MCP reconstruction trace against tally_gate2_iso.
-AWS_PROFILE=gate5-deployer python scripts/gate2_live_mcp_trace.py
+AWS_PROFILE=gate5-deployer ./.venv/bin/python -m scripts.gate2_live_mcp_trace
 ```
 
 ## What success looks like

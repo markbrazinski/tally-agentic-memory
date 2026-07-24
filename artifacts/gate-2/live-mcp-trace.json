@@ -1,0 +1,16 @@
+{
+  "classification": "SYNTHETIC DEMO \u2014 FICTIONAL DATA",
+  "database": "tally_gate2_iso (gate2-live tenant; defaultdb untouched)",
+  "read_path": "LIVE CockroachDB Managed MCP (real sponsor trace)",
+  "mcp_write_tool_denied": true,
+  "mcp_rows_returned": 19,
+  "mcp_rows_note": "The Managed MCP view is cluster/database-scoped, not tenant-scoped (MCP enforces tenant scope at the connection). The count includes representative memory seeded by other trace tenants in this isolated database; the deterministic validator filters to this invoice's shipment/container, yielding events_accepted.",
+  "mcp_server_request_id_present": false,
+  "events_accepted": 5,
+  "reconstruction": {
+    "state": "COMPLETE",
+    "days_complete": 7,
+    "days_total": 7
+  },
+  "mock_fallback": false
+}

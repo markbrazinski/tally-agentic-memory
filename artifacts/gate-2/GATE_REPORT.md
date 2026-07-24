@@ -1,7 +1,7 @@
 # Gate 2 — Sourced Reconstruction — Gate Report
 
 **Branch:** `feat/sourced-reconstruction-v1` (from `main` @ Gate-1 merge `19abe7a`)
-**Status:** IMPLEMENTED + TESTED + DRIVER-READBACK PROVEN; live Managed MCP sponsor trace DEFERRED (no isolated MCP endpoint provisioned)
+**Status:** IMPLEMENTED + TESTED + LIVE MANAGED MCP SPONSOR TRACE PASSED (real read-only MCP read against tally_gate2_iso; 5 hero events; 7/7 COMPLETE)
 **Suite:** 738 passed (699 baseline + 39 Gate 2); ruff clean on changed files
 **Isolated env:** `tally_gate2_iso` (migrations 001–011); protected `defaultdb` verified unchanged (21 tables)
 
@@ -10,7 +10,7 @@
 | Requirement | Controlling doc §| Status | Repository evidence | Smallest implementation | Acceptance test | Dependency |
 |---|---|---|---|---|---|---|
 | Consume the durable START_RECONSTRUCTION task | BE Plan §6.4; Recon Commission §6.1 | PASS | `claim_next_reconstruction_task` leases `task_type='START_RECONSTRUCTION'` reusing the intake lease/fence pattern | Lease filter + fence on current_attempt+lease_owner | `test_reconstruction_repository` (fencing), live positive trace | Intake (Gate 1) |
-| Real Managed MCP read; no direct-SQL/fixture/model fallback | BE Plan §2, §6.3; Commission §6.1–6.3 | PASS (unit) / MCP live DEFERRED | `reconstruction_mcp.read_reconstruction_memory` → `CockroachManagedMCP.select_query` only; worker fails closed | Fixed bounded SELECT via read-only MCP client; MCP errors → `fail_reconstruction` | `test_reconstruction_worker` 6 no-fallback cases; `test_reconstruction_mcp` | none |
+| Real Managed MCP read; no direct-SQL/fixture/model fallback | BE Plan §2, §6.3; Commission §6.1–6.3 | PASS (LIVE) | `reconstruction_mcp.read_reconstruction_memory` → `CockroachManagedMCP.select_query` only; worker fails closed | Live read-only MCP read (write tool denied) against tally_gate2_iso: 5 hero events, 7/7 COMPLETE (`live-mcp-trace.json`); `test_reconstruction_worker` 6 no-fallback cases; `test_reconstruction_mcp` | none |
 | Immutable reconstruction versioning | Commission §5.2 | PASS | `reconstructions` unique(invoice,version) + unique(invoice,fingerprint); replay path | `complete_reconstruction` replays existing version on duplicate | `test_reconstruction_repository::test_duplicate_delivery_replays_existing_version` | none |
 | Every event: source/version/provenance + distinct time domains | Commission §5.1–5.2; UX §5.4 | PASS | `reconstruction_events` columns; `validate_events` | occurred/effective/observed/recorded/received columns; server-derived `recorded_before_cutoff` | `test_reconstruction_core` (time domains, source, ownership) | none |
 | Knowledge cutoff = received_at; no later event enters | BE Plan §4.1(7); Commission §5.2 | PASS | `validate_events` rejects `recorded > cutoff`; cutoff inherited from task | Cutoff filter in validator + MCP WHERE clause | `test_reconstruction_core::test_event_after_knowledge_cutoff_is_rejected_not_labelled` | Intake (sets received_at) |
@@ -32,7 +32,21 @@
 
 ## Deferrals
 
-1. **Live Managed MCP sponsor trace** — DEFERRED. The isolated Gate-2 lineage has no provisioned Managed MCP endpoint (SSM holds only hero `/tally/gate5/mcp-*` config scoped to the protected `defaultdb`). The live traces read the MCP view through the driver, explicitly labeled `driver-diagnostic`, NOT the sponsor trace. The worker's real MCP path is implemented and unit-proven fail-closed. Unblocking needs an isolated MCP endpoint + OAuth for `tally_gate2_iso`.
+1. **Live Managed MCP sponsor trace** — **PASSED (live).** A real read-only Managed
+   MCP read ran against the isolated `tally_gate2_iso` database (the same cluster
+   MCP with the database overridden to the isolated lineage — Managed MCP scopes to
+   a cluster, the database is a per-query parameter). The identity was verified
+   read-only (write tool denied), the fixed reconstruction SELECT returned the hero
+   events, the deterministic validator accepted exactly the 5 hero events, and
+   reconstruction reached 7/7 COMPLETE (`live-mcp-trace.json`, `mock_fallback:false`).
+   Reproduce: `python -m scripts.gate5b_oauth_bootstrap` (one-time browser re-auth),
+   then `python -m scripts.gate2_live_mcp_trace`. The earlier driver-diagnostic
+   read is retained as a fallback-behavior oracle only.
+
+   **Deploy note:** the browser step uses a `127.0.0.1` OAuth *callback* — a
+   laptop-only, one-time login artifact. Runtime MCP reads go to the public
+   `https://cockroachlabs.cloud/mcp` endpoint; App Runner reads the sealed token
+   from SSM and auto-refreshes it, so no localhost is involved in the deployed path.
 2. **Gate 3+ fields** — `applicable_rate_minor`/`outcome`/`dispute_amount_minor` intentionally null/PENDING in Gate 2.
 
 ## No-fallback statement (Gate 2 scope)

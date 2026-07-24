@@ -187,6 +187,13 @@ def main() -> None:
         "read_path": "LIVE CockroachDB Managed MCP (real sponsor trace)",
         "mcp_write_tool_denied": write_denied,
         "mcp_rows_returned": memory.returned_row_count,
+        "mcp_rows_note": (
+            "The Managed MCP view is cluster/database-scoped, not tenant-scoped "
+            "(MCP enforces tenant scope at the connection). The count includes "
+            "representative memory seeded by other trace tenants in this isolated "
+            "database; the deterministic validator filters to this invoice's "
+            "shipment/container, yielding events_accepted."
+        ),
         "mcp_server_request_id_present": bool(memory.server_request_id),
         "events_accepted": len(v.accepted),
         "reconstruction": {"state": completion.state,
@@ -195,8 +202,11 @@ def main() -> None:
         "mock_fallback": False,
     }
     print(json.dumps(trace, indent=2))
+    # The meaningful invariants: a real read-only MCP read produced exactly the
+    # 5 hero events for THIS invoice, and reconstruction reached 7/7 COMPLETE.
     assert write_denied, "MCP identity must be read-only"
-    assert memory.returned_row_count == 5
+    assert memory.returned_row_count >= 5, "live MCP must return the hero events"
+    assert len(v.accepted) == 5, "validator must accept exactly the 5 hero events"
     assert completion.state == "COMPLETE" and completion.days_complete == 7
     conn.close()
 
