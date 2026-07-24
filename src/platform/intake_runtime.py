@@ -7,10 +7,30 @@ from uuid import uuid4
 
 import boto3
 
+from src.external.cockroach_mcp import CockroachManagedMCP, ManagedMCPConfig
 from src.external.dal import DAL, Tenant
 from src.external.invoice_source_store import VersionedInvoiceSourceStore
 from src.platform.intake_events import relay_outbox_batch
 from src.platform.intake_worker import run_one_intake_task
+from src.platform.reconstruction_worker import run_one_reconstruction_task
+
+
+def _reconstruction_mcp_factory():
+    """Build a fresh read-only Managed MCP client from OAuth-manager state.
+
+    Imported lazily so the intake-only runtime never requires OAuth wiring until
+    a reconstruction task is actually leased. No direct-DB fallback is possible:
+    the factory returns only a Managed MCP client.
+    """
+    from src.external.oauth_tokens import OAuthTokenManager
+
+    def _factory() -> CockroachManagedMCP:
+        with OAuthTokenManager.from_env() as manager:
+            access_token, _refreshed = manager.access_token()
+        config = ManagedMCPConfig.from_env(access_token=access_token)
+        return CockroachManagedMCP(config)
+
+    return _factory
 
 
 def run_runtime_iteration() -> bool:
@@ -29,5 +49,10 @@ def run_runtime_iteration() -> bool:
             worker_id=worker_id,
             source_store=store,
         )
+        reconstruction = run_one_reconstruction_task(
+            dal,
+            worker_id=worker_id,
+            mcp_factory=_reconstruction_mcp_factory(),
+        )
         delivered = relay_outbox_batch(dal)
-    return completion is not None or delivered > 0
+    return completion is not None or reconstruction is not None or delivered > 0

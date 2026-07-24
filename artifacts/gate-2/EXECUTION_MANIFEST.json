@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "classification": "PUBLIC-SAFE SYNTHETIC GATE 2 SOURCED RECONSTRUCTION",
+  "report_state": "IMPLEMENTED_AND_TESTED_LIVE_MANAGED_MCP_TRACE_PASSED",
+  "scope": {
+    "included": "Sourced reconstruction: consume START_RECONSTRUCTION task, validate MCP-derived pre-invoice events, persist immutable reconstruction version with seven charged days, coverage, events, outbox; public projection for Gate 3/4",
+    "excluded": ["applicable rule / vector retrieval", "deterministic judgment", "approval", "seal", "correspondence", "send"],
+    "environment": "isolated CockroachDB database tally_gate2_iso (same cluster as the protected hero defaultdb, which was verified UNCHANGED; cluster identifier retained privately)",
+    "release_binding": "feature branch feat/sourced-reconstruction-v1"
+  },
+  "source_fixture": {
+    "classification": "clearly fictional representative source package",
+    "events_manifest": "tests/fixtures/demo/INV-1048.reconstruction-events.json",
+    "disclosure": "Representative demonstration data. Not a live carrier or terminal feed.",
+    "provenance_classification": "DEMO_SCENARIO"
+  },
+  "verification": [
+    {
+      "requirement": "immutable reconstruction versioning with fingerprint idempotency",
+      "status": "PASS",
+      "public_evidence": "complete_reconstruction writes one version per (invoice, input_fingerprint); a duplicated delivery replays the existing version and writes no second row (unit) and the version unique index is enforced (migration 010)."
+    },
+    {
+      "requirement": "every accepted event carries source, version, provenance, and distinct time domains; no event after the knowledge cutoff",
+      "status": "PASS",
+      "public_evidence": "validate_events rejects events recorded after the invoice received_at cutoff, unverified source bindings, cross-shipment/container events, non-allowlisted types, naive timestamps, and duplicates; occurred/recorded/observed times are stored as distinct columns; recorded_before_cutoff is server-derived."
+    },
+    {
+      "requirement": "deterministic free-time/gate-out boundary in the scenario timezone",
+      "status": "PASS",
+      "public_evidence": "Boundary policy computes first-chargeable = day after free-time-end and last-chargeable = gate-out date, in America/Los_Angeles. A live-caught UTC-truncation bug (June 8 dropped) was fixed and regression-tested."
+    },
+    {
+      "requirement": "seven charged days each source-complete with bound events",
+      "status": "PASS",
+      "public_evidence": "Live positive trace on tally_gate2_iso: 5 events accepted, 7 charged-day rows, 7 source-complete, reconstruction state COMPLETE, 1 public reconstruction event + 1 outbox row read back."
+    },
+    {
+      "requirement": "atomic transition (reconstruction + events + days + coverage + invoice status + public event + outbox) and late-worker fencing",
+      "status": "PASS",
+      "public_evidence": "Repository transaction commits all rows in one dal.run_with_retry body; a lost lease raises before any write (unit); completion/failure UPDATEs re-assert current_attempt + lease_owner."
+    },
+    {
+      "requirement": "Managed MCP read is load-bearing with NO direct-SQL/fixture/model fallback",
+      "status": "PASS",
+      "public_evidence": "The fixed bounded SELECT runs only through the read-only Managed MCP client; MCP unavailable/unauthorized/malformed/empty all route to fail_reconstruction (BLOCKED/NEEDS_EVIDENCE) and never to complete_reconstruction (unit, 6 no-fallback cases). The worker never opens a driver connection on the MCP failure path."
+    },
+    {
+      "requirement": "counterfactual: a missing/unavailable source produces a gap, not a success",
+      "status": "PASS",
+      "public_evidence": "Live negative trace on tally_gate2_iso: GATE_OUT source version UNAVAILABLE -> the MCP read view excludes it -> boundary cannot form -> 0 source-complete days -> terminal NEEDS_EVIDENCE -> no COMPLETE reconstruction. mock_fallback:false."
+    },
+    {
+      "requirement": "public projection exposes no private identifiers",
+      "status": "PASS",
+      "public_evidence": "The reconstruction projection returns verification state and public refs only; a leak scan asserts absence of s3 bucket/key/version, SQL, correlation, and private-anchor tokens (unit)."
+    }
+  ],
+  "deployed_readback": {
+    "database": "tally_gate2_iso",
+    "positive_trace": "artifacts/gate-2/live-positive-trace.json",
+    "negative_trace": "artifacts/gate-2/live-negative-trace.json",
+    "read_path": "driver-diagnostic",
+    "note": "The positive/negative live traces read the mcp_reconstruction_memory_v1 view through the CockroachDB DRIVER because the isolated lineage has no provisioned Managed MCP endpoint (SSM has only the hero /tally/gate5/mcp-* config, scoped to the protected defaultdb). The driver read is explicitly labeled a diagnostic and is NOT the Managed MCP sponsor trace. The worker's real MCP path is unit-proven fail-closed."
+  },
+  "test_state": {
+    "full_suite": "738 passed",
+    "baseline": "699 passed",
+    "gate2_tests": 39,
+    "ruff_changed_files": "clean"
+  },
+  "public_safety": {
+    "fictional_data_only": true,
+    "mock_fallback_claimed": false,
+    "contains_credentials": false,
+    "contains_private_infrastructure_identifiers": false,
+    "contains_source_object_binding": false,
+    "contains_database_connection_details": false
+  },
+  "protected_existing_system": {
+    "hero_database_defaultdb_modified": false,
+    "hero_defaultdb_table_count_before": 21,
+    "hero_defaultdb_table_count_after": 21,
+    "other_tally_databases_modified": false
+  },
+  "live_managed_mcp": {
+    "status": "PASSED_LIVE",
+    "evidence": "artifacts/gate-2/live-mcp-trace.json",
+    "detail": "A real read-only Managed MCP read ran against the isolated tally_gate2_iso database (same cluster MCP, database overridden). The identity was verified read-only (write tool denied); the fixed reconstruction SELECT returned the hero events; the deterministic validator accepted exactly 5 hero events; reconstruction reached 7/7 COMPLETE. mock_fallback:false. Reproduce: re-auth via scripts.gate5b_oauth_bootstrap, then scripts.gate2_live_mcp_trace."
+  },
+  "explicit_deferrals": [
+    {
+      "statement": "Gate 3 applicable-rule (applicable_rate_minor), Gate 4 judgment/outcome, approval, seal, send",
+      "status": "OPEN",
+      "reason": "Later gates; deliberately left OPEN. Charged-day applicable_rate_minor/outcome remain null/PENDING in Gate 2 by design."
+    }
+  ],
+  "downstream_contract": {
+    "endpoint": "GET /api/invoices/{invoice_id}/reconstruction",
+    "consumers": ["Gate 3 applicable rule", "Gate 4 deterministic judgment"],
+    "shape": "reconstruction_id, version, state, knowledge_cutoff, effective_timezone, source_disclosure, timeline[], charged_days[] (invoice_rate_minor, applicable_rate_minor=null until Gate 3/4, coverage, event_refs, missing_requirements), coverage{days_complete, days_total, requirements, missing_requirements}"
+  },
+  "teardown": {
+    "status": "ISOLATED_DATABASE_RETAINED",
+    "checklist": "artifacts/gate-2/TEARDOWN.md",
+    "approval_required": true
+  }
+}
