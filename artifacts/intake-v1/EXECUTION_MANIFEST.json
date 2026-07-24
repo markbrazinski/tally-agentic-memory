@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "classification": "PUBLIC-SAFE SYNTHETIC INTAKE V1 EXECUTION",
+  "report_state": "DRAFT_PENDING_FINAL_LIVE_READBACK",
+  "scope": {
+    "included": "Intake and orchestration through the atomic reconstruction handoff",
+    "excluded": [
+      "approval",
+      "correspondence",
+      "email",
+      "controlled sending",
+      "action gating"
+    ],
+    "environment": "isolated Intake v1 deployment",
+    "release_binding": "RETAINED_IN_PRIVATE_EXECUTION_RECORD"
+  },
+  "source_fixture": {
+    "classification": "clearly fictional representative invoice",
+    "repository_path": "tests/fixtures/demo/INV-1048.pdf",
+    "expected_claims_manifest": "tests/fixtures/demo/INV-1048.expected-claims.json",
+    "live_source_binding": "RETAINED_IN_PRIVATE_EXECUTION_RECORD"
+  },
+  "verification": [
+    {
+      "requirement": "idempotent multipart intake",
+      "status": "PENDING_FINAL_LIVE_READBACK",
+      "public_evidence": "PLACEHOLDER"
+    },
+    {
+      "requirement": "exact-version source preservation and retrieval",
+      "status": "PENDING_FINAL_LIVE_READBACK",
+      "public_evidence": "PLACEHOLDER",
+      "private_binding": "RETAINED_IN_PRIVATE_EXECUTION_RECORD"
+    },
+    {
+      "requirement": "real model extraction with validated PDF anchors",
+      "status": "PENDING_FINAL_LIVE_READBACK",
+      "public_evidence": "PLACEHOLDER"
+    },
+    {
+      "requirement": "durable leased worker and bounded retries",
+      "status": "PENDING_FINAL_LIVE_READBACK",
+      "public_evidence": "PLACEHOLDER"
+    },
+    {
+      "requirement": "durable event history, outbox, and SSE reconciliation",
+      "status": "PENDING_FINAL_LIVE_READBACK",
+      "public_evidence": "PLACEHOLDER"
+    },
+    {
+      "requirement": "atomic reconstruction handoff bound to the exact source and immutable claim set",
+      "status": "PENDING_FINAL_LIVE_READBACK",
+      "public_evidence": "PLACEHOLDER"
+    },
+    {
+      "requirement": "negative, privacy, and logged-out deployment checks",
+      "status": "PENDING_FINAL_LIVE_READBACK",
+      "public_evidence": "PLACEHOLDER"
+    },
+    {
+      "requirement": "complete execution and teardown manifest",
+      "status": "PARTIAL",
+      "public_evidence": "This draft manifest and TEARDOWN.md are present; final live readback and later approved teardown remain outstanding."
+    }
+  ],
+  "public_safety": {
+    "fictional_data_only": true,
+    "mock_fallback_claimed": false,
+    "contains_credentials": false,
+    "contains_private_infrastructure_identifiers": false,
+    "contains_source_object_binding": false,
+    "contains_database_connection_details": false,
+    "contains_model_prompt": false,
+    "private_details_location": "operator-retained private execution record"
+  },
+  "protected_existing_system": {
+    "hero_database_modified": "PENDING_FINAL_READBACK",
+    "hero_lineage_modified": "PENDING_FINAL_READBACK",
+    "hero_objects_modified": "PENDING_FINAL_READBACK",
+    "judged_routing_modified": "PENDING_FINAL_READBACK"
+  },
+  "explicit_deferrals": [
+    {
+      "statement": "Verification shows MCP, S3, vector binding, and no fallback without private identifiers.",
+      "status": "OPEN",
+      "reason": "The future action-gating path is outside this Intake v1 iteration. Earlier Gate 5 evidence is not proof of this path."
+    },
+    {
+      "statement": "Approval, correspondence, email, controlled sending, and action gating",
+      "status": "OPEN",
+      "reason": "Outside the authorized Intake and orchestration iteration."
+    }
+  ],
+  "teardown": {
+    "status": "NOT_EXECUTED",
+    "checklist": "artifacts/intake-v1/TEARDOWN.md",
+    "approval_required": true
+  }
+}
