@@ -18,3 +18,7 @@ python-dateutil==2.9.0.post0
 # FastAPI service is not a Lambda - it needs boto3 itself for the Bedrock
 # extraction call (src/external/bedrock_extract.py).
 boto3==1.43.40
+# Cognito JWT validation for the judge-demo auth layer. Standard, audited JWT
+# library — signature verification is security-critical and must not be
+# hand-rolled. [crypto] pulls RS256 support (Cognito signs with RS256).
+pyjwt[crypto]==2.10.1

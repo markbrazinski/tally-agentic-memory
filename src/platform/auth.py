@@ -76,6 +76,36 @@ def _resolve_rachel_user_id(tenant_id: str) -> str:
     return str(row[0])
 
 
+def resolve_actor_for_email(tenant_id: str, email: str | None) -> AuthedActor:
+    """Resolve an authenticated email to an audit actor.
+
+    The judge-demo has one provisioned user; audit rows attribute to a real
+    users.id row. If the presented email matches a users row use it, otherwise
+    fall back to the demo actor (the judge account is authenticated by Cognito;
+    this is audit-identity resolution, not a second authz check).
+    """
+    lookup = (email or "").strip().lower() or DEMO_ACTOR_EMAIL
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, display_name FROM users WHERE tenant_id=%s AND email=%s;",
+                (tenant_id, lookup),
+            )
+            row = cur.fetchone()
+            if row is None and lookup != DEMO_ACTOR_EMAIL:
+                cur.execute(
+                    "SELECT id, display_name FROM users WHERE tenant_id=%s AND email=%s;",
+                    (tenant_id, DEMO_ACTOR_EMAIL),
+                )
+                row = cur.fetchone()
+    if not row:
+        raise RuntimeError(
+            f"No audit user available for tenant {tenant_id} "
+            f"(tried {lookup!r} and {DEMO_ACTOR_EMAIL!r}) - run seed_demo_tenant."
+        )
+    return AuthedActor(user_id=str(row[0]), display_name=str(row[1] or "judge"))
+
+
 def make_require_bearer_auth(tenant_id: str):
     """Returns a FastAPI dependency bound to one fixed tenant_id (this
     session's demo scope: one tenant). FastAPI's Depends() calls the

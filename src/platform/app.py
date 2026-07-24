@@ -30,7 +30,7 @@ import pdfplumber
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 
@@ -101,7 +101,35 @@ DEMO_TENANT_ID = os.environ.get(
 )
 DEMO_ACTOR = "rachel.martinez"
 
-require_auth = make_require_bearer_auth(DEMO_TENANT_ID)
+JUDGE_AUTH_ENABLED = os.environ.get("TALLY_JUDGE_AUTH_ENABLED", "").lower() == "true"
+
+# Judge-demo mode: protect the entire surface with Amazon Cognito (username +
+# password → JWT). The intake mutations use the Cognito dependency for actor
+# resolution; the global middleware (installed below) enforces auth on every
+# route including reads, SSE, PDF, and import. Falls back to the static-bearer
+# auth for local dev / tests when Cognito is not configured.
+_cognito_config = None
+if JUDGE_AUTH_ENABLED:
+    from src.platform.cognito_auth import CognitoConfig, make_require_cognito_auth
+
+    _cognito_config = CognitoConfig.from_env()
+
+if _cognito_config is not None:
+    require_auth = make_require_cognito_auth(DEMO_TENANT_ID, _cognito_config)
+else:
+    require_auth = make_require_bearer_auth(DEMO_TENANT_ID)
+
+# Register judge-auth login routes + enforcement middleware BEFORE the intake
+# include_router. FastAPI 0.139.0's included router snapshots a cached
+# "effective candidates" view of the app's routes when it is added; routes
+# registered AFTER it (as install_judge_auth used to be) are missing from that
+# snapshot and 404 at dispatch even though they appear in app.router.routes.
+# Registering first puts /login and /api/login into the snapshot.
+if _cognito_config is not None:
+    from src.platform.judge_auth import install_judge_auth
+
+    install_judge_auth(app, config=_cognito_config)
+
 app.include_router(make_intake_router(require_auth=require_auth))
 
 
@@ -136,6 +164,9 @@ _PUBLIC_HTTP_EXACT_PATHS = frozenset(
     {"/", "/healthz", "/readyz", "/public/demo/hero"}
 )
 _INTAKE_PUBLIC_EXACT_PATHS = frozenset({"/", "/healthz", "/readyz", "/api/stream"})
+# Login/logout endpoints that must pass the public-surface filter when judge
+# auth is on (the Cognito middleware is the real gate for everything else).
+_JUDGE_PUBLIC_EXACT_PATHS = frozenset({"/login", "/api/login", "/api/logout"})
 
 
 @app.middleware("http")
@@ -160,10 +191,22 @@ async def restrict_public_demo_surface(request: Request, call_next):
                 and path.startswith("/api/invoices/")
                 and path.endswith("/intake/retry")
             )
+            # When Cognito judge auth is enabled it is the real access gate; this
+            # public-surface filter must not 404 the login/logout endpoints, the
+            # login page, or SPA client-routes (all non-/api GET paths). Without
+            # this, /login and /api/login 404 here BEFORE the auth middleware or
+            # router ever run — auth enforces but there's no way to log in.
+            or (JUDGE_AUTH_ENABLED and path in _JUDGE_PUBLIC_EXACT_PATHS)
+            or (JUDGE_AUTH_ENABLED and method == "GET" and not path.startswith("/api/"))
         )
         if not allowed:
             return JSONResponse(status_code=404, content={"detail": "not found"})
     return await call_next(request)
+
+
+# (Judge-demo Cognito enforcement — middleware + login routes — is installed
+# above, before the intake include_router, so the login routes are part of the
+# included router's effective-candidates snapshot. See the note there.)
 
 # invoices.s3_key is STRING NOT NULL (migrations/002_bundle0_schema.sql,
 # matching TDD §2.9 - every real invoice has a real S3 pointer). This
@@ -701,6 +744,35 @@ async def ws_feed(websocket: WebSocket) -> None:
 
 _static_root = Path(os.environ.get("TALLY_STATIC_DIR", "/app/ui"))
 if _static_root.is_dir():
-    # API routes are registered first; this final catch-all serves the Vite
-    # build without placing a credential or deployment identifier in it.
-    app.mount("/", StaticFiles(directory=_static_root, html=True), name="public-ui")
+    # Serve the Vite build WITHOUT mounting StaticFiles at "/". A mount at "/"
+    # is a greedy catch-all: combined with FastAPI's lazily-materialized
+    # included routers (the intake router), it shadowed sibling API routes at
+    # request-dispatch time — /login and /api/login returned 404 live even
+    # though the routes were present in app.router.routes. Instead we mount the
+    # asset dir under an explicit prefix and add a narrow SPA fallback that
+    # serves index.html only for non-API, non-auth GET paths. Real routes always
+    # win because this fallback is the LAST route and never matches /api,
+    # /login, /healthz, /readyz, /feed, or /assets.
+    _assets_dir = _static_root / "assets"
+    if _assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
+
+    _spa_index = _static_root / "index.html"
+    _RESERVED_PREFIXES = (
+        "/api", "/login", "/healthz", "/readyz", "/feed",
+        "/assets", "/docs", "/openapi", "/redoc",
+    )
+
+    @app.get("/{spa_path:path}", response_class=HTMLResponse, include_in_schema=False)
+    def _spa_fallback(spa_path: str) -> HTMLResponse:
+        # Never intercept real backend paths — let them 404 honestly if unknown.
+        if any(("/" + spa_path).startswith(p) for p in _RESERVED_PREFIXES):
+            return HTMLResponse(status_code=404, content="Not Found")
+        # Serve a concrete static file if one exists (favicon, manifest, etc.),
+        # else the SPA shell so client-side routing works on deep links.
+        candidate = (_static_root / spa_path) if spa_path else _spa_index
+        if candidate.is_file() and candidate != _spa_index:
+            return HTMLResponse(candidate.read_bytes())
+        if _spa_index.is_file():
+            return HTMLResponse(_spa_index.read_text())
+        return HTMLResponse(status_code=404, content="Not Found")

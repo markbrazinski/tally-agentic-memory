@@ -63,6 +63,7 @@ def make_router(*, require_auth) -> APIRouter:
     async def create_demo_invoice(
         file: UploadFile = File(...),
         demo_scenario: str = Form("locked-inv-1048"),
+        import_source: str = Form(DEFAULT_IMPORT_SOURCE),
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
         actor: AuthedActor = Depends(require_auth),
     ) -> Response:
@@ -70,6 +71,8 @@ def make_router(*, require_auth) -> APIRouter:
             raise _http_error(400, "IDEMPOTENCY_KEY_REQUIRED")
         if demo_scenario not in ALLOWED_SCENARIOS:
             raise _http_error(422, "INVALID_DEMO_SCENARIO")
+        if import_source not in ALLOWED_IMPORT_SOURCES:
+            raise _http_error(422, "INVALID_IMPORT_SOURCE")
         body = await file.read(15 * 1024 * 1024 + 1)
         try:
             envelope = validate_pdf_envelope(body, file.filename)
@@ -93,6 +96,7 @@ def make_router(*, require_auth) -> APIRouter:
                 idempotency_key=idempotency_key.strip(),
                 demo_scenario=demo_scenario,
                 actor=actor,
+                import_source=import_source,
             )
         except IdempotencyConflictError as exc:
             raise _http_error(409, "IDEMPOTENCY_CONFLICT") from exc
@@ -260,6 +264,15 @@ def validate_supported_pdf(body: bytes) -> None:
         raise ValueError("ENCRYPTED_OR_UNREADABLE_PDF") from exc
 
 
+# The controlled channels an invoice may enter Tally through. `operator_import`
+# is an authenticated operator submitting a PDF directly; `forwarded_email_simulation`
+# stands in for a forwarded-email path until a real inbound-email adapter exists.
+# A future email adapter calls receive_invoice(..., import_source=
+# "forwarded_email_simulation") — the same contract, unchanged downstream.
+ALLOWED_IMPORT_SOURCES = frozenset({"operator_import", "forwarded_email_simulation"})
+DEFAULT_IMPORT_SOURCE = "operator_import"
+
+
 def receive_invoice(
     *,
     body: bytes,
@@ -267,10 +280,16 @@ def receive_invoice(
     idempotency_key: str,
     demo_scenario: str,
     actor: AuthedActor,
+    import_source: str = DEFAULT_IMPORT_SOURCE,
 ) -> tuple[dict[str, Any], bool]:
     tenant_id = _tenant_id()
+    if import_source not in ALLOWED_IMPORT_SOURCES:
+        raise IntakeUnavailableError("INVALID_IMPORT_SOURCE")
+    # import_source is part of the idempotency fingerprint: the same bytes under a
+    # different channel is a distinct controlled import.
     request_hash = hashlib.sha256(
         body + b"\0" + demo_scenario.encode("utf-8")
+        + b"\0" + import_source.encode("utf-8")
     ).hexdigest()
     tenant = Tenant(tenant_id=tenant_id, actor=actor.display_name)
     with DAL.connect(tenant) as dal:
@@ -303,6 +322,8 @@ def receive_invoice(
                 source_sha256=envelope.sha256,
                 response_snapshot=snapshot,
             )
+            if isinstance(snapshot.get("invoice"), dict):
+                snapshot["invoice"]["import_source"] = import_source
             return snapshot, True
 
         source = reservation.stored_source
@@ -333,6 +354,11 @@ def receive_invoice(
                 public_disclosure="Fictional hackathon demonstration invoice.",
             ),
         )
+    # Record how the invoice entered Tally (the controlled channel) on the public
+    # snapshot without changing the persisted schema — an email adapter reusing
+    # receive_invoice surfaces the same field.
+    if isinstance(snapshot.get("invoice"), dict):
+        snapshot["invoice"]["import_source"] = import_source
     return snapshot, False
 
 

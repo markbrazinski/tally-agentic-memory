@@ -1,0 +1,32 @@
+# Judge-demo image: the NEW Claude-designed React workbench (ui-next/) served
+# same-origin by the FastAPI app. Separate from the root Dockerfile (which still
+# builds the legacy ui/ for the existing tally-app / tally-gate5-demo services)
+# so those deploys are preserved.
+
+FROM node:24-slim AS ui-build
+WORKDIR /ui
+COPY ui-next/package.json ui-next/package-lock.json ./
+RUN npm ci
+COPY ui-next/ ./
+# Production build: static bundle that talks to same-origin /api at runtime
+# (no dev proxy, no backend needed at build time).
+RUN npm run build
+
+
+FROM python:3.12-slim
+WORKDIR /app
+
+# psycopg[binary] still needs libpq's runtime shared library on this base image.
+RUN apt-get update && apt-get install -y --no-install-recommends libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src/ src/
+COPY contract/ contract/
+COPY --from=ui-build /ui/dist/ /app/ui/
+
+EXPOSE 8000
+
+CMD ["uvicorn", "src.platform.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
