@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "classification": "PUBLIC-SAFE SYNTHETIC GATE 2 SOURCED RECONSTRUCTION",
-  "report_state": "IMPLEMENTED_AND_TESTED_DRIVER_READBACK_MCP_TRACE_DEFERRED",
+  "report_state": "IMPLEMENTED_AND_TESTED_LIVE_MANAGED_MCP_TRACE_PASSED",
   "scope": {
     "included": "Sourced reconstruction: consume START_RECONSTRUCTION task, validate MCP-derived pre-invoice events, persist immutable reconstruction version with seven charged days, coverage, events, outbox; public projection for Gate 3/4",
     "excluded": ["applicable rule / vector retrieval", "deterministic judgment", "approval", "seal", "correspondence", "send"],
@@ -83,12 +83,12 @@
     "hero_defaultdb_table_count_after": 21,
     "other_tally_databases_modified": false
   },
+  "live_managed_mcp": {
+    "status": "PASSED_LIVE",
+    "evidence": "artifacts/gate-2/live-mcp-trace.json",
+    "detail": "A real read-only Managed MCP read ran against the isolated tally_gate2_iso database (same cluster MCP, database overridden). The identity was verified read-only (write tool denied); the fixed reconstruction SELECT returned the hero events; the deterministic validator accepted exactly 5 hero events; reconstruction reached 7/7 COMPLETE. mock_fallback:false. Reproduce: re-auth via scripts.gate5b_oauth_bootstrap, then scripts.gate2_live_mcp_trace."
+  },
   "explicit_deferrals": [
-    {
-      "statement": "Live Managed MCP sponsor-path reconstruction trace against an isolated lineage",
-      "status": "DEFERRED",
-      "reason": "No isolated Managed MCP endpoint is provisioned (SSM holds only hero-scoped mcp cluster/database config). Requires an isolated MCP endpoint + OAuth for the tally_gate2_iso lineage. The worker MCP path is implemented and unit-proven fail-closed; only the live sponsor execution is deferred."
-    },
     {
       "statement": "Gate 3 applicable-rule (applicable_rate_minor), Gate 4 judgment/outcome, approval, seal, send",
       "status": "OPEN",
