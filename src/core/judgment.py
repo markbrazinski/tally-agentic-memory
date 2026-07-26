@@ -39,6 +39,16 @@ class RecommendationType(StrEnum):
     REQUEST_EVIDENCE = "REQUEST_EVIDENCE"
 
 
+class ReasonCode(StrEnum):
+    """Machine-readable reasons a recommendation withholds or supports action
+    (Delta §2.1). Recorded on the frozen recommendation for inspection."""
+
+    MISSING_DAY_SOURCE = "MISSING_DAY_SOURCE"
+    RULE_NOT_VERIFIED = "RULE_NOT_VERIFIED"
+    SOURCE_VERSION_UNAVAILABLE = "SOURCE_VERSION_UNAVAILABLE"
+    SOURCE_INTEGRITY_FAILED = "SOURCE_INTEGRITY_FAILED"
+
+
 @dataclass(frozen=True)
 class DayInput:
     charge_date: date
@@ -103,6 +113,7 @@ class Recommendation:
     days_covered: int
     evidence_coverage: str
     judgments: tuple[DayJudgment, ...]
+    reason_codes: tuple[ReasonCode, ...]
     digest: str
     summary: str
 
@@ -138,6 +149,24 @@ def resolve_recommendation(days: list[DayInput]) -> Recommendation:
         1 for j in chargeable if j.outcome is not DayOutcome.INSUFFICIENT_EVIDENCE
     )
 
+    # Reason codes explain a withheld/insufficient decision (Delta §2.1). A day
+    # that resolves INSUFFICIENT_EVIDENCE is either missing source coverage
+    # (MISSING_DAY_SOURCE) or missing a verified applicable rate (RULE_NOT_VERIFIED).
+    # Derived from the same DayInput the judgment used — never client-supplied.
+    reason: list[ReasonCode] = []
+    by_day = {d.charge_date: d for d in days}
+    for j in chargeable:
+        if j.outcome is not DayOutcome.INSUFFICIENT_EVIDENCE:
+            continue
+        src = by_day.get(j.charge_date)
+        if src is not None and src.coverage_state != "PRESENT_VERIFIED":
+            code = ReasonCode.MISSING_DAY_SOURCE
+        else:
+            code = ReasonCode.RULE_NOT_VERIFIED
+        if code not in reason:
+            reason.append(code)
+    reason_codes = tuple(reason)
+
     has_insufficient = any(
         j.outcome is DayOutcome.INSUFFICIENT_EVIDENCE for j in chargeable
     )
@@ -152,7 +181,9 @@ def resolve_recommendation(days: list[DayInput]) -> Recommendation:
         summary = f"Approve {_fmt(supported, currency)} for payment; rates match."
 
     coverage = f"{days_covered} of {days_total} days"
-    digest = _digest(rec_type, disputed, supported, claimed, currency, judgments)
+    digest = _digest(
+        rec_type, disputed, supported, claimed, currency, judgments, reason_codes
+    )
     return Recommendation(
         recommendation_type=rec_type,
         disputed_amount_minor=disputed,
@@ -163,6 +194,7 @@ def resolve_recommendation(days: list[DayInput]) -> Recommendation:
         days_covered=days_covered,
         evidence_coverage=coverage,
         judgments=judgments,
+        reason_codes=reason_codes,
         digest=digest,
         summary=summary,
     )
@@ -186,13 +218,16 @@ def recommendation_fingerprint(days: list[DayInput]) -> str:
     ).hexdigest()
 
 
-def _digest(rec_type, disputed, supported, claimed, currency, judgments) -> str:
+def _digest(
+    rec_type, disputed, supported, claimed, currency, judgments, reason_codes=()
+) -> str:
     payload = {
         "type": rec_type.value,
         "disputed": disputed,
         "supported": supported,
         "claimed": claimed,
         "currency": currency,
+        "reasons": [r.value for r in reason_codes],
         "days": [
             {"d": j.charge_date.isoformat(), "o": j.outcome.value,
              "disc": j.discrepancy_minor}

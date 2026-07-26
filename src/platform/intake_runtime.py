@@ -24,10 +24,29 @@ def _reconstruction_mcp_factory():
     a reconstruction task is actually leased. No direct-DB fallback is possible:
     the factory returns only a Managed MCP client.
     """
-    from src.external.oauth_tokens import OAuthTokenManager
+    from src.external.oauth_tokens import (
+        DynamoDBRefreshLease,
+        OAuthTokenManager,
+        SSMTokenStore,
+    )
 
     def _factory() -> CockroachManagedMCP:
-        with OAuthTokenManager.from_env() as manager:
+        # Build the OAuth manager the same way app.py:_get_oauth_manager does
+        # (there is no OAuthTokenManager.from_env): an SSM-backed token store plus
+        # a DynamoDB refresh lease, from the same env the hero deploy uses.
+        region = os.environ.get("AWS_REGION", "us-east-1")
+        parameter_name = os.environ["TALLY_OAUTH_TOKEN_PARAMETER"]
+        lease_table = os.environ["TALLY_OAUTH_REFRESH_LEASE_TABLE"]
+        store = SSMTokenStore(
+            boto3.client("ssm", region_name=region),
+            parameter_name=parameter_name,
+        )
+        lease = DynamoDBRefreshLease(
+            boto3.client("dynamodb", region_name=region),
+            table_name=lease_table,
+            bundle_key=parameter_name,
+        )
+        with OAuthTokenManager(store, refresh_lease=lease) as manager:
             access_token, _refreshed = manager.access_token()
         config = ManagedMCPConfig.from_env(access_token=access_token)
         return CockroachManagedMCP(config)

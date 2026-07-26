@@ -229,8 +229,12 @@ def _load_claim_inputs(
     )
     by_field: dict[str, tuple[Any, Any, Any]] = {}
     for field_name, normalized, amount_minor, currency in cur.fetchall():
-        value = normalized if not isinstance(normalized, str) else json.loads(normalized)
-        by_field[field_name] = (value, amount_minor, currency)
+        # normalized_value is JSONB (migration 007) — psycopg already decodes it
+        # to native Python (str/int/dict). Do NOT json.loads() again: a decoded
+        # string like "2026-06-22" or "OAK-77421" is not itself JSON and raises
+        # JSONDecodeError, which the runtime loop swallows so the reconstruction
+        # task stalls PENDING forever.
+        by_field[field_name] = (normalized, amount_minor, currency)
 
     container = by_field.get("container_number", (None, None, None))[0] or ""
     daily = by_field.get("daily_rate", (None, None, None))

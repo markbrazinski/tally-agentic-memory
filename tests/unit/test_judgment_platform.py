@@ -111,6 +111,7 @@ class FakeCursor:
             self.one = (self.conn.seq,)
         elif n.startswith("INSERT INTO recommendations"):
             self.conn.recommendations.append(p[7])  # recommendation_type
+            self.conn.reason_codes.append(p[-1])  # reason_codes JSON (last param)
         elif n.startswith("INSERT INTO charged_day_judgments"):
             self.conn.judgments += 1
         elif n.startswith("INSERT INTO invoice_events"):
@@ -131,6 +132,7 @@ class FakeConn:
         self.existing_rec = existing_rec
         self.seq = 5
         self.recommendations = []
+        self.reason_codes = []
         self.judgments = 0
         self.events = []
         self.outbox = 0
@@ -165,6 +167,43 @@ def test_restraint_875_approve():
     result = complete_judgment(_dal(conn), lease=_lease(), days=_hero_inputs(12500, 12500))
     assert result.recommendation_type == "APPROVE_FOR_PAYMENT"
     assert result.supported_amount_minor == 87500
+
+
+def _six_of_seven_inputs():
+    """The authority-transition revision 1: six sourced days + June 11 missing
+    source coverage. Delta §2.9 proof item 1."""
+    days = []
+    for d in HERO_DATES:
+        if d == date(2026, 6, 11):
+            days.append(DayInput(d, 35000, None, "USD", "MISSING", True))
+        else:
+            days.append(DayInput(d, 35000, 25000, "USD", "PRESENT_VERIFIED", True))
+    return days
+
+
+def test_six_of_seven_withholds_authority():
+    # 6/7 coverage: the recommendation must be REQUEST_EVIDENCE, project
+    # NEEDS_EVIDENCE (never READY_FOR_REVIEW), emit decision.authority_withheld,
+    # and record MISSING_DAY_SOURCE. No financial (DISPUTE) amount is authorized.
+    conn = FakeConn()
+    result = complete_judgment(_dal(conn), lease=_lease(), days=_six_of_seven_inputs())
+    assert result.recommendation_type == "REQUEST_EVIDENCE"
+    assert "decision.authority_withheld" in conn.events
+    assert "decision.recommendation_ready" not in conn.events
+    # reason_codes persisted on the recommendation row (param index 18).
+    import json as _json
+    codes = _json.loads(conn.reason_codes[0]) if conn.reason_codes else []
+    assert "MISSING_DAY_SOURCE" in codes
+
+
+def test_seven_of_seven_disputes_after_binding():
+    # Revision 2: once June 11 is sourced, deterministic code reaches DISPUTE
+    # 70000 and projects READY_FOR_REVIEW via decision.recommendation_ready.
+    conn = FakeConn()
+    result = complete_judgment(_dal(conn), lease=_lease(), days=_hero_inputs())
+    assert result.recommendation_type == "DISPUTE"
+    assert result.disputed_amount_minor == 70000
+    assert "decision.recommendation_ready" in conn.events
 
 
 def test_idempotent_replay_no_second_freeze():

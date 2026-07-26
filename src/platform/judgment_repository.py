@@ -17,6 +17,7 @@ from uuid import uuid4
 from src.core.judgment import (
     DayInput,
     Recommendation,
+    RecommendationType,
     recommendation_fingerprint,
     resolve_recommendation,
 )
@@ -177,16 +178,31 @@ def complete_judgment(
                               recommendation)
             _finish_task(cur, tenant_id, lease)
 
+            # Delta §2.5: READY_FOR_REVIEW may be projected only when the active
+            # recommendation is NOT REQUEST_EVIDENCE. A withheld (6/7) decision
+            # projects NEEDS_EVIDENCE and emits decision.authority_withheld — the
+            # persisted refusal the demo films, not a loading placeholder. A
+            # complete decision projects READY_FOR_REVIEW and emits
+            # decision.recommendation_ready.
+            withheld = (
+                recommendation.recommendation_type
+                is RecommendationType.REQUEST_EVIDENCE
+            )
+            projected_status = "NEEDS_EVIDENCE" if withheld else "READY_FOR_REVIEW"
+            event_type = (
+                "decision.authority_withheld" if withheld
+                else "decision.recommendation_ready"
+            )
             sequence = _lock_invoice_and_advance(
                 cur, tenant_id=tenant_id, invoice_id=lease.invoice_id,
                 intake_state="READY_FOR_RECONSTRUCTION",
-                aggregate_status="READY_FOR_REVIEW", status="READY_FOR_REVIEW",
+                aggregate_status=projected_status, status=projected_status,
                 increment=1, occurred_at=now,
             )
             _insert_rule_event(
                 cur, tenant_id=tenant_id, invoice_id=lease.invoice_id,
-                sequence=sequence, event_type="decision.recommendation_ready",
-                occurred_at=now, state="COMPLETED", aggregate_status="READY_FOR_REVIEW",
+                sequence=sequence, event_type=event_type,
+                occurred_at=now, state="COMPLETED", aggregate_status=projected_status,
                 summary=recommendation.summary, initiated_by=lease.initiated_by,
                 actor_display=lease.actor_display,
                 input_refs=[{"type": "reconstruction", "id": lease.reconstruction_id,
@@ -212,15 +228,17 @@ def _insert_recommendation(cur, tenant_id, rec_id, version, lease, rule_id,
             (tenant_id, id, invoice_id, reconstruction_id, applicable_rule_id,
              version, input_fingerprint, recommendation_type, disputed_amount_minor,
              supported_amount_minor, claimed_amount_minor, currency, days_total,
-             days_covered, evidence_coverage, state, digest, public_summary)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'FROZEN',%s,%s)
+             days_covered, evidence_coverage, state, digest, public_summary,
+             reason_codes)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'FROZEN',%s,%s,%s)
         ON CONFLICT (tenant_id, reconstruction_id, input_fingerprint) DO NOTHING;
         """,
         (tenant_id, rec_id, lease.invoice_id, lease.reconstruction_id, rule_id,
          version, fingerprint, rec.recommendation_type.value,
          rec.disputed_amount_minor, rec.supported_amount_minor,
          rec.claimed_amount_minor, rec.currency, rec.days_total, rec.days_covered,
-         rec.evidence_coverage, rec.digest, rec.summary),
+         rec.evidence_coverage, rec.digest, rec.summary,
+         json.dumps([c.value for c in rec.reason_codes])),
     )
 
 
