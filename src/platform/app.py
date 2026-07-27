@@ -191,6 +191,11 @@ async def restrict_public_demo_surface(request: Request, call_next):
                 and path.startswith("/api/invoices/")
                 and path.endswith("/intake/retry")
             )
+            or (
+                method == "POST"
+                and path.startswith("/api/invoices/")
+                and path.endswith("/release-evidence")
+            )
             # When Cognito judge auth is enabled it is the real access gate; this
             # public-surface filter must not 404 the login/logout endpoints, the
             # login page, or SPA client-routes (all non-/api GET paths). Without
