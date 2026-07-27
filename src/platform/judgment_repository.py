@@ -129,7 +129,10 @@ def load_day_inputs(dal: DAL, *, reconstruction_id: str) -> list[DayInput]:
                 charge_date=r[0], invoice_rate_minor=int(r[1]),
                 applicable_rate_minor=int(r[2]) if r[2] is not None else None,
                 currency=r[3], coverage_state=r[4],
-                chargeable=(r[5] == "CHARGEABLE"),
+                # UNRESOLVED is a charged day we could not source: it is
+                # chargeable-but-insufficient (→ REQUEST_EVIDENCE), NOT excluded.
+                # Only NOT_CHARGEABLE (outside the sourced timeline) is dropped.
+                chargeable=(r[5] != "NOT_CHARGEABLE"),
                 # missing_requirements is JSONB → psycopg decodes to list.
                 missing_requirements=tuple(r[6] or ()),
             )

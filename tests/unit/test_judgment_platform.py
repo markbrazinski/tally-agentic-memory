@@ -18,6 +18,7 @@ from src.platform.intake_tasks import TaskLeaseLostError
 from src.platform.judgment_repository import (
     JudgmentTaskLease,
     complete_judgment,
+    load_day_inputs,
 )
 
 TENANT = "10000000-0000-4000-8000-000000000002"
@@ -38,6 +39,51 @@ def _lease(worker_id="w1"):
         attempt=1, worker_id=worker_id, input_fingerprint="fp-1",
         initiated_by=None, actor_display="Rachel",
     )
+
+
+class _RowCursor:
+    """Minimal cursor returning fixed charged-day rows for load_day_inputs."""
+
+    def __init__(self, rows):
+        self._rows = rows
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        return self
+
+    def fetchall(self):
+        return self._rows
+
+
+class _RowConn:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def cursor(self):
+        return _RowCursor(self._rows)
+
+
+def test_load_day_inputs_unresolved_is_chargeable_but_insufficient():
+    # The DB→judgment mapping: an UNRESOLVED charged day (missing source) must be
+    # chargeable=True so it resolves INSUFFICIENT_EVIDENCE → REQUEST_EVIDENCE, and
+    # is NOT dropped as EXCLUDED. Only NOT_CHARGEABLE (outside the window) drops.
+    rows = [
+        (date(2026, 6, 10), 35000, 25000, "USD", "PRESENT_VERIFIED", "CHARGEABLE", []),
+        (date(2026, 6, 11), 35000, None, "USD", "MISSING", "UNRESOLVED", ["TERMINAL_ACCESS"]),
+        (date(2026, 6, 15), 35000, None, "USD", "MISSING", "NOT_CHARGEABLE", []),
+    ]
+    dal = DAL(_RowConn(rows), Tenant(TENANT, "judgment-worker"))
+    days = load_day_inputs(dal, reconstruction_id="recon-1")
+    by_date = {d.charge_date: d for d in days}
+    assert by_date[date(2026, 6, 10)].chargeable is True
+    assert by_date[date(2026, 6, 11)].chargeable is True  # the bug: was False
+    assert by_date[date(2026, 6, 11)].missing_requirements == ("TERMINAL_ACCESS",)
+    assert by_date[date(2026, 6, 15)].chargeable is False
 
 
 # ---- worker orchestration (monkeypatched repository) ----
