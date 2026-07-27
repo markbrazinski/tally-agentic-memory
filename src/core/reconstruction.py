@@ -415,6 +415,55 @@ def _boundary_refs(*event_groups: list[NormalizedEvent]) -> tuple[str, ...]:
     return tuple(refs)
 
 
+@dataclass(frozen=True)
+class AccessSnapshotFacts:
+    """The retained fields of a pending terminal-access snapshot, read from
+    memory for verification. Immutable — verification never rewrites these."""
+
+    public_ref: str
+    container_ref: str
+    snapshot_date: date
+    exact_source_verified: bool
+    access_status: str
+    gate_status: str
+    blocking_hold: str
+
+
+@dataclass(frozen=True)
+class AccessVerification:
+    passed: bool
+    reason_code: str | None  # None on pass; else a machine-readable failure code
+
+
+def verify_access_snapshot(
+    facts: AccessSnapshotFacts,
+    *,
+    expected_container_ref: str,
+    expected_date: date,
+) -> AccessVerification:
+    """Deterministically verify a retained pending access snapshot against its
+    exact expected identity + integrity, before it may be bound.
+
+    Fail-closed and specific: a wrong container, wrong date, unavailable exact
+    source, or a snapshot that does not actually assert access (available / gate
+    open / no blocking hold) must NOT bind and must NOT fall back. The caller
+    records this verdict durably before any PENDING -> VERIFIED transition.
+    """
+    if facts.container_ref != expected_container_ref:
+        return AccessVerification(False, "CONTAINER_MISMATCH")
+    if facts.snapshot_date != expected_date:
+        return AccessVerification(False, "DATE_MISMATCH")
+    if not facts.exact_source_verified:
+        return AccessVerification(False, "SOURCE_VERSION_UNAVAILABLE")
+    if (
+        facts.access_status != "AVAILABLE"
+        or facts.gate_status != "OPEN"
+        or facts.blocking_hold != "NONE"
+    ):
+        return AccessVerification(False, "SOURCE_INTEGRITY_FAILED")
+    return AccessVerification(True, None)
+
+
 def classify_coverage(
     *,
     events: tuple[NormalizedEvent, ...],

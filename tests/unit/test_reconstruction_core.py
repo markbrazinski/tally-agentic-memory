@@ -304,3 +304,63 @@ def test_no_access_snapshots_scenario_unaffected():
     days = _adjudicate(_hero_rows())
     assert all(d.state is ChargedDayState.SOURCE_COMPLETE for d in days)
     assert all("TERMINAL_ACCESS" not in d.missing_requirements for d in days)
+
+
+# ---- pending access-snapshot verification (the P4 bind guardrails) ----
+
+from src.core.reconstruction import (  # noqa: E402
+    AccessSnapshotFacts,
+    verify_access_snapshot,
+)
+
+
+def _facts(**over):
+    base = dict(
+        public_ref="SE-INV1048-AX-0611", container_ref="TLLU4829317",
+        snapshot_date=date(2026, 6, 11), exact_source_verified=True,
+        access_status="AVAILABLE", gate_status="OPEN", blocking_hold="NONE",
+    )
+    base.update(over)
+    return AccessSnapshotFacts(**base)
+
+
+def test_verify_access_snapshot_passes_on_exact_match():
+    v = verify_access_snapshot(
+        _facts(), expected_container_ref="TLLU4829317",
+        expected_date=date(2026, 6, 11),
+    )
+    assert v.passed and v.reason_code is None
+
+
+def test_verify_rejects_wrong_container():
+    v = verify_access_snapshot(
+        _facts(container_ref="MSCU0000000"),
+        expected_container_ref="TLLU4829317", expected_date=date(2026, 6, 11),
+    )
+    assert not v.passed and v.reason_code == "CONTAINER_MISMATCH"
+
+
+def test_verify_rejects_wrong_date():
+    v = verify_access_snapshot(
+        _facts(snapshot_date=date(2026, 6, 12)),
+        expected_container_ref="TLLU4829317", expected_date=date(2026, 6, 11),
+    )
+    assert not v.passed and v.reason_code == "DATE_MISMATCH"
+
+
+def test_verify_rejects_unavailable_exact_source():
+    v = verify_access_snapshot(
+        _facts(exact_source_verified=False),
+        expected_container_ref="TLLU4829317", expected_date=date(2026, 6, 11),
+    )
+    assert not v.passed and v.reason_code == "SOURCE_VERSION_UNAVAILABLE"
+
+
+def test_verify_rejects_integrity_failure():
+    # A snapshot that does not actually assert access (e.g. a blocking hold)
+    # fails integrity and must not bind.
+    v = verify_access_snapshot(
+        _facts(blocking_hold="CUSTOMS_EXAM"),
+        expected_container_ref="TLLU4829317", expected_date=date(2026, 6, 11),
+    )
+    assert not v.passed and v.reason_code == "SOURCE_INTEGRITY_FAILED"

@@ -10,6 +10,7 @@ import boto3
 from src.external.cockroach_mcp import CockroachManagedMCP, ManagedMCPConfig
 from src.external.dal import DAL, Tenant
 from src.external.invoice_source_store import VersionedInvoiceSourceStore
+from src.platform.access_evidence_worker import run_one_access_evidence_task
 from src.platform.applicable_rule_worker import run_one_rule_task
 from src.platform.intake_events import relay_outbox_batch
 from src.platform.intake_worker import run_one_intake_task
@@ -75,12 +76,14 @@ def run_runtime_iteration() -> bool:
             worker_id=worker_id,
             mcp_factory=_reconstruction_mcp_factory(),
         )
+        binding = run_one_access_evidence_task(dal, worker_id=worker_id)
         rule = run_one_rule_task(dal, worker_id=worker_id)
         judgment = run_one_judgment_task(dal, worker_id=worker_id)
         delivered = relay_outbox_batch(dal)
     return (
         completion is not None
         or reconstruction is not None
+        or binding is not None
         or rule is not None
         or judgment is not None
         or delivered > 0

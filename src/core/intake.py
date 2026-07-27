@@ -51,6 +51,11 @@ class TaskType(StrEnum):
     START_RECONSTRUCTION = "START_RECONSTRUCTION"
     FIND_APPLICABLE_RULE = "FIND_APPLICABLE_RULE"
     JUDGE_DAYS = "JUDGE_DAYS"
+    # Gap-driven: verify a retained-but-PENDING per-day access snapshot against
+    # its exact source and bind it (PENDING -> VERIFIED), then re-open
+    # reconstruction so the now-visible snapshot lifts coverage. Never inserts
+    # the snapshot; it already exists in retained memory.
+    BIND_ACCESS_EVIDENCE = "BIND_ACCESS_EVIDENCE"
 
 
 _ALLOWED_TRANSITIONS = {
