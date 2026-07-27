@@ -109,6 +109,20 @@ export default class Workbench extends React.Component {
     if (evt.event_type === "invoice.received") { this.loadQueue(); return; }
     const openId = this.state.invoiceId;
     if (openId && evt.invoice_id && !sameInvoice(evt.invoice_id, openId)) return;
+    // Authority-transition events carry no wb-rank of their own; they signal
+    // that the persisted projection changed (coverage 6/7->7/7, June-11 bound,
+    // a new recommendation revision). Re-read the projection so the rail and
+    // ledger update IN PLACE from server truth — forceUpdate re-renders without
+    // remount/navigation/auto-scroll, so scroll position is preserved.
+    const refreshEvents = [
+      "decision.authority_withheld",
+      "reconstruction.source_bound",
+      "reconstruction.coverage_updated",
+      "decision.recommendation_ready",
+    ];
+    if (refreshEvents.includes(evt.event_type)) {
+      this.refreshReconstruction();
+    }
     const next = nextWb(this.state.wb, evt.event_type, (p) => this.rank(p));
     if (next !== this.state.wb) {
       this.setState({ wb: next });
@@ -401,9 +415,37 @@ export default class Workbench extends React.Component {
     };
   }
 
+  // Live projection adapter: when a real reconstruction (this.recon) is loaded,
+  // the authority-bearing values (coverage counts, per-day states, the
+  // recommendation) are READ from the server projection — never computed or
+  // hardcoded here (Delta §3.2). Returns null in the mock/non-live scene, where
+  // buildWorkbench falls back to its prototype literals unchanged.
+  proj() {
+    const r = this.recon;
+    // Only the real deployed path (scene "live") is projection-driven. The
+    // prototype scenes (recommendation/insufficient/…) and the mock click-audit
+    // stay rank-driven so their fixed narratives render unchanged.
+    if (this.scene !== "live" || !this.live || !r) return null;
+    const cov = r.coverage || {};
+    const rec = r.recommendation || null;
+    // Index by day-of-month so a padded ("2026-06-08") or unpadded ("2026-06-8")
+    // date from either the live API or the mock both resolve.
+    const byDate = {};
+    (r.charged_days || []).forEach((d) => {
+      const m = /^(\d{4})-(\d{2})-(\d{1,2})$/.exec(d.date || "");
+      if (m) byDate[parseInt(m[3], 10)] = d;
+    });
+    return { r, cov, rec, byDate };
+  }
+
   buildWorkbench() {
     const st = this.state; const sm = this.statusMeta(); const p = this.pill(sm.kind);
-    const insuf = st.wb === "insufficient";
+    const P = this.proj();
+    // Authority is withheld when the live recommendation is REQUEST_EVIDENCE
+    // (or, in the mock scene, the insufficient wb state).
+    const insuf = P && P.rec
+      ? P.rec.recommendation_type === "REQUEST_EVIDENCE"
+      : st.wb === "insufficient";
     const reconDone = this.at("reconstructed") || insuf;
     const ruleDone = this.at("ruleVerified");
     const recReady = this.at("recommendation") && !insuf;
@@ -429,9 +471,26 @@ export default class Workbench extends React.Component {
 
     const dayNums = [8,9,10,11,12,13,14];
     const days = dayNums.map((n, ix) => {
-      const badGap = insuf && ix === 2;
+      // LIVE: read this day's persisted state from the projection. The June-11
+      // gap, the coverage state, and the per-day discrepancy are the server's —
+      // not badGap=ix===2 or a wb-rank guess.
+      const pd = P ? P.byDate[n] : null;
       let outcome, outBg, outFg, coverage, covFg, rule, ruleColor, access, disc, discColor;
       disc = ""; discColor = "#B4513F";
+      if (pd) {
+        const complete = pd.state === "SOURCE_COMPLETE";
+        const gap = pd.coverage === "MISSING" || pd.state === "INSUFFICIENT_EVIDENCE";
+        const hasRate = pd.applicable_rate_minor != null;
+        const discrep = pd.dispute_amount_minor != null && pd.dispute_amount_minor > 0;
+        if (gap) { outcome = "INSUFFICIENT EVIDENCE"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE GAP"; covFg = "#B4513F"; rule = "—"; ruleColor = "#B7AE9C"; access = "no record"; disc = "—"; discColor = "#B7AE9C"; }
+        else if (discrep) { outcome = "RATE DISCREPANCY"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "$" + (pd.applicable_rate_minor / 100).toFixed(0); ruleColor = "#2F7752"; access = "available"; disc = "−$" + (pd.dispute_amount_minor / 100).toFixed(0); }
+        else if (complete && hasRate) { outcome = "SUPPORTED"; outBg = "#E4EEE7"; outFg = "#2F7752"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "$" + (pd.applicable_rate_minor / 100).toFixed(0); ruleColor = "#2F7752"; access = "available"; disc = "$0"; discColor = "#2F7752"; }
+        else if (complete) { outcome = "SOURCE COMPLETE"; outBg = "#E4EEE7"; outFg = "#2F7752"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "verifying"; ruleColor = "#8A7A50"; access = "available"; disc = "…"; discColor = "#8A7A50"; }
+        else { outcome = "UNRESOLVED"; outBg = "#ECEFF1"; outFg = "#40515C"; coverage = "—"; covFg = "#B7AE9C"; rule = "—"; ruleColor = "#B7AE9C"; access = "—"; disc = "—"; discColor = "#B7AE9C"; }
+        return { date: "Jun " + n, claim: "$350", access, rule, ruleColor, outcome, outBg, outFg, coverage, covFg, disc, discColor, rowBg: st.drawer === "day" && st.dayIx === ix ? "#FBF6EE" : "transparent", onOpen: this.openDayDrawer.bind(this, ix) };
+      }
+      // MOCK/non-live scene: unchanged prototype rendering.
+      const badGap = insuf && ix === 2;
       if (badGap) { outcome = "INSUFFICIENT EVIDENCE"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE GAP"; covFg = "#B4513F"; rule = "—"; ruleColor = "#B7AE9C"; access = "no record"; disc = "—"; discColor = "#B7AE9C"; }
       else if (ruleDone) { outcome = "RATE DISCREPANCY"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "$250"; ruleColor = "#2F7752"; access = "available"; disc = "−$100"; }
       else if (reconDone) { outcome = "SOURCE COMPLETE"; outBg = "#E4EEE7"; outFg = "#2F7752"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "verifying"; ruleColor = "#8A7A50"; access = "available"; disc = "…"; discColor = "#8A7A50"; }
@@ -470,13 +529,19 @@ export default class Workbench extends React.Component {
       { label: "Invoice source", val: "$2,450 · 6 claims", on: this.openSourceInvoice },
       { label: "Reconstruction", val: "9 events · 7 days", on: this.openDayDrawer.bind(this, 2) },
       { label: "Applicable tariff", val: "$250 / day", on: this.openSourceTariff },
-      { label: "Decision", val: "DISPUTE $700", on: this.goDecision },
+      { label: "Decision", val: (P && P.rec && P.rec.recommendation_type === "DISPUTE" ? "DISPUTE $" + (P.rec.disputed_amount_minor / 100).toFixed(0) : P && P.rec ? "REQUEST EVIDENCE" : "DISPUTE $700"), on: this.goDecision },
     ];
     const showGate = st.wb === "sending";
     const showSent = st.wb === "sent";
+    // LIVE: the rail head is the persisted recommendation — its type and its
+    // exact disputed amount — never a literal. DISPUTE shows the real minor-unit
+    // amount (70000 -> $700); REQUEST_EVIDENCE withholds it.
     let recHead, recColor, recBg, recBorder;
+    const liveDispute = P && P.rec && P.rec.recommendation_type === "DISPUTE"
+      ? "DISPUTE $" + (P.rec.disputed_amount_minor / 100).toFixed(0)
+      : null;
     if (insuf) { recHead = "REQUEST EVIDENCE"; recColor = "#8A7A50"; recBg = "#FBF6EE"; recBorder = "#E6D6AE"; }
-    else { recHead = "DISPUTE $700"; recColor = "#B4513F"; recBg = "#FCFBF8"; recBorder = st.wb === "recommendation" ? "#C8A955" : "#DED6C7"; }
+    else { recHead = liveDispute || "DISPUTE $700"; recColor = "#B4513F"; recBg = "#FCFBF8"; recBorder = (P && P.rec ? P.rec.state === "FROZEN" : st.wb === "recommendation") ? "#C8A955" : "#DED6C7"; }
 
     const pnode = (name, tool, state) => {
       const map = { complete: { dot: "#2F7752", bg: "#E4EEE7", border: "#B9D3C4", nameColor: "#23272F", pulse: "" }, working: { dot: "#C8A955", bg: "#FBF6EE", border: "#E6D6AE", nameColor: "#23272F", pulse: "tly-work" }, blocked: { dot: "#B4513F", bg: "#F2E1DC", border: "#E3B3A8", nameColor: "#23272F", pulse: "" }, waiting: { dot: "#C9D0D6", bg: "#FCFBF8", border: "#DED6C7", nameColor: "#8A96A0", pulse: "" } };
@@ -544,12 +609,18 @@ export default class Workbench extends React.Component {
       openSourceInvoice: this.openSourceInvoice, openSourceTariff: this.openSourceTariff,
       claimsLabel: claimVals ? "EXTRACTED CLAIMS" : "EXTRACTING CLAIMS…", claims,
       timeline: tl, timelineEmpty: tl.length === 0, timelineCount: tl.length ? tl.length + " of 9 events" : "",
-      days, coverageLine: ruleDone ? "7 of 7 days · SOURCE COMPLETE" : reconDone ? "7 of 7 sourced" : "reconstructing…",
+      days, coverageLine: P
+        ? `${P.cov.days_complete} of ${P.cov.days_total} days${P.cov.days_complete === P.cov.days_total ? " · SOURCE COMPLETE" : " · evidence required"}`
+        : (ruleDone ? "7 of 7 days · SOURCE COMPLETE" : reconDone ? "7 of 7 sourced" : "reconstructing…"),
       dayOpen: st.dayOpen, day: dayDetail,
       agents,
-      showRec: recReady || insuf,
+      showRec: P ? !!P.rec : (recReady || insuf),
       recHead, recColor, recBg, recBorder,
-      showApprove: st.wb === "recommendation",
+      // Delta §3.6: the financial CTA appears ONLY for a complete DISPUTE
+      // recommendation (rev2). REQUEST_EVIDENCE (rev1) never enables approval.
+      showApprove: P
+        ? !!(P.rec && P.rec.recommendation_type === "DISPUTE" && P.rec.state === "FROZEN")
+        : st.wb === "recommendation",
       approveDispute: this.approveDispute, closeDay: this.closeDay, noop: this.noop,
       showSeal: ["approved","sealing","readyToSend","correspondence"].includes(st.wb),
       sealSteps: this.sealSteps(),
@@ -575,7 +646,25 @@ export default class Workbench extends React.Component {
     if (!d) return mk({ title: "", meta: [], body: "", bound: "" });
     if (d === "day") {
       const n = [8,9,10,11,12,13,14][this.state.dayIx] || 10;
-      return mk({ kind: "day", title: "Charged day · Jun " + n, meta: [{ k: "Occurred", v: "Jun " + n + ", 2026", color: "#40515C" }, { k: "Chargeable", v: "Yes · beyond free time", color: V }, { k: "Coverage", v: "SOURCE COMPLETE", color: V }], chain: [{ k: "Free-time end", v: "Jun 7 — recorded before invoice", bg: "#E4EEE7", fg: "#2F7752" }, { k: "Availability / access", v: "Container available · movable", bg: "#E4EEE7", fg: "#2F7752" }, { k: "Invoice rate (PDF anchor)", v: "$350 / day · INV-1048 p.1 line 4", bg: "#ECEFF1", fg: "#40515C" }, { k: "Applicable tariff", v: "$250 / day · eff. Jun 1 · exact-version verified", bg: "#FBF1D8", fg: "#A9823C" }, { k: "Daily calculation", v: "$350 − $250", bg: "#F2E1DC", fg: "#B4513F" }, { k: "Financial effect", v: "−$100 discrepancy", bg: "#F2E1DC", fg: "#B4513F" }], usedBy: [{ k: "Recommendation", v: "DISPUTE $700" }, { k: "Charged day", v: "Jun " + n + " of 7" }, { k: "Rolls into", v: "$700 supported difference" }], verification: [{ k: "Effective date", v: "VERIFIED", c: V }, { k: "Exact text", v: "VERIFIED", c: V }, { k: "Exact rate", v: "VERIFIED", c: V }, { k: "Scope", v: "VERIFIED", c: V }], body: "CHARGED DAY  Jun " + n + ", 2026\nInvoice rate     $350.00\nApplicable rate  $250.00\n----------------------------\nDiscrepancy      $100.00\n\nEvents  free-time-end (Jun 7),\n        gate-out (Jun 14)", bound: "$350 − $250 = $100 · RATE DISCREPANCY" });
+      // LIVE: reflect this day's persisted state. An unbound day (June 11 in
+      // revision 1) opens its MISSING evidence — the required terminal-access
+      // snapshot — not a fabricated SOURCE COMPLETE. A bound day opens its exact
+      // sourced evidence.
+      const P = this.proj();
+      const pd = P ? P.byDate[n] : null;
+      if (pd && (pd.coverage === "MISSING" || pd.state === "INSUFFICIENT_EVIDENCE")) {
+        const missing = (pd.missing_requirements || []).join(", ") || "required source";
+        const label = missing.includes("TERMINAL_ACCESS")
+          ? "Required terminal-access snapshot not yet bound" : "Required source not yet bound";
+        return mk({ kind: "day", title: "Charged day · Jun " + n,
+          meta: [{ k: "Occurred", v: "Jun " + n + ", 2026", color: "#40515C" }, { k: "Chargeable", v: "Yes · beyond free time", color: V }, { k: "Coverage", v: "UNRESOLVED", color: "#B4513F" }],
+          chain: [{ k: "Free-time end", v: "Jun 7 — recorded before invoice", bg: "#E4EEE7", fg: "#2F7752" }, { k: "Terminal access", v: label, bg: "#F2E1DC", fg: "#B4513F" }, { k: "Invoice rate (PDF anchor)", v: "$350 / day · INV-1048 p.1 line 4", bg: "#ECEFF1", fg: "#40515C" }, { k: "Missing evidence", v: missing, bg: "#F2E1DC", fg: "#B4513F" }],
+          usedBy: [{ k: "Recommendation", v: "REQUEST EVIDENCE" }, { k: "Charged day", v: "Jun " + n + " · unresolved" }, { k: "Blocks", v: "financial judgment" }],
+          verification: [{ k: "Terminal-access snapshot", v: "NOT BOUND", c: "#B4513F" }],
+          body: "CHARGED DAY  Jun " + n + ", 2026\nInvoice rate     $350.00\nApplicable rate  —\n----------------------------\nCoverage         MISSING\n\nMissing  " + missing, bound: "Required terminal-access snapshot not yet bound" });
+      }
+      const refs = pd && pd.event_refs && pd.event_refs.length ? pd.event_refs.join(", ") : "free-time-end (Jun 7), gate-out (Jun 14)";
+      return mk({ kind: "day", title: "Charged day · Jun " + n, meta: [{ k: "Occurred", v: "Jun " + n + ", 2026", color: "#40515C" }, { k: "Chargeable", v: "Yes · beyond free time", color: V }, { k: "Coverage", v: "SOURCE COMPLETE", color: V }], chain: [{ k: "Free-time end", v: "Jun 7 — recorded before invoice", bg: "#E4EEE7", fg: "#2F7752" }, { k: "Availability / access", v: "Container available · movable", bg: "#E4EEE7", fg: "#2F7752" }, { k: "Invoice rate (PDF anchor)", v: "$350 / day · INV-1048 p.1 line 4", bg: "#ECEFF1", fg: "#40515C" }, { k: "Applicable tariff", v: "$250 / day · eff. Jun 1 · exact-version verified", bg: "#FBF1D8", fg: "#A9823C" }, { k: "Daily calculation", v: "$350 − $250", bg: "#F2E1DC", fg: "#B4513F" }, { k: "Financial effect", v: "−$100 discrepancy", bg: "#F2E1DC", fg: "#B4513F" }], usedBy: [{ k: "Recommendation", v: "DISPUTE $700" }, { k: "Charged day", v: "Jun " + n + " of 7" }, { k: "Rolls into", v: "$700 supported difference" }], verification: [{ k: "Bound sources", v: refs, c: V }, { k: "Effective date", v: "VERIFIED", c: V }, { k: "Exact rate", v: "VERIFIED", c: V }, { k: "Scope", v: "VERIFIED", c: V }], body: "CHARGED DAY  Jun " + n + ", 2026\nInvoice rate     $350.00\nApplicable rate  $250.00\n----------------------------\nDiscrepancy      $100.00\n\nEvents  " + refs, bound: "$350 − $250 = $100 · RATE DISCREPANCY" });
     }
     if (d === "invoice") return mk({ title: "INV-1048.pdf", meta: [{ k: "Type", v: "Carrier PDF", color: "#40515C" }, { k: "Received", v: "Jun 22, 2026", color: "#40515C" }, { k: "Exact version", v: "VERIFIED", color: V }, { k: "Affected days", v: "Jun 8–14", color: "#40515C" }], usedBy: [{ k: "Claims", v: "6 fields extracted" }, { k: "Affected days", v: "7 charged days" }, { k: "Recommendation", v: "DISPUTE $700" }], verification: [{ k: "Exact S3 version", v: "VERIFIED", c: V }, { k: "Region anchors", v: "6 linked", c: V }], body: "DEMURRAGE INVOICE\nContainer TLLU-482931-7\nB/L OAK-77421\nPeriod  Jun 8 – Jun 14, 2026\n\nRate    $350.00 / day\nDays    7\n--------------------------\nTotal   $2,450.00\n\nIssued  Jun 22, 2026", bound: "Rate $350.00/day · Total $2,450.00" });
     if (d === "tariff") return mk({ title: "Tariff · Pacific demurrage", meta: [{ k: "Effective", v: "Jun 1, 2026 →", color: "#40515C" }, { k: "Recorded", v: "before invoice", color: V }, { k: "Retrieval", v: "RETRIEVED (vector)", color: "#8A7A50" }, { k: "Applicability", v: "VERIFIED (deterministic)", color: V }], usedBy: [{ k: "Rule for", v: "all 7 charged days" }, { k: "Sets rate", v: "$250 / day" }, { k: "Recommendation", v: "DISPUTE $700" }], verification: [{ k: "Vector candidate", v: "RETRIEVED", c: "#8A7A50" }, { k: "Effective date", v: "VERIFIED", c: V }, { k: "Exact text", v: "VERIFIED", c: V }, { k: "Exact rate", v: "VERIFIED", c: V }, { k: "Scope", v: "VERIFIED", c: V }], body: "PACIFIC DEMURRAGE TARIFF\nSection 4 — Demurrage charges\n\n4.1  Free time: 96 hours from availability.\n4.2  Demurrage rate: $250 per calendar\n     day per container thereafter.\n\nEffective  2026-06-01", bound: "Demurrage rate: $250 per calendar day" });

@@ -153,7 +153,7 @@ def load_reconstruction_projection(
             SELECT id, version, recommendation_type, disputed_amount_minor,
                    supported_amount_minor, claimed_amount_minor, currency,
                    days_total, days_covered, evidence_coverage, state, public_summary,
-                   digest
+                   digest, reason_codes
             FROM recommendations
             WHERE tenant_id=%s AND reconstruction_id=%s AND superseded_by IS NULL
             ORDER BY version DESC LIMIT 1;
@@ -178,6 +178,7 @@ def load_reconstruction_projection(
             "state": rec_row[10],
             "summary": rec_row[11],
             "digest": rec_row[12],
+            "reason_codes": _json_list(rec_row[13]),
             "approval_etag": f'"rec-{rec_row[0]}-v{int(rec_row[1])}-{rec_row[12]}"',
         }
 

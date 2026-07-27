@@ -10,6 +10,7 @@ export const EVENT_TO_WB = {
   "intake.claims_validated": "reconstructing",
   "invoice.reconstruction_started": "reconstructing",
   "reconstruction.memory_retrieval_started": "reconstructing",
+  "reconstruction.source_bound": "reconstructing",
   "reconstruction.completed": "reconstructed",
   "evidence.rule_search_started": "retrieving",
   "evidence.rule_verified": "ruleVerified",
@@ -19,6 +20,10 @@ export const EVENT_TO_WB = {
   "decision.sealed": "readyToSend",
   "correspondence.send_blocked": "sending",
   "correspondence.sent": "sent",
+  // decision.authority_withheld and reconstruction.coverage_updated are
+  // deliberately unmapped: they carry no wb-rank advance (the 6/7 refusal is not
+  // "further along" than reconstruction). onLiveEvent still refreshes the server
+  // projection on them, so the rail/ledger re-read authority + coverage in place.
 };
 
 // Aggregate status (invoice.aggregate_status) -> queue pill kind + label.
