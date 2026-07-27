@@ -105,7 +105,7 @@ SOURCE_CONFIG=$(cat <<JSON
         "TALLY_DEMO_TOKEN": "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter${SSM_PREFIX}/demo-token",
         "TALLY_TENANT_ID": "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter${SSM_PREFIX}/tenant-id",
         "TALLY_MCP_CLUSTER_ID": "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter/tally/gate5/mcp-cluster-id",
-        "TALLY_MCP_DATABASE": "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter/tally/gate5/mcp-database"
+        "TALLY_MCP_DATABASE": "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter${SSM_PREFIX}/mcp-database"
       },
       "RuntimeEnvironmentVariables": {
         "AWS_REGION": "${REGION}",
