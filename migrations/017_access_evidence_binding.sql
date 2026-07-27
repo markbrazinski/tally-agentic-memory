@@ -30,3 +30,10 @@ CREATE TABLE IF NOT EXISTS access_evidence_verifications (
   UNIQUE INDEX access_verif_task_snapshot_idx
     (tenant_id, task_id, snapshot_public_ref)
 );
+
+-- Per-event normalized facts on the retained memory row. The terminal-access
+-- snapshot carries access_status / gate_status / blocking_hold, which the
+-- gap-driven verifier reads (server-side) to confirm the day is truly available
+-- before binding. Additive, default '{}' so pre-existing rows are unaffected.
+ALTER TABLE shipment_event_memory
+  ADD COLUMN IF NOT EXISTS normalized_facts JSONB NOT NULL DEFAULT '{}';

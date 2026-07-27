@@ -10,12 +10,15 @@ absence. No second-pass insert is involved.
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
+from pathlib import Path
 
 from src.external.dal import DAL, Tenant
 from src.external.reconstruction_seed import load_source_package, seed_reconstruction_memory
 
 TENANT = "10000000-0000-4000-8000-000000000002"
+MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 
 
 class FakeCursor:
@@ -92,6 +95,47 @@ def test_seed_marks_only_june11_access_pending():
     # The boundary events remain VERIFIED (retained, source-bound).
     boundary = [e for e in conn.events if e["event_type"] != "TERMINAL_ACCESS_SNAPSHOT"]
     assert all(e["source_version_state"] == "VERIFIED" for e in boundary)
+
+
+def _shipment_memory_columns() -> set[str]:
+    """Columns of shipment_event_memory as the migrations actually define them:
+    the CREATE TABLE body (011) plus any ADD COLUMN (017). Catches a seed/verifier
+    that references a column no migration ever added (the normalized_facts gap)."""
+    cols: set[str] = set()
+    ddl = "\n".join(p.read_text() for p in sorted(MIGRATIONS.glob("*.sql")))
+    body = re.search(
+        r"CREATE TABLE IF NOT EXISTS shipment_event_memory\s*\((.*?)\n\);",
+        ddl, re.DOTALL,
+    ).group(1)
+    for line in body.splitlines():
+        m = re.match(r"\s*([a-z_]+)\s+(?:UUID|STRING|TIMESTAMPTZ|DATE|JSONB)\b", line)
+        if m:
+            cols.add(m.group(1))
+    for m in re.finditer(
+        r"ALTER TABLE shipment_event_memory\s+ADD COLUMN IF NOT EXISTS\s+([a-z_]+)",
+        ddl,
+    ):
+        cols.add(m.group(1))
+    return cols
+
+
+def test_seed_insert_columns_exist_in_schema():
+    # The seed's shipment_event_memory INSERT must reference only real columns.
+    # normalized_facts was queried by the verifier + carried by the fixture but
+    # never added to the table — a mismatch fakes can't catch. Guard it here.
+    import inspect
+
+    import src.external.reconstruction_seed as seed_mod
+
+    src = inspect.getsource(seed_mod)
+    insert = re.search(
+        r"INSERT INTO shipment_event_memory\s*\((.*?)\)\s*VALUES", src, re.DOTALL
+    ).group(1)
+    used = {c.strip() for c in insert.replace("\n", " ").split(",") if c.strip()}
+    schema = _shipment_memory_columns()
+    assert "normalized_facts" in schema, "migration must define normalized_facts"
+    missing = used - schema
+    assert not missing, f"seed inserts columns absent from schema: {missing}"
 
 
 def test_all_access_recorded_before_invoice():

@@ -87,8 +87,8 @@ def seed_reconstruction_memory(
                         (tenant_id, public_ref, shipment_ref, container_ref,
                          event_type, source_public_ref, source_version_state,
                          display_anchor, provenance_classification, occurred_at,
-                         effective_from, recorded_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         effective_from, recorded_at, normalized_facts)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (tenant_id, public_ref) DO NOTHING;
                     """,
                     (
@@ -99,6 +99,7 @@ def seed_reconstruction_memory(
                         _parse(event["occurred_at"]),
                         _date(effective_from) if effective_from else None,
                         _parse(event["recorded_at"]),
+                        json.dumps(event.get("normalized_facts", {})),
                     ),
                 )
                 counts["shipment_events"] += 1
