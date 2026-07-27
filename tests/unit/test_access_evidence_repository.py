@@ -153,3 +153,47 @@ def test_idempotent_when_already_verified():
     assert result.outcome == "VERIFIED"
     assert conn.bound == 0 and conn.enqueued == []  # no second bind/enqueue
     assert conn.verdicts == []  # no second verdict row
+
+
+# ---- P6 controlled release: HELD -> PENDING ----
+
+class ReleaseCursor:
+    def __init__(self, conn):
+        self.conn = conn
+        self.rowcount = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=()):
+        s = " ".join(sql.split())
+        if s.startswith("UPDATE workflow_tasks SET state='PENDING'"):
+            # Simulate: a held task exists on the first release, none after.
+            self.rowcount = 1 if self.conn.held else 0
+            self.conn.held = False
+        return self
+
+
+class ReleaseConn:
+    def __init__(self, held=True):
+        self.held = held
+
+    def cursor(self):
+        return ReleaseCursor(self)
+
+    def transaction(self):
+        return FakeTxn()
+
+    def close(self):
+        pass
+
+
+def test_release_flips_held_to_pending_then_idempotent():
+    from src.platform.access_evidence_repository import release_access_evidence
+    conn = ReleaseConn(held=True)
+    dal = _dal(conn)
+    assert release_access_evidence(dal, invoice_id="inv-1") is True   # released
+    assert release_access_evidence(dal, invoice_id="inv-1") is False  # idempotent

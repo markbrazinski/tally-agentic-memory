@@ -14,8 +14,10 @@ from dataclasses import dataclass
 from datetime import timedelta
 from uuid import uuid4
 
+from src.core.intake import TaskType, task_input_fingerprint
 from src.core.judgment import (
     DayInput,
+    ReasonCode,
     Recommendation,
     RecommendationType,
     recommendation_fingerprint,
@@ -213,6 +215,18 @@ def complete_judgment(
                                 "version": version}],
                 output_count=recommendation.days_total,
             )
+
+            # Controlled release (P6): when authority is withheld specifically
+            # because a per-day terminal-access snapshot is unbound, pre-create
+            # the durable BIND_ACCESS_EVIDENCE task in a HELD state. HELD is not
+            # in the worker's runnable set, so the 6/7 refusal persists and stays
+            # filmable until an authenticated release flips HELD -> PENDING. The
+            # task is created server-side; the frontend never creates it.
+            if withheld and ReasonCode.MISSING_DAY_ACCESS_EVIDENCE in recommendation.reason_codes:
+                _enqueue_held_access_binding(
+                    cur, tenant_id=tenant_id, lease=lease,
+                )
+
             return JudgmentCompletion(
                 recommendation_id, version, recommendation.recommendation_type.value,
                 recommendation.disputed_amount_minor,
@@ -220,6 +234,64 @@ def complete_judgment(
             )
 
     return dal.run_with_retry(_complete)
+
+
+def _enqueue_held_access_binding(cur, *, tenant_id, lease) -> None:
+    """Create the durable BIND_ACCESS_EVIDENCE task in HELD state, carrying the
+    exact retained June-11 snapshot's identity so the worker (once released) can
+    verify and bind it. The snapshot is looked up server-side from the retained
+    memory the reconstruction is scoped to — never supplied by a client. HELD is
+    not runnable; an authenticated release flips it to PENDING."""
+    # The unresolved per-day access snapshot: the PENDING terminal-access row for
+    # this invoice's shipment/container. There is exactly one in the hero.
+    cur.execute(
+        """
+        SELECT m.public_ref, m.container_ref, m.effective_from
+        FROM shipment_event_memory m
+        JOIN invoices i
+          ON i.tenant_id = m.tenant_id
+        JOIN claim_sets cs
+          ON cs.tenant_id = i.tenant_id AND cs.invoice_id = i.id
+        WHERE m.tenant_id=%s AND i.id=%s
+          AND m.event_type='TERMINAL_ACCESS_SNAPSHOT'
+          AND m.source_version_state='PENDING'
+        ORDER BY m.effective_from
+        LIMIT 1;
+        """,
+        (tenant_id, lease.invoice_id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        # No retained pending snapshot to bind — nothing to release. The refusal
+        # stands (a real gap, not an invented task).
+        return
+    snapshot_ref, container_ref, snap_date = row[0], row[1], row[2]
+    refs = [{
+        "type": "access_binding_request",
+        "snapshot_public_ref": snapshot_ref,
+        "container_ref": container_ref,
+        "snapshot_date": snap_date.isoformat(),
+    }]
+    fingerprint = task_input_fingerprint(
+        task_type=TaskType.BIND_ACCESS_EVIDENCE, input_refs=refs
+    )
+    cur.execute(
+        """
+        INSERT INTO workflow_tasks
+            (tenant_id, id, invoice_id, task_type, task_version, state,
+             initiated_by, actor_display, knowledge_cutoff_at, input_fingerprint,
+             input_object_refs, public_summary)
+        SELECT %s, %s, %s, 'BIND_ACCESS_EVIDENCE', 1, 'HELD', %s, %s,
+               i.received_at, %s, %s,
+               'Awaiting release to verify the terminal-access snapshot'
+        FROM invoices i WHERE i.tenant_id=%s AND i.id=%s
+        ON CONFLICT (tenant_id, invoice_id, task_type, task_version, input_fingerprint)
+        DO NOTHING;
+        """,
+        (tenant_id, str(uuid4()), lease.invoice_id, lease.initiated_by,
+         lease.actor_display, fingerprint, json.dumps(refs),
+         tenant_id, lease.invoice_id),
+    )
 
 
 def _insert_recommendation(cur, tenant_id, rec_id, version, lease, rule_id,

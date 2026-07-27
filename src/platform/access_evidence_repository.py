@@ -320,5 +320,27 @@ def claim_next_access_evidence_task(
     return dal.run_with_retry(_claim)
 
 
+def release_access_evidence(dal: DAL, *, invoice_id: str) -> bool:
+    """Controlled release: flip this invoice's HELD BIND_ACCESS_EVIDENCE task to
+    PENDING so the worker can claim it. Returns True if a held task was released,
+    False if none was held (idempotent — a second call is a no-op)."""
+    tenant_id = dal.tenant.tenant_id
+
+    def _release(conn):
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE workflow_tasks
+                SET state='PENDING', updated_at=now()
+                WHERE tenant_id=%s AND invoice_id=%s
+                  AND task_type='BIND_ACCESS_EVIDENCE' AND state='HELD';
+                """,
+                (tenant_id, invoice_id),
+            )
+            return cur.rowcount > 0
+
+    return dal.run_with_retry(_release)
+
+
 class AccessSnapshotMissingError(RuntimeError):
     """The referenced snapshot row is absent — a real gap, never invented."""

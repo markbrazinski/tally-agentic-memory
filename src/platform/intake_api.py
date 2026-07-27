@@ -31,6 +31,7 @@ from src.external.invoice_source_store import (
     StoredInvoiceSource,
     VersionedInvoiceSourceStore,
 )
+from src.platform.access_evidence_repository import release_access_evidence
 from src.platform.auth import AuthedActor
 from src.platform.authority_seal_api import register_authority_seal_routes
 from src.platform.intake_events import load_event_history, sse_stream
@@ -200,6 +201,20 @@ def make_router(*, require_auth) -> APIRouter:
             "true" if result.replay else "false"
         )
         return response
+
+    @router.post("/api/invoices/{invoice_id}/release-evidence")
+    def release_evidence(
+        invoice_id: str,
+        actor: AuthedActor = Depends(require_auth),
+    ) -> Response:
+        """Controlled release: flip the HELD BIND_ACCESS_EVIDENCE task to PENDING
+        so the durable evidence worker verifies + binds the retained snapshot.
+        Server-side and authenticated — this triggers the real durable task; it
+        does not create the source, compute coverage, or simulate the outcome.
+        Idempotent: releasing an already-released (or absent) task is a no-op."""
+        with DAL.connect(Tenant(_tenant_id(), actor.display_name)) as dal:
+            released = release_access_evidence(dal, invoice_id=invoice_id)
+        return JSONResponse({"released": released}, status_code=200)
 
     @router.get("/api/invoices/{invoice_id}/sources/{source_id}/content")
     def get_invoice_source(invoice_id: str, source_id: str) -> Response:

@@ -109,6 +109,9 @@ class FakeCursor:
             self.one = ("rule-1",)
         elif n.startswith("SELECT status_sequence FROM invoices"):
             self.one = (self.conn.seq,)
+        elif n.startswith("SELECT m.public_ref, m.container_ref, m.effective_from"):
+            # The held-task enqueue looks up the retained PENDING access snapshot.
+            self.one = self.conn.pending_snapshot
         elif n.startswith("INSERT INTO recommendations"):
             self.conn.recommendations.append(p[7])  # recommendation_type
             self.conn.reason_codes.append(p[-1])  # reason_codes JSON (last param)
@@ -118,6 +121,8 @@ class FakeCursor:
             self.conn.events.append(p[4])
         elif n.startswith("INSERT INTO event_outbox"):
             self.conn.outbox += 1
+        elif n.startswith("INSERT INTO workflow_tasks"):
+            self.conn.enqueued_tasks.append("BIND_ACCESS_EVIDENCE")  # held task
         elif n.startswith("UPDATE invoices"):
             self.conn.seq += p[3]
         return self
@@ -136,6 +141,10 @@ class FakeConn:
         self.judgments = 0
         self.events = []
         self.outbox = 0
+        self.enqueued_tasks = []
+        # A retained PENDING June-11 snapshot the held-task enqueue can reference.
+        self.pending_snapshot = ("SE-INV1048-AX-0611", "TLLU4829317",
+                                 date(2026, 6, 11))
 
     def cursor(self):
         return FakeCursor(self)
@@ -175,7 +184,8 @@ def _six_of_seven_inputs():
     days = []
     for d in HERO_DATES:
         if d == date(2026, 6, 11):
-            days.append(DayInput(d, 35000, None, "USD", "MISSING", True))
+            days.append(DayInput(d, 35000, None, "USD", "MISSING", True,
+                                 missing_requirements=("TERMINAL_ACCESS",)))
         else:
             days.append(DayInput(d, 35000, 25000, "USD", "PRESENT_VERIFIED", True))
     return days
@@ -190,10 +200,22 @@ def test_six_of_seven_withholds_authority():
     assert result.recommendation_type == "REQUEST_EVIDENCE"
     assert "decision.authority_withheld" in conn.events
     assert "decision.recommendation_ready" not in conn.events
-    # reason_codes persisted on the recommendation row (param index 18).
+    # reason_codes persisted on the recommendation row.
     import json as _json
     codes = _json.loads(conn.reason_codes[0]) if conn.reason_codes else []
-    assert "MISSING_DAY_SOURCE" in codes
+    assert "MISSING_DAY_ACCESS_EVIDENCE" in codes
+    # P6 controlled release: a HELD BIND_ACCESS_EVIDENCE task is pre-created (not
+    # runnable) so the 6/7 refusal persists until an authenticated release.
+    assert conn.enqueued_tasks == ["BIND_ACCESS_EVIDENCE"]
+
+
+def test_no_held_task_when_no_pending_snapshot():
+    # If no retained pending snapshot exists, no held task is created — the
+    # refusal stands rather than an invented binding task.
+    conn = FakeConn()
+    conn.pending_snapshot = None
+    complete_judgment(_dal(conn), lease=_lease(), days=_six_of_seven_inputs())
+    assert conn.enqueued_tasks == []
 
 
 def test_seven_of_seven_disputes_after_binding():
