@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import os
 import threading
 import time
@@ -67,6 +68,9 @@ async def _run_intake_runtime() -> None:
         try:
             did_work = await asyncio.to_thread(run_runtime_iteration)
         except Exception:
+            # The loop must never die on one bad iteration, but a swallowed
+            # error made deployed failures invisible — log it (public-safe).
+            logging.getLogger("tally.runtime").exception("intake runtime iteration failed")
             did_work = False
         await asyncio.sleep(0.25 if did_work else 1.0)
 

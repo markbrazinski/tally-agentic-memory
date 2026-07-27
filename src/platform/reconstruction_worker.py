@@ -69,6 +69,17 @@ def run_one_reconstruction_task(
             )
     except MCPUnavailableError as exc:
         # Fail closed. Transport/timeout is retryable; auth/protocol is terminal.
+        # Log the diagnostic cause (type + message + underlying cause) so a
+        # deployed reconstruction failure is not silent. Public-safe: MCP errors
+        # carry no token/locator text.
+        import logging
+
+        cause = exc.__cause__ or exc.__context__
+        logging.getLogger("tally.reconstruction").error(
+            "reconstruction MCP failure: code=%s type=%s msg=%s cause=%s:%s",
+            _safe_mcp_code(exc), type(exc).__name__, str(exc),
+            type(cause).__name__ if cause else None, str(cause) if cause else None,
+        )
         retryable = _is_retryable_mcp(exc)
         fail_reconstruction(
             dal,
