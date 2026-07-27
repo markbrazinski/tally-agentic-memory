@@ -37,6 +37,12 @@ class ShipmentEventType(StrEnum):
     FREE_TIME_START = "FREE_TIME_START"
     FREE_TIME_END = "FREE_TIME_END"
     GATE_OUT = "GATE_OUT"
+    # A per-day terminal-access snapshot (container available, gate open, no
+    # blocking hold) sourcing one specific charged date. Unlike the whole-window
+    # boundary events above, one snapshot covers exactly one date, so a single
+    # unbound day (the June-11 hero) can be UNRESOLVED while its neighbours are
+    # SOURCE_COMPLETE.
+    TERMINAL_ACCESS_SNAPSHOT = "TERMINAL_ACCESS_SNAPSHOT"
 
 
 # The five event types the locked hero timeline requires. An MCP row whose type
@@ -320,6 +326,19 @@ def adjudicate_charged_days(
     ]
     gate_out = [e for e in events if e.event_type is ShipmentEventType.GATE_OUT]
 
+    # Per-day terminal-access snapshots, indexed by the date they source. A
+    # snapshot sources the date in effective_from (falling back to occurred_at's
+    # date). When the scenario uses per-day access at all (any snapshot present),
+    # every in-window day must have its OWN snapshot bound to be SOURCE_COMPLETE —
+    # this is what lets exactly June 11 stay UNRESOLVED in revision 1 while its
+    # neighbours resolve. Scenarios with no access snapshots are unaffected.
+    access_by_date: dict[date, NormalizedEvent] = {}
+    for e in events:
+        if e.event_type is ShipmentEventType.TERMINAL_ACCESS_SNAPSHOT:
+            snap_date = e.effective_from or e.occurred_at.date()
+            access_by_date.setdefault(snap_date, e)
+    access_required = bool(access_by_date)
+
     results: list[ChargedDayResult] = []
     for charge_date in charge_dates:
         missing: list[str] = []
@@ -329,6 +348,11 @@ def adjudicate_charged_days(
             missing.append("FREE_TIME_END")
         if not gate_out:
             missing.append("GATE_OUT")
+        # Per-day access gap: only relevant once the scenario uses access
+        # snapshots, and only for a day that lacks its own bound snapshot.
+        access_snapshot = access_by_date.get(charge_date)
+        if access_required and access_snapshot is None:
+            missing.append("TERMINAL_ACCESS")
 
         in_window = (
             boundary is not None
@@ -364,6 +388,9 @@ def adjudicate_charged_days(
                 )
             )
             continue
+        # A resolved day binds its per-day access snapshot alongside the
+        # boundary events (so the June-11 row can open its exact source).
+        access_group = [access_snapshot] if access_snapshot is not None else []
         results.append(
             ChargedDayResult(
                 charge_date=charge_date,
@@ -372,7 +399,9 @@ def adjudicate_charged_days(
                 coverage_state=CoverageState.PRESENT_VERIFIED,
                 invoice_rate_minor=invoice_rate_minor,
                 currency=currency,
-                event_refs=_boundary_refs(availability, free_time_end, gate_out),
+                event_refs=_boundary_refs(
+                    availability, free_time_end, gate_out, access_group
+                ),
                 missing_requirements=(),
             )
         )

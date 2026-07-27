@@ -249,3 +249,58 @@ def test_coverage_missing_events_marked_missing():
     )
     assert coverage["GATE_OUT"] is CoverageState.MISSING
     assert coverage["INVOICE_RATE"] is CoverageState.MISSING
+
+
+# ---- per-day terminal-access mechanic (the June-11 6/7 -> 7/7 hero) ----
+
+HERO_DATES = [date(2026, 6, d) for d in range(8, 15)]  # June 8..14 inclusive
+
+
+def _access_rows(dates):
+    """One TERMINAL_ACCESS_SNAPSHOT per date, occurred at noon that day."""
+    return [
+        _row(f"AX-{d.isoformat()}", "TERMINAL_ACCESS_SNAPSHOT",
+             f"{d.isoformat()}T12:00:00+00:00")
+        for d in dates
+    ]
+
+
+def _adjudicate(rows):
+    v = _validate(rows)
+    boundary = resolve_charge_boundary(v.accepted)
+    return adjudicate_charged_days(
+        charge_dates=HERO_DATES, invoice_rate_minor=35000, currency="USD",
+        events=v.accepted, boundary=boundary,
+    )
+
+
+def test_missing_june11_access_leaves_only_that_day_unresolved():
+    # Six access snapshots present (all days except June 11). June 11 is the one
+    # UNRESOLVED day with TERMINAL_ACCESS missing; the other six SOURCE_COMPLETE.
+    six = [d for d in HERO_DATES if d != date(2026, 6, 11)]
+    days = _adjudicate(_hero_rows() + _access_rows(six))
+    by_date = {d.charge_date: d for d in days}
+    complete = sum(1 for d in days if d.state is ChargedDayState.SOURCE_COMPLETE)
+    assert complete == 6
+    june11 = by_date[date(2026, 6, 11)]
+    assert june11.state is ChargedDayState.INSUFFICIENT_EVIDENCE
+    assert june11.coverage_state is CoverageState.MISSING
+    assert "TERMINAL_ACCESS" in june11.missing_requirements
+    assert resolve_terminal_state(days) is not ReconstructionState.COMPLETE
+
+
+def test_binding_june11_access_reaches_seven_of_seven():
+    # Once the retained June-11 snapshot is bound, all seven resolve.
+    days = _adjudicate(_hero_rows() + _access_rows(HERO_DATES))
+    complete = sum(1 for d in days if d.state is ChargedDayState.SOURCE_COMPLETE)
+    assert complete == 7
+    assert all(d.coverage_state is CoverageState.PRESENT_VERIFIED for d in days)
+    assert resolve_terminal_state(days) is ReconstructionState.COMPLETE
+
+
+def test_no_access_snapshots_scenario_unaffected():
+    # Legacy scenarios with zero access snapshots keep the 3-boundary behaviour:
+    # all in-window days SOURCE_COMPLETE without any TERMINAL_ACCESS requirement.
+    days = _adjudicate(_hero_rows())
+    assert all(d.state is ChargedDayState.SOURCE_COMPLETE for d in days)
+    assert all("TERMINAL_ACCESS" not in d.missing_requirements for d in days)

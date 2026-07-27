@@ -116,7 +116,7 @@ def load_day_inputs(dal: DAL, *, reconstruction_id: str) -> list[DayInput]:
         cur.execute(
             """
             SELECT charge_date, invoice_rate_minor, applicable_rate_minor, currency,
-                   coverage_state, chargeability
+                   coverage_state, chargeability, missing_requirements
             FROM reconstruction_charged_days
             WHERE tenant_id=%s AND reconstruction_id=%s ORDER BY charge_date;
             """,
@@ -128,6 +128,8 @@ def load_day_inputs(dal: DAL, *, reconstruction_id: str) -> list[DayInput]:
                 applicable_rate_minor=int(r[2]) if r[2] is not None else None,
                 currency=r[3], coverage_state=r[4],
                 chargeable=(r[5] == "CHARGEABLE"),
+                # missing_requirements is JSONB → psycopg decodes to list.
+                missing_requirements=tuple(r[6] or ()),
             )
             for r in cur.fetchall()
         ]

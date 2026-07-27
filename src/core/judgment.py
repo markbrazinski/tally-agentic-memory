@@ -44,6 +44,7 @@ class ReasonCode(StrEnum):
     (Delta §2.1). Recorded on the frozen recommendation for inspection."""
 
     MISSING_DAY_SOURCE = "MISSING_DAY_SOURCE"
+    MISSING_DAY_ACCESS_EVIDENCE = "MISSING_DAY_ACCESS_EVIDENCE"
     RULE_NOT_VERIFIED = "RULE_NOT_VERIFIED"
     SOURCE_VERSION_UNAVAILABLE = "SOURCE_VERSION_UNAVAILABLE"
     SOURCE_INTEGRITY_FAILED = "SOURCE_INTEGRITY_FAILED"
@@ -57,6 +58,11 @@ class DayInput:
     currency: str
     coverage_state: str  # PRESENT_VERIFIED | MISSING | ...
     chargeable: bool
+    # The reconstruction's per-day missing-requirement codes (e.g.
+    # ("TERMINAL_ACCESS",)). Lets the evaluator emit a precise reason code —
+    # MISSING_DAY_ACCESS_EVIDENCE vs the generic MISSING_DAY_SOURCE. Defaulted
+    # so existing callers/tests are unaffected.
+    missing_requirements: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -160,7 +166,13 @@ def resolve_recommendation(days: list[DayInput]) -> Recommendation:
             continue
         src = by_day.get(j.charge_date)
         if src is not None and src.coverage_state != "PRESENT_VERIFIED":
-            code = ReasonCode.MISSING_DAY_SOURCE
+            # A per-day terminal-access gap is the specific hero reason: the
+            # retained TERMINAL_ACCESS_SNAPSHOT exists in memory but is not yet
+            # bound to this day. Otherwise it's a generic missing source.
+            if src is not None and "TERMINAL_ACCESS" in src.missing_requirements:
+                code = ReasonCode.MISSING_DAY_ACCESS_EVIDENCE
+            else:
+                code = ReasonCode.MISSING_DAY_SOURCE
         else:
             code = ReasonCode.RULE_NOT_VERIFIED
         if code not in reason:
