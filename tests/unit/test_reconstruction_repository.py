@@ -137,6 +137,57 @@ def test_complete_writes_one_atomic_version():
     assert types[-1] == "reconstruction.coverage_updated"
 
 
+def _six_of_seven_days():
+    from datetime import date
+
+    days = []
+    for d in range(8, 15):
+        if d == 11:
+            days.append(ChargedDayResult(
+                charge_date=date(2026, 6, d),
+                state=ChargedDayState.INSUFFICIENT_EVIDENCE,
+                chargeability="UNRESOLVED",
+                coverage_state=CoverageState.MISSING,
+                invoice_rate_minor=35000, currency="USD",
+                event_refs=("SE-002", "SE-004", "SE-005"),
+                missing_requirements=("TERMINAL_ACCESS",),
+            ))
+        else:
+            days.append(ChargedDayResult(
+                charge_date=date(2026, 6, d),
+                state=ChargedDayState.SOURCE_COMPLETE,
+                chargeability="CHARGEABLE",
+                coverage_state=CoverageState.PRESENT_VERIFIED,
+                invoice_rate_minor=35000, currency="USD",
+                event_refs=("SE-002", "SE-004", "SE-005"),
+                missing_requirements=(),
+            ))
+    return tuple(days)
+
+
+def test_needs_evidence_revision_still_hands_off_to_rule_and_judgment():
+    # A 6/7 (NEEDS_EVIDENCE) reconstruction must ALSO enqueue FIND_APPLICABLE_RULE
+    # so the authority evaluator produces a persisted REQUEST_EVIDENCE
+    # recommendation + decision.authority_withheld — the incomplete revision is an
+    # inspectable conclusion, not a dead end (Delta §2.2).
+    conn = FakeConn()
+    seed_running_task(conn)
+    dal = make_dal(conn)
+    result = complete_reconstruction(
+        dal, lease=_lease(), events=_hero_events(), days=_six_of_seven_days(),
+        coverage=_coverage(), terminal_state=ReconstructionState.NEEDS_EVIDENCE,
+        day_event_roles={}, mcp_correlation_id="corr-1",
+        mcp_query_ref_private="srv-1", issue_codes=(),
+    )
+    assert result.state == "NEEDS_EVIDENCE"
+    assert result.days_complete == 6 and result.days_total == 7
+    # the rule handoff task is enqueued (was previously COMPLETE-only)
+    assert conn.counts.get("workflow_tasks_enqueued", 0) == 1
+    types = [e["type"] for e in conn.events]
+    assert "reconstruction.needs_evidence" in types
+    assert types[-1] == "reconstruction.coverage_updated"
+
+
 def test_late_worker_is_fenced_before_any_write():
     conn = FakeConn()
     seed_running_task(conn, worker="worker-1", attempt=1)

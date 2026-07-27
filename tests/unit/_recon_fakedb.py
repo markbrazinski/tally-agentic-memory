@@ -105,6 +105,9 @@ class FakeCursor:
             self.conn.events.append({"type": p[4], "state": p[10], "seq": p[3]})
         elif n.startswith("INSERT INTO event_outbox"):
             self.conn.count("event_outbox")
+        elif n.startswith("INSERT INTO workflow_tasks"):
+            # A follow-on task enqueue (e.g. FIND_APPLICABLE_RULE handoff).
+            self.conn.count("workflow_tasks_enqueued")
         elif n.startswith("UPDATE workflow_tasks"):
             # completion or failure — fence on current_attempt + lease_owner.
             task = self.conn.tasks.get(p[-3])

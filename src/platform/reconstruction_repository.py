@@ -429,10 +429,17 @@ def complete_reconstruction(
 
             _finish_task(cur, tenant_id, lease, terminal_state.value)
 
-            # On a complete reconstruction, hand off to Gate 3 by creating one
-            # durable FIND_APPLICABLE_RULE task bound to this reconstruction
-            # version (mirrors intake's START_RECONSTRUCTION handoff).
-            if terminal_state is ReconstructionState.COMPLETE:
+            # Hand off to Gate 3 (rule) → Gate 4 (judgment) for any reconstruction
+            # that adjudicated charged days — COMPLETE (→ DISPUTE/APPROVE) AND
+            # NEEDS_EVIDENCE (→ REQUEST_EVIDENCE). The incomplete 6/7 revision
+            # MUST still produce a persisted REQUEST_EVIDENCE recommendation with
+            # decision.authority_withheld (Delta §2.2) — it is an inspectable
+            # system conclusion, not a loading placeholder. Only genuinely blocked
+            # states (no usable days) skip the handoff.
+            if terminal_state in (
+                ReconstructionState.COMPLETE,
+                ReconstructionState.NEEDS_EVIDENCE,
+            ):
                 _emit_rule_task(
                     cur, tenant_id=tenant_id, lease=lease,
                     reconstruction_id=reconstruction_id, version=version,
