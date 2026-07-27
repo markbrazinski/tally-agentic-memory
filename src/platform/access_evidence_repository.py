@@ -196,8 +196,25 @@ def _load_snapshot_facts(cur, tenant_id, public_ref) -> AccessSnapshotFacts:
 def _emit_reconstruction_task(cur, *, tenant_id, lease, now) -> None:
     """Enqueue a fresh START_RECONSTRUCTION so the worker re-runs the fixed MCP
     query — now returning the newly-VERIFIED snapshot — into a NEW revision.
-    A distinct fingerprint (the binding event) keeps it separate from revision 1."""
-    refs = [{"type": "access_binding", "id": lease.snapshot_public_ref}]
+    A distinct fingerprint (the binding event) keeps it separate from revision 1.
+
+    The task MUST carry the same invoice_source + claim_set refs as revision 1's
+    task: the reconstruction claim reads charge_dates/rate/container from the
+    claim_set ref. Without them the lease forms with an empty claim (version 0)
+    and the worker fails PRIOR_MEMORY_EMPTY. We copy them from the original task
+    and append the access_binding ref so the fingerprint is distinct."""
+    cur.execute(
+        """
+        SELECT input_object_refs FROM workflow_tasks
+        WHERE tenant_id=%s AND invoice_id=%s AND task_type='START_RECONSTRUCTION'
+        ORDER BY created_at LIMIT 1;
+        """,
+        (tenant_id, lease.invoice_id),
+    )
+    prior = cur.fetchone()
+    base_refs = (prior[0] if prior and isinstance(prior[0], list)
+                 else json.loads(prior[0]) if prior and prior[0] else [])
+    refs = [*base_refs, {"type": "access_binding", "id": lease.snapshot_public_ref}]
     fingerprint = task_input_fingerprint(
         task_type=TaskType.START_RECONSTRUCTION, input_refs=refs
     )

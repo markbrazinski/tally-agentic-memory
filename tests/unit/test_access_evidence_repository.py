@@ -60,6 +60,9 @@ class FakeCursor:
             self.conn.bound += 1
         elif s.startswith("SELECT status_sequence FROM invoices"):
             self.one = (5,)
+        elif s.startswith("SELECT input_object_refs FROM workflow_tasks"):
+            # The original START_RECONSTRUCTION task's refs (source + claim_set).
+            self.one = (self.conn.prior_task_refs,)
         elif s.startswith("SELECT now()"):
             self.one = (NOW,)
         elif s.startswith("INSERT INTO invoice_events"):
@@ -68,6 +71,9 @@ class FakeCursor:
             self.conn.outbox += 1
         elif s.startswith("INSERT INTO workflow_tasks"):
             self.conn.enqueued.append(params[3] if len(params) > 3 else None)
+            # input_object_refs is the JSON refs payload on the enqueue INSERT.
+            refs = next((p for p in params if isinstance(p, str) and "claim_set" in p), None)
+            self.conn.enqueued_refs.append(refs)
         elif s.startswith("UPDATE invoices"):
             pass
         elif s.startswith("UPDATE workflow_tasks SET state='COMPLETED'"):
@@ -95,6 +101,12 @@ class FakeConn:
         self.events = []
         self.outbox = 0
         self.enqueued = []
+        self.enqueued_refs = []
+        # The original START_RECONSTRUCTION task's refs the requeue must carry.
+        self.prior_task_refs = [
+            {"type": "invoice_source", "id": "src-1", "version": 1},
+            {"type": "claim_set", "id": "cs-1", "version": 1},
+        ]
         self.finished = 0
 
     def cursor(self):
@@ -127,6 +139,10 @@ def test_passing_verification_binds_and_requeues():
     assert conn.bound == 1  # PENDING -> VERIFIED on exactly the June-11 row
     assert "reconstruction.source_bound" in conn.events
     assert result.reconstruction_requeued and len(conn.enqueued) == 1
+    # The requeued reconstruction must carry the claim_set ref (else the claim
+    # loads version 0 → empty charge_dates → PRIOR_MEMORY_EMPTY, no revision 2).
+    assert conn.enqueued_refs and "claim_set" in conn.enqueued_refs[0]
+    assert "access_binding" in conn.enqueued_refs[0]
 
 
 def test_wrong_container_refuses_and_does_not_bind():
