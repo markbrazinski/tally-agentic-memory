@@ -103,7 +103,9 @@ SOURCE_CONFIG=$(cat <<JSON
       "RuntimeEnvironmentSecrets": {
         "TALLY_CRDB_DSN": "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter${SSM_PREFIX}/crdb-dsn",
         "TALLY_DEMO_TOKEN": "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter${SSM_PREFIX}/demo-token",
-        "TALLY_TENANT_ID": "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter${SSM_PREFIX}/tenant-id"
+        "TALLY_TENANT_ID": "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter${SSM_PREFIX}/tenant-id",
+        "TALLY_MCP_CLUSTER_ID": "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter/tally/gate5/mcp-cluster-id",
+        "TALLY_MCP_DATABASE": "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter/tally/gate5/mcp-database"
       },
       "RuntimeEnvironmentVariables": {
         "AWS_REGION": "${REGION}",
@@ -116,7 +118,9 @@ SOURCE_CONFIG=$(cat <<JSON
         "TALLY_JUDGE_AUTH_ENABLED": "true",
         "TALLY_COGNITO_USER_POOL_ID": "${USER_POOL_ID}",
         "TALLY_COGNITO_CLIENT_ID": "${CLIENT_ID}",
-        "TALLY_COGNITO_REGION": "${REGION}"
+        "TALLY_COGNITO_REGION": "${REGION}",
+        "TALLY_OAUTH_TOKEN_PARAMETER": "/tally/gate5/oauth-token-bundle",
+        "TALLY_OAUTH_REFRESH_LEASE_TABLE": "tally-gate5-oauth-refresh-lease"
       }
     }
   },
