@@ -73,22 +73,32 @@ def seed_reconstruction_memory(
                 counts["source_artifacts"] += 1
 
             for event in pkg["events"]:
+                # Per-event source_version_state (default VERIFIED). The retained
+                # June-11 terminal-access snapshot is seeded PENDING: it exists in
+                # memory before the invoice but is excluded from the MCP view
+                # (source_version_state='VERIFIED') until the gap-driven evidence
+                # task verifies + binds it — that binding is a state transition,
+                # never a second-pass insert.
+                version_state = event.get("source_version_state", "VERIFIED")
+                effective_from = event.get("effective_from")
                 cur.execute(
                     """
                     INSERT INTO shipment_event_memory
                         (tenant_id, public_ref, shipment_ref, container_ref,
                          event_type, source_public_ref, source_version_state,
                          display_anchor, provenance_classification, occurred_at,
-                         recorded_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, 'VERIFIED', %s, %s, %s, %s)
+                         effective_from, recorded_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (tenant_id, public_ref) DO NOTHING;
                     """,
                     (
                         tenant_id, event["public_ref"], pkg["shipment_ref"],
                         pkg["container_ref"], event["event_type"],
-                        event["source_public_ref"], event["display_anchor"],
-                        pkg["provenance_classification"],
-                        _parse(event["occurred_at"]), _parse(event["recorded_at"]),
+                        event["source_public_ref"], version_state,
+                        event["display_anchor"], pkg["provenance_classification"],
+                        _parse(event["occurred_at"]),
+                        _date(effective_from) if effective_from else None,
+                        _parse(event["recorded_at"]),
                     ),
                 )
                 counts["shipment_events"] += 1
@@ -99,6 +109,12 @@ def seed_reconstruction_memory(
 
 def _parse(value: str) -> datetime:
     return datetime.fromisoformat(value)
+
+
+def _date(value: str):
+    from datetime import date
+
+    return date.fromisoformat(value)
 
 
 def _sha_placeholder(ref: str) -> str:
