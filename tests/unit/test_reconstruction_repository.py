@@ -128,10 +128,13 @@ def test_complete_writes_one_atomic_version():
     assert len(conn.reconstructions) == 1
     assert conn.counts["reconstruction_events"] == 4
     assert conn.counts["reconstruction_charged_days"] == 7
-    # exactly one public event + its outbox row committed in the same txn
-    assert conn.counts["invoice_events"] == 1
-    assert conn.counts["event_outbox"] == 1
-    assert conn.events[-1]["type"] == "reconstruction.completed"
+    # a completed reconstruction emits its terminal event AND a durable
+    # coverage_updated event, each with its outbox row, in the same txn.
+    assert conn.counts["invoice_events"] == 2
+    assert conn.counts["event_outbox"] == 2
+    types = [e["type"] for e in conn.events]
+    assert "reconstruction.completed" in types
+    assert types[-1] == "reconstruction.coverage_updated"
 
 
 def test_late_worker_is_fenced_before_any_write():

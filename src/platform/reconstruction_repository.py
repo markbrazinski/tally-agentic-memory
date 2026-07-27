@@ -477,6 +477,41 @@ def complete_reconstruction(
                 ],
                 output_count=len(events),
             )
+
+            # Durable coverage signal (Delta §2.4): the resolved/required day
+            # counts for THIS revision. It is what the decision rail and the
+            # charged-day ledger read to show 6 of 7 -> 7 of 7 — a persisted
+            # state transition, not a client-computed number.
+            coverage_seq = _lock_invoice_and_advance(
+                cur,
+                tenant_id=tenant_id,
+                invoice_id=lease.invoice_id,
+                intake_state="READY_FOR_RECONSTRUCTION",
+                aggregate_status=aggregate,
+                status=aggregate,
+                increment=1,
+                occurred_at=completed_at,
+            )
+            _insert_recon_event(
+                cur,
+                tenant_id=tenant_id,
+                invoice_id=lease.invoice_id,
+                sequence=coverage_seq,
+                event_type="reconstruction.coverage_updated",
+                occurred_at=completed_at,
+                state="COMPLETED",
+                aggregate_status=aggregate,
+                summary=f"Source coverage {days_complete} of {len(days)} charged days",
+                initiated_by=lease.initiated_by,
+                actor_display=lease.actor_display,
+                input_refs=[
+                    {"type": "reconstruction", "id": reconstruction_id, "version": version}
+                ],
+                produced_refs=[
+                    {"type": "reconstruction", "id": reconstruction_id, "version": version}
+                ],
+                output_count=days_complete,
+            )
             return ReconstructionCompletion(
                 reconstruction_id=reconstruction_id,
                 version=version,
