@@ -12,12 +12,14 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.core.correspondence import GateResult, GateState
+from src.core.correspondence import GateResult, GateState, SealedFactPack
 from src.external.controlled_mail import DemonstrationInboxProvider
 from src.external.dal import DAL, Tenant
+from src.platform import correspondence_repository as repo
 from src.platform.correspondence_repository import (
     SendConflictError,
     approve_and_send,
+    draft_from_sealed,
 )
 
 TENANT = "10000000-0000-4000-8000-000000000002"
@@ -118,6 +120,76 @@ def _send(conn, provider, *, gates=None, approver="second.approver", key="send-1
         second_approver_display=approver, gate_checks=gates or _fresh_gates(),
         provider=provider,
     )
+
+
+class _DraftCursor:
+    def __init__(self, conn):
+        self.conn = conn
+        self.one = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        n = " ".join(sql.split())
+        self.one = None
+        if n.startswith("SELECT id FROM correspondence_drafts"):
+            self.one = None  # no existing draft
+        elif n.startswith("INSERT INTO correspondence_drafts"):
+            # body_prose is the 8th column value.
+            self.conn.stored_prose = (params or ())[7]
+        return self
+
+    def fetchone(self):
+        return self.one
+
+
+class _DraftConn:
+    def __init__(self):
+        self.stored_prose = None
+
+    def cursor(self):
+        return _DraftCursor(self)
+
+    def transaction(self):
+        return FakeTxn()
+
+
+_PACK = SealedFactPack(
+    invoice_id="inv-1", decision_seal_id="seal-1", seal_digest="sha256:s",
+    recommendation_type="DISPUTE", disputed_amount_minor=70000,
+    supported_amount_minor=175000, currency="USD",
+    charged_period_start="2026-06-08", charged_period_end="2026-06-14",
+    container_ref="TLLU-482931-7", invoice_no="INV-1048", rule_ref="Clause 4.2",
+)
+
+
+def test_draft_auto_generates_prose_when_none_supplied(monkeypatch):
+    # Demo v3: with no body_prose, draft_from_sealed generates it from the sealed
+    # pack via the injected generator (default deterministic). Locked fields are
+    # re-derived from the seal, so validation still passes.
+    monkeypatch.setattr(repo, "load_sealed_fact_pack", lambda dal, **k: _PACK)
+    conn = _DraftConn()
+
+    class StubGen:
+        def draft_body(self, pack):
+            return f"GENERATED for {pack.invoice_no} disputing $700.00"
+
+    result = draft_from_sealed(
+        _dal(conn), decision_seal_id="seal-1", draft_generator=StubGen()
+    )
+    assert result.validation_state == "VALIDATED"
+    assert conn.stored_prose == "GENERATED for INV-1048 disputing $700.00"
+
+
+def test_draft_explicit_prose_still_honored(monkeypatch):
+    monkeypatch.setattr(repo, "load_sealed_fact_pack", lambda dal, **k: _PACK)
+    conn = _DraftConn()
+    draft_from_sealed(_dal(conn), decision_seal_id="seal-1", body_prose="EXPLICIT")
+    assert conn.stored_prose == "EXPLICIT"
 
 
 def test_all_gates_pass_sends_to_controlled_inbox():

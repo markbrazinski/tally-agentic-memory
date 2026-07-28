@@ -31,6 +31,10 @@ from src.external.controlled_mail import (
     ControlledSendError,
     DemonstrationInboxProvider,
 )
+from src.external.correspondence_bedrock import (
+    DeterministicDraftGenerator,
+    DraftGeneratorProtocol,
+)
 from src.external.dal import DAL
 
 
@@ -113,14 +117,22 @@ def load_sealed_fact_pack(dal: DAL, *, decision_seal_id: str) -> SealedFactPack:
 
 
 def draft_from_sealed(
-    dal: DAL, *, decision_seal_id: str, body_prose: str
+    dal: DAL, *, decision_seal_id: str, body_prose: str | None = None,
+    draft_generator: DraftGeneratorProtocol | None = None,
 ) -> DraftResult:
     """Create the bounded draft from the sealed fact pack (idempotent per seal).
 
     The locked fields are copied from the seal; the prose is the only free text.
+    When ``body_prose`` is not supplied, it is generated from the sealed fact pack
+    by ``draft_generator`` (default: the deterministic no-network generator; the
+    platform wires the Bedrock generator). The model writes prose only — the
+    locked fields below are always re-derived from the seal, never the prose.
     """
     tenant_id = dal.tenant.tenant_id
     pack = load_sealed_fact_pack(dal, decision_seal_id=decision_seal_id)
+    if body_prose is None:
+        generator = draft_generator or DeterministicDraftGenerator()
+        body_prose = generator.draft_body(pack)
     fields = locked_fields(pack)
     fields_digest = locked_fields_digest(pack)
     validation = validate_draft_locked_fields(pack, fields)
