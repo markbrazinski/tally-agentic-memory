@@ -26,7 +26,8 @@ export function createLiveProvider() {
 
     async getInvoice(invoiceId) {
       const { body, etag } = await getJson(`/api/invoices/${invoiceId}`);
-      return { invoice: body.invoice || body, etag };
+      // links.source is the real retained-PDF endpoint (exact S3 version).
+      return { invoice: body.invoice || body, links: body.links || null, etag };
     },
 
     async getReconstruction(invoiceId) {

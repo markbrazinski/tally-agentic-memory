@@ -4,6 +4,9 @@ INV-1048 is the complete-memory hero ($350/day × 7 = $2,450 → DISPUTE $700).
 INV-1047 is the queue-level refusal ($125/day × 7 = $875): a DIFFERENT shipment
 with complete operational history but no governing tariff in the corpus, so the
 evaluator genuinely returns NEEDS EVIDENCE / "Governing tariff not verified".
+INV-1041 is the clean historical approval ($90/day × 6 = $540): a DISTINCT
+shipment whose invoice rate equals the applicable tariff (0 discrepancy) so the
+engine returns APPROVE_FOR_PAYMENT, sealed via the real Gate-5 approve path.
 """
 
 from __future__ import annotations
@@ -34,6 +37,24 @@ INV_1048 = InvoiceSpec(
         (12, "Charged Days: 7"),
         (12, "Daily Rate: USD $350.00 per day"),
         (14, "Total Amount Due: USD $2,450.00"),
+        (10, "Synthetic hackathon fixture. No carrier was contacted."),
+    ),
+)
+
+INV_1041 = InvoiceSpec(
+    filename="INV-1041.pdf",
+    lines=(
+        (20, "FICTIONAL DEMO INVOICE - NOT A REAL CARRIER CHARGE"),
+        (16, "Seabright Demo Shipping"),
+        (12, "Invoice: INV-1041"),
+        (12, "Issued: May 18, 2026"),
+        (12, "Bill of Lading: OAK-33108"),
+        (12, "Container: OOLU-840112-5"),
+        (12, "Charge Type: Demurrage"),
+        (12, "Charge Period: May 4, 2026 through May 9, 2026"),
+        (12, "Charged Days: 6"),
+        (12, "Daily Rate: USD $90.00 per day"),
+        (14, "Total Amount Due: USD $540.00"),
         (10, "Synthetic hackathon fixture. No carrier was contacted."),
     ),
 )
@@ -106,7 +127,7 @@ def build_pdf(spec: InvoiceSpec) -> bytes:
 
 if __name__ == "__main__":
     DEMO_DIR.mkdir(parents=True, exist_ok=True)
-    for spec in (INV_1048, INV_1050):
+    for spec in (INV_1048, INV_1050, INV_1041):
         out = DEMO_DIR / spec.filename
         out.write_bytes(build_pdf(spec))
         print(f"wrote {out}")

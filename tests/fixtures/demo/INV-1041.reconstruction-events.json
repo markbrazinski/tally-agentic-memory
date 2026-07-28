@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "classification": "SYNTHETIC DEMO — FICTIONAL DATA",
+  "disclosure": "Representative demonstration data. Not a live carrier or terminal feed.",
+  "provenance_classification": "DEMO_SCENARIO",
+  "shipment_ref": "OOLU8401125",
+  "container_ref": "OOLU8401125",
+  "bill_of_lading": "OAK-33108",
+  "effective_timezone": "America/Los_Angeles",
+  "_note": "INV-1041 clean historical approval (Demo v3): complete operational history (boundary events), a DISTINCT shipment from the hero (TLLU4829317) and the INV-1047 refusal (MSCU7011453). Every charged day is PRESENT_VERIFIED and the invoice daily rate EQUALS the applicable tariff rate (0 discrepancy), so the judgment engine returns APPROVE_FOR_PAYMENT. Sealed via the real Gate-5 approve path so the aggregate reads APPROVED_FOR_PAYMENT — a genuine sealed historical approval, never a hardcoded status. Never opened in the film.",
+  "source_artifacts": [
+    {
+      "public_ref": "SRC-MILESTONE-INV-1041",
+      "source_type": "MILESTONE_EXPORT",
+      "display_name": "Container milestone export (representative)",
+      "mime_type": "application/json",
+      "adapter_name": "representative_container_milestone_adapter"
+    },
+    {
+      "public_ref": "SRC-AVAILABILITY-INV-1041",
+      "source_type": "AVAILABILITY_NOTICE",
+      "display_name": "Terminal availability notice (representative)",
+      "mime_type": "application/json",
+      "adapter_name": "representative_availability_notice_adapter"
+    }
+  ],
+  "events": [
+    {
+      "public_ref": "SE-INV1041-001",
+      "event_type": "DISCHARGED",
+      "occurred_at": "2026-04-28T13:00:00-07:00",
+      "recorded_at": "2026-04-28T14:15:00-07:00",
+      "source_public_ref": "SRC-MILESTONE-INV-1041",
+      "display_anchor": "milestone row: DISCHARGED 2026-04-28",
+      "normalized_facts": {"milestone": "DISCHARGED"}
+    },
+    {
+      "public_ref": "SE-INV1041-002",
+      "event_type": "AVAILABLE",
+      "occurred_at": "2026-04-29T08:30:00-07:00",
+      "recorded_at": "2026-04-29T09:00:00-07:00",
+      "source_public_ref": "SRC-AVAILABILITY-INV-1041",
+      "display_anchor": "availability notice: AVAILABLE 2026-04-29",
+      "normalized_facts": {"status": "AVAILABLE_FOR_PICKUP"}
+    },
+    {
+      "public_ref": "SE-INV1041-003",
+      "event_type": "FREE_TIME_START",
+      "occurred_at": "2026-04-29T08:30:00-07:00",
+      "recorded_at": "2026-04-29T09:00:00-07:00",
+      "source_public_ref": "SRC-AVAILABILITY-INV-1041",
+      "display_anchor": "availability notice: free time begins 2026-04-29",
+      "normalized_facts": {"free_time_days": 4}
+    },
+    {
+      "public_ref": "SE-INV1041-004",
+      "event_type": "FREE_TIME_END",
+      "occurred_at": "2026-05-03T23:59:00-07:00",
+      "recorded_at": "2026-05-03T23:59:00-07:00",
+      "source_public_ref": "SRC-AVAILABILITY-INV-1041",
+      "display_anchor": "availability notice: free time ends 2026-05-03",
+      "normalized_facts": {"free_time_days": 4}
+    },
+    {
+      "public_ref": "SE-INV1041-005",
+      "event_type": "GATE_OUT",
+      "occurred_at": "2026-05-09T16:00:00-07:00",
+      "recorded_at": "2026-05-09T17:20:00-07:00",
+      "source_public_ref": "SRC-MILESTONE-INV-1041",
+      "display_anchor": "milestone row: GATE_OUT 2026-05-09",
+      "normalized_facts": {"milestone": "GATE_OUT"}
+    }
+  ]
+}

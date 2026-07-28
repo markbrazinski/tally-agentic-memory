@@ -206,6 +206,11 @@ export default class Workbench extends React.Component {
   }
   async openInvoiceLive(id) {
     let target = "recommendation";
+    // The real retained-PDF link (exact S3 version) from the invoice projection.
+    try {
+      const inv = await this.provider.getInvoice(id);
+      this.sourceUrl = inv && inv.links ? inv.links.source : null;
+    } catch { this.sourceUrl = null; }
     try {
       const r = await this.provider.getReconstruction(id);
       if (r) {
@@ -370,8 +375,15 @@ export default class Workbench extends React.Component {
     const sm = this.statusMeta();
     const disputed = st.disputed;
     const rows = [];
-    rows.push({ name: "INV-1041.pdf", sub: "Demurrage · Jun 2", container: "MRKU-701882-3", status: "APPROVED FOR PAYMENT", ...this._q("verified"), amount: "$540", chevron: "›", cursor: "default", rowBg: "transparent", nameColor: "#8A96A0", amountColor: "#8A96A0", onOpen: this.noop, anim: "", workDot: "display:none;" });
-    rows.push({ name: "INV-1039.pdf", sub: "Detention · May 28", container: "TCLU-559120-1", status: "DISPUTED", ...this._q("contested"), amount: "$1,120", chevron: "›", cursor: "default", rowBg: "transparent", nameColor: "#8A96A0", amountColor: "#8A96A0", onOpen: this.noop, anim: "", workDot: "display:none;" });
+    // LIVE: the two pre-existing queue rows (INV-1041 APPROVED, INV-1047 NEEDS
+    // EVIDENCE) are REAL persisted evaluator outputs read from the projection
+    // below — never hardcoded here (v3 §6: do not hardcode either disposition).
+    // MOCK/prototype scene keeps its literal INV-1041/INV-1039 backdrop so the
+    // click-audit fixture renders unchanged.
+    if (!this.live) {
+      rows.push({ name: "INV-1041.pdf", sub: "Demurrage · Jun 2", container: "MRKU-701882-3", status: "APPROVED FOR PAYMENT", ...this._q("verified"), amount: "$540", chevron: "›", cursor: "default", rowBg: "transparent", nameColor: "#8A96A0", amountColor: "#8A96A0", onOpen: this.noop, anim: "", workDot: "display:none;" });
+      rows.push({ name: "INV-1039.pdf", sub: "Detention · May 28", container: "TCLU-559120-1", status: "DISPUTED", ...this._q("contested"), amount: "$1,120", chevron: "›", cursor: "default", rowBg: "transparent", nameColor: "#8A96A0", amountColor: "#8A96A0", onOpen: this.noop, anim: "", workDot: "display:none;" });
+    }
     if (arrived) {
       // In live mode, reflect the hero row's real aggregate status + id.
       const heroRow = this.live && this.liveQueue
@@ -400,21 +412,22 @@ export default class Workbench extends React.Component {
         : "Demurrage · Jun 8–14";
       rows.push({ name: "INV-1048.pdf", sub: heroSub, container: "TLLU-482931-7", status: st1048, ...this._q(kind1048), amount: heroTotal, chevron: "›", cursor: "pointer", rowBg: disputedRow ? "transparent" : "#FBF6EE", nameColor: "#23272F", amountColor: disputedRow ? "#B4513F" : "#23272F", onOpen: () => this.openInvoice(heroId), anim: view === "queue" ? "tly-row-in" : "", workDot: working ? "" : "display:none;" });
     }
-    // The second invoice is a persisted refusal row. LIVE: read it straight from
-    // the queue projection — INV-1047, invoice total $875, status NEEDS EVIDENCE,
-    // detail = its unresolved reason. It authorizes NO financial action, so it is
-    // never clickable into a disposition (v3: do not open/recover it here). The
-    // mock scene keeps its original INV-1050 READY-FOR-REVIEW narrative so the
-    // click-audit fixture is unchanged.
+    // LIVE: render every pre-existing (non-hero) queue row straight from the
+    // server projection — INV-1041 ($540 APPROVED FOR PAYMENT) and INV-1047
+    // ($875 NEEDS EVIDENCE, detail = its unresolved reason). Both are REAL
+    // evaluator outputs; neither authorizes a financial action here, so neither
+    // is clickable into a disposition (v3: do not open/recover them in the film).
+    // Amount column is always the carrier invoice total. MOCK scene keeps its
+    // original INV-1050 READY-FOR-REVIEW narrative so the click-audit is unchanged.
     if (this.live) {
-      const refusal = (this.liveQueue || []).find(
-        (r) => !isHeroRow(r) && !/1041|1039/.test(String(r.invoiceId) + " " + String(r.name)),
-      );
-      if (refusal) {
-        const meta = STATUS_LABEL[refusal.aggregateStatus] || { status: refusal.aggregateStatus, kind: "checking" };
-        const detail = refusal.unresolvedReason || "Governing tariff not verified";
-        rows.push({ name: refusal.name || "INV-1047.pdf", sub: "Demurrage · " + detail, container: refusal.container || "—", status: meta.status, ...this._q(meta.kind), amount: refusal.amountMinor != null ? money(refusal.amountMinor) : "$875", chevron: "›", cursor: "default", rowBg: "transparent", nameColor: "#23272F", amountColor: "#23272F", onOpen: this.noop, anim: "tly-row-in", workDot: "display:none;" });
-      }
+      (this.liveQueue || [])
+        .filter((r) => !isHeroRow(r))
+        .forEach((r) => {
+          const meta = STATUS_LABEL[r.aggregateStatus] || { status: r.aggregateStatus, kind: "checking" };
+          // NEEDS EVIDENCE shows its unresolved reason; a cleared row shows its charge.
+          const detail = r.unresolvedReason || "Demurrage";
+          rows.push({ name: r.name || (r.invoiceId ? r.invoiceId + ".pdf" : "—"), sub: detail, container: r.container || "—", status: meta.status, ...this._q(meta.kind), amount: r.amountMinor != null ? money(r.amountMinor) : "—", chevron: "›", cursor: "default", rowBg: "transparent", nameColor: "#23272F", amountColor: "#23272F", onOpen: this.noop, anim: "tly-row-in", workDot: "display:none;" });
+        });
     } else if (disputed) {
       const done = st.inv1050 === "done";
       rows.push({ name: "INV-1050.pdf", sub: "Demurrage · Jun 5–11", container: "HLXU-223874-9", status: done ? "APPROVED FOR PAYMENT" : "READY FOR REVIEW", ...this._q(done ? "verified" : "neutral"), amount: "$875", chevron: "›", cursor: "pointer", rowBg: done ? "transparent" : "#FBF6EE", nameColor: "#23272F", amountColor: done ? "#2F7752" : "#23272F", onOpen: this.openInv1050, anim: "tly-row-in", workDot: "display:none;" });
@@ -565,7 +578,13 @@ export default class Workbench extends React.Component {
     agents.push(A("Intake Agent", rk <= 0 ? "Extracting carrier claims" : "Claims extracted", "Amazon Bedrock · S3", rk <= 0 ? "working…" : "6 claims linked to PDF regions", rk <= 0 ? "working" : "complete"));
     agents.push(A("Reconstruction Agent", rk < this.rank("reconstructing") ? "Waiting" : rk < this.rank("reconstructed") ? "Retrieving prior memory" : "Reconstruction complete", "CockroachDB Managed MCP", rk < this.rank("reconstructing") ? "—" : rk < this.rank("reconstructed") ? "assembling events…" : "9 sourced events · 7 charged days", rk < this.rank("reconstructing") ? "waiting" : rk < this.rank("reconstructed") ? "working" : "complete"));
     agents.push(A("Evidence Agent", rk < this.rank("retrieving") ? "Waiting" : rk < this.rank("ruleVerified") ? "Searching retained tariff" : "Candidate retrieved", "CockroachDB Distributed Vector Indexing", rk < this.rank("retrieving") ? "—" : rk < this.rank("ruleVerified") ? "1 tariff candidate · unverified" : "1 tariff candidate retrieved", rk < this.rank("retrieving") ? "waiting" : rk < this.rank("ruleVerified") ? "working" : "complete"));
-    agents.push(A("Decision Engine", rk < this.rank("ruleVerified") ? "Waiting" : rk < this.rank("recommendation") ? "Verifying & calculating" : "Recommendation issued", "Deterministic code", rk < this.rank("ruleVerified") ? "—" : rk < this.rank("recommendation") ? "validating clause…" : "Applicable rule verified · $700 dispute", rk < this.rank("ruleVerified") ? "waiting" : rk < this.rank("recommendation") ? "working" : "complete"));
+    // Decision Engine output: LIVE reads the dispute figure from the projection
+    // once issued (never the literal); MOCK keeps "$700 dispute".
+    const deOut = rk < this.rank("ruleVerified") ? "—"
+      : rk < this.rank("recommendation") ? "validating clause…"
+      : (P && P.rec && P.rec.recommendation_type === "DISPUTE") ? "Applicable rule verified · " + money(P.rec.disputed_amount_minor) + " dispute"
+      : P ? "Applicable rule verified" : "Applicable rule verified · $700 dispute";
+    agents.push(A("Decision Engine", rk < this.rank("ruleVerified") ? "Waiting" : rk < this.rank("recommendation") ? "Verifying & calculating" : "Recommendation issued", "Deterministic code", deOut, rk < this.rank("ruleVerified") ? "waiting" : rk < this.rank("recommendation") ? "working" : "complete"));
     if (rk >= this.rank("approved")) agents.push(A("Correspondence Agent", st.wb === "sent" ? "Draft sent" : "Drafting adjustment request", "Amazon Bedrock", st.wb === "sent" ? "request delivered" : "draft ready · manifest attached", st.wb === "sent" ? "complete" : "working"));
 
     const gateDefs = [{ label: "Approved recommendation matches record" }, { label: "Decision record sealed" }, { label: "Managed MCP approved-memory read" }, { label: "Vector-retrieved clause binding" }, { label: "Exact S3 source versions" }];
@@ -590,7 +609,7 @@ export default class Workbench extends React.Component {
       { label: "Invoice source", val: P ? claimTotal + " claimed" : "$2,450 · 6 claims", on: this.openSourceInvoice },
       { label: "Reconstruction", val: P ? claimDays + " charged days" : "9 events · 7 days", on: this.openDayDrawer.bind(this, 2) },
       { label: "Applicable tariff", val: ruleRate, on: this.openSourceTariff },
-      { label: "Decision", val: (P && P.rec && P.rec.recommendation_type === "DISPUTE" ? "DISPUTE " + money(P.rec.disputed_amount_minor) : P && P.rec ? "REQUEST EVIDENCE" : "DISPUTE $700"), on: this.goDecision },
+      { label: "Decision", val: (P && P.rec && P.rec.recommendation_type === "DISPUTE" ? "DISPUTE " + money(P.rec.disputed_amount_minor) : P && P.rec ? "REQUEST EVIDENCE" : P ? "computing…" : "DISPUTE $700"), on: this.goDecision },
     ];
     const showGate = st.wb === "sending";
     const showSent = st.wb === "sent";
@@ -602,7 +621,11 @@ export default class Workbench extends React.Component {
       ? "DISPUTE $" + (P.rec.disputed_amount_minor / 100).toFixed(0)
       : null;
     if (insuf) { recHead = "REQUEST EVIDENCE"; recColor = "#8A7A50"; recBg = "#FBF6EE"; recBorder = "#E6D6AE"; }
-    else { recHead = liveDispute || "DISPUTE $700"; recColor = "#B4513F"; recBg = "#FCFBF8"; recBorder = (P && P.rec ? P.rec.state === "FROZEN" : st.wb === "recommendation") ? "#C8A955" : "#DED6C7"; }
+    // LIVE: the dispute figure appears only once the projection carries it (after
+    // deterministic validation freezes the DISPUTE revision) — never the literal
+    // (v3: runtime-derived, must not read as pre-baked). MOCK keeps "$700".
+    else if (P) { recHead = liveDispute || "COMPUTING…"; recColor = liveDispute ? "#B4513F" : "#8A7A50"; recBg = "#FCFBF8"; recBorder = (P.rec && P.rec.state === "FROZEN") ? "#C8A955" : "#DED6C7"; }
+    else { recHead = "DISPUTE $700"; recColor = "#B4513F"; recBg = "#FCFBF8"; recBorder = st.wb === "recommendation" ? "#C8A955" : "#DED6C7"; }
 
     // Rail reconciliation math. LIVE: every figure is the server's — claimed,
     // supported, disputed totals from the recommendation revision; coverage
@@ -621,6 +644,10 @@ export default class Workbench extends React.Component {
         difference: rec.disputed_amount_minor != null ? money(rec.disputed_amount_minor) : "$0",
         coverageLine: `Evidence coverage ${P.cov.days_complete} of ${P.cov.days_total} days`,
       };
+    } else if (P) {
+      // LIVE, projection not yet carrying the recommendation: withhold the
+      // reconciliation figures until the server computes them (no pre-baked $700).
+      recon = { carrierLine: "computing…", tariffLine: "computing…", difference: "—", coverageLine: "Evidence coverage in progress" };
     } else {
       recon = { carrierLine: "7 × $350 = $2,450", tariffLine: "7 × $250 = $1,750", difference: "$700", coverageLine: "Evidence coverage 7 of 7 days" };
     }
@@ -689,6 +716,9 @@ export default class Workbench extends React.Component {
       goDecision: this.goDecision, goActivity: this.goActivity,
       srcVersion: "EXACT VERSION VERIFIED", srcCols: this.at("reconstructed") ? "260px 1fr" : "1fr 1fr",
       openSourceInvoice: this.openSourceInvoice, openSourceTariff: this.openSourceTariff,
+      // LIVE: real link to the retained PDF (exact S3 version). MOCK: null → the
+      // in-app drawer opens instead (click-audit unchanged).
+      sourceUrl: this.live ? (this.sourceUrl || null) : null,
       claimsLabel: claimVals ? "EXTRACTED CLAIMS" : "EXTRACTING CLAIMS…", claims,
       timeline: tl, timelineEmpty: tl.length === 0, timelineCount: tl.length ? tl.length + " of 9 events" : "",
       days, coverageLine: P
@@ -703,6 +733,11 @@ export default class Workbench extends React.Component {
       showApprove: P
         ? !!(P.rec && P.rec.recommendation_type === "DISPUTE" && P.rec.state === "FROZEN")
         : st.wb === "recommendation",
+      // Approve CTA label: LIVE reads the exact disputed amount from the frozen
+      // recommendation; MOCK keeps "$700".
+      approveLabel: (P && P.rec && P.rec.recommendation_type === "DISPUTE" && P.rec.disputed_amount_minor != null)
+        ? "Approve " + money(P.rec.disputed_amount_minor) + " dispute"
+        : (P ? "Approve dispute" : "Approve $700 dispute"),
       approveDispute: this.approveDispute, closeDay: this.closeDay, noop: this.noop,
       showSeal: ["approved","sealing","readyToSend","correspondence"].includes(st.wb),
       sealSteps: this.sealSteps(),
@@ -1050,7 +1085,9 @@ export default class Workbench extends React.Component {
                     <span style={css("font-family: 'IBM Plex Mono',monospace; font-size: 8.5px; font-weight: 600; letter-spacing: 0.05em; border-radius: 5px; padding: 3px 8px; background: #ECEFF1; color: #40515C;")}>FROM INVOICE</span>
                     <span style={css("font-size: 12.5px; font-weight: 600; color: #23272F;")}>Invoice source</span>
                     <span style={css("font-family: 'IBM Plex Mono',monospace; font-size: 9.5px; color: #2F7752; margin-left: auto;")}>{wb.srcVersion}</span>
-                    <a href="#" onClick={v.openSourceInvoice} style={css("font-size: 11.5px;")}>View full source →</a>
+                    {wb.sourceUrl
+                      ? <a href={wb.sourceUrl} target="_blank" rel="noopener noreferrer" style={css("font-size: 11.5px;")}>View retained PDF →</a>
+                      : <a href="#" onClick={v.openSourceInvoice} style={css("font-size: 11.5px;")}>View full source →</a>}
                     <button onClick={wb.toggleSource} aria-expanded={wb.openSource} style={css("display:flex; align-items:center; gap:5px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#6F7883; background:#FCFBF8; border:1px solid #DED6C7; border-radius:6px; padding:4px 9px; cursor:pointer;")}>{wb.srcChev} {wb.srcDiscLabel}</button>
                   </div>
                   <div style={css("font-size: 11.5px; color: #6F7883; margin-top: 4px;")}>{wb.srcCaption}</div>
@@ -1259,11 +1296,7 @@ export default class Workbench extends React.Component {
                     <div style={css("margin-top: 12px; font-size: 11.5px; color: #6F7883; line-height: 1.5;")}>{wb.recon.coverageLine}</div>
                     {wb.showApprove && (<>
                       <div style={css("margin-top: 12px; padding: 11px 13px; background: #FBF6EE; border: 1px solid #E6D6AE; border-radius: 8px; font-size: 12px; color: #40515C; line-height: 1.5;")}>Tally completed the analysis. Your approval authorizes this financial judgment.<div style={css("font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:0.06em; color:#8A7A50; margin-top:6px;")}>HUMAN AUTHORIZATION REQUIRED</div></div>
-                      <button onClick={v.approveDispute} style={css("margin-top: 12px; width: 100%; font-size: 14px; font-weight: 600; color: #F5F0E7; background: #1D2A33; border: none; border-radius: 8px; padding: 12px; cursor: pointer;")}>Approve $700 dispute</button>
-                      <div style={css("display: flex; gap: 8px; margin-top: 8px;")}>
-                        <button onClick={v.closeDay} style={css("flex:1; font-size: 11.5px; font-weight: 600; color: #23272F; background: #F3EEE3; border: 1px solid #DED6C7; border-radius: 7px; padding: 8px; cursor: pointer;")}>Modify judgment</button>
-                        <button onClick={v.noop} style={css("flex:1; font-size: 11.5px; font-weight: 600; color: #23272F; background: #FCFBF8; border: 1px solid #C9D0D6; border-radius: 7px; padding: 8px; cursor: pointer;")}>Request evidence</button>
-                      </div>
+                      <button onClick={v.approveDispute} style={css("margin-top: 12px; width: 100%; font-size: 14px; font-weight: 600; color: #F5F0E7; background: #1D2A33; border: none; border-radius: 8px; padding: 12px; cursor: pointer;")}>{wb.approveLabel}</button>
                     </>)}
                     {wb.showSeal && (<div style={css("margin-top: 12px; display: flex; flex-direction: column; gap: 6px;")}>{wb.sealSteps.map((s, i) => (<div key={i} style={S("display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Mono',monospace; font-size: 11px;", { color: s.color })}><span>{s.icon}</span>{s.label}</div>))}</div>)}
                     {wb.showSendBtn && (<div style={css("margin-top: 12px; font-size: 11.5px; color: #6F7883; line-height: 1.5;")}>Decision sealed. Review and send the adjustment request below.</div>)}

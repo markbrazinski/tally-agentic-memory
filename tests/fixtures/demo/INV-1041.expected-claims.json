@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "classification": "SYNTHETIC DEMO — FICTIONAL DATA",
+  "invoice_number": "INV-1041",
+  "container_number": "OOLU-840112-5",
+  "bill_of_lading": "OAK-33108",
+  "charge_type": "DEMURRAGE",
+  "charge_period": {
+    "start": "2026-05-04",
+    "end": "2026-05-09"
+  },
+  "charged_days": 6,
+  "daily_rate": {
+    "amount_minor": 9000,
+    "currency": "USD"
+  },
+  "total": {
+    "amount_minor": 54000,
+    "currency": "USD"
+  },
+  "issued_date": "2026-05-18"
+}
