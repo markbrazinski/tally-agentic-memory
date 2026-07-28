@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
-# One command to make the two pre-existing queue rows real on the isolated judge
-# lane, then read back live state. Mirrors run_acceptance.sh's SSM/profile wiring.
+# One command to seed the two pre-existing queue rows on the isolated judge lane,
+# then read back live state. Mirrors run_acceptance.sh's SSM/profile wiring.
 #
 #   scripts/prep_demo_v3_rows.sh
 #
-# - INV-1047: import its PDF through the deployed intake API + seed its memory,
-#   so the deployed workers resolve the genuine NEEDS_EVIDENCE ($875) refusal.
-# - INV-1041: drive the real engine + real Gate-5 approve_and_seal so the queue
-#   shows a genuine sealed APPROVED FOR PAYMENT ($540) "done by a person before".
-# Ends by asserting the live projection == intent (via demo_v3_prep's read-back).
+# Both rows are seeded DIRECTLY through the real engine (not the deployed workers,
+# which are hero-hardwired to $250/USOAK/DRY):
+# - INV-1047: engine → REQUEST_EVIDENCE (no verified rule) → NEEDS_EVIDENCE ($875),
+#   reason "Governing tariff not verified". A refusal authorizes no action; no seal.
+# - INV-1041: engine → APPROVE_FOR_PAYMENT (0 discrepancy) → real Gate-5
+#   approve_and_seal → APPROVED FOR PAYMENT ($540), a genuine sealed historical
+#   approval "done by a person before".
+# demo_v3_prep ends by asserting the live projection == intent for both.
+#
+# NOTE: the seals contend with the deployed intake worker loop. If a run fails
+# with RETRY_SERIALIZABLE even after the built-in retries, briefly set
+# TALLY_INTAKE_WORKER_ENABLED=false on the App Runner service, re-run, then
+# re-enable it.
 set -euo pipefail
 
 PROFILE="${AWS_PROFILE:-gate5-deployer}"
@@ -21,24 +29,6 @@ get() { aws ssm get-parameter --name "$1" --with-decryption --profile "$PROFILE"
 
 export TALLY_CRDB_DSN="$(get /tally/intake-v1/crdb-dsn)"
 export TALLY_TENANT_ID="$TENANT"
-# Mutating routes use bearer auth (src/platform/auth.py), not a login cookie.
-TOKEN="$(get /tally/intake-v1/demo-token)"
-ARN="$(aws apprunner list-services --profile "$PROFILE" --region "$REGION" \
-        --query "ServiceSummaryList[?ServiceName=='tally-intake-v1'].ServiceArn|[0]" --output text)"
-URL="https://$(aws apprunner describe-service --profile "$PROFILE" --region "$REGION" \
-        --service-arn "$ARN" --query 'Service.ServiceUrl' --output text)"
 
-echo "== import INV-1047.pdf (real intake → genuine NEEDS EVIDENCE refusal) =="
-INV1047="$(curl -s -X POST "$URL/api/demo/invoices" \
-        -H "Authorization: Bearer $TOKEN" \
-        -H "Idempotency-Key: prep-1047-$(date +%s)-$RANDOM" \
-        -F "file=@tests/fixtures/demo/INV-1047.pdf;type=application/pdf" \
-        -F "demo_scenario=locked-inv-1047" -F "import_source=operator_import" \
-      | $PY -c "import sys,json;print((json.load(sys.stdin).get('invoice') or {}).get('invoice_id',''))" || true)"
-# NOTE: if this prints empty, INV-1047 needs adding to ALLOWED_SCENARIOS in
-# intake_api.py + a redeploy (see the hand-off notes). The seal-drive below is
-# independent and still runs.
-echo "   INV-1047 invoice_id=${INV1047:-<pending — see notes>}"
-
-echo "== drive INV-1041 through real engine + real Gate-5 seal, + read back both =="
+echo "== seed INV-1047 refusal + INV-1041 sealed approval, then read back =="
 exec $PY -m scripts.demo_v3_prep
