@@ -51,7 +51,14 @@ SOURCE_CONFIG="$(jq -n \
         # be in the deploy block or a redeploy regresses reconstruction to
         # KeyError: 'TALLY_OAUTH_TOKEN_PARAMETER'.
         TALLY_OAUTH_TOKEN_PARAMETER:"/tally/gate5/oauth-token-bundle",
-        TALLY_OAUTH_REFRESH_LEASE_TABLE:"tally-gate5-oauth-refresh-lease"
+        TALLY_OAUTH_REFRESH_LEASE_TABLE:"tally-gate5-oauth-refresh-lease",
+        # Managed MCP scope (reconstruction reads these too; absent → the worker
+        # dies with MCPPermissionError "missing ... cluster_id, database", which
+        # surfaces confusingly as MCP_UNAUTHORIZED). service_identity +
+        # permission_mode are hardcoded for the OAuth runtime path, so only the
+        # cluster + database need to be in env.
+        TALLY_MCP_CLUSTER_ID:"51445757-7351-4f55-b545-1bc84a4f6a55",
+        TALLY_MCP_DATABASE:"tally_intake_deployed_20260723"
       }
     }
   },

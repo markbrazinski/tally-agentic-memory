@@ -13,8 +13,12 @@ ACCOUNT="$(aws sts get-caller-identity --profile "$PROFILE" --query Account --ou
 
 FN="tally-oauth-refresh-canary"
 ROLE="tally-oauth-canary-role"
+# The access token lives ~60 min, so the refresh MUST fire more often than that
+# or it lapses for the rest of the hour (the 4h rate left it dead ~75% of the
+# time). 45 min keeps a valid token continuously. Resource name kept for
+# idempotent re-deploys (it is just a label, not the interval).
 SCHEDULE="tally-oauth-canary-4h"
-RATE="rate(4 hours)"
+RATE="rate(45 minutes)"
 
 OAUTH_PARAM="/tally/gate5/oauth-token-bundle"
 LEASE_TABLE="tally-gate5-oauth-refresh-lease"

@@ -17,8 +17,10 @@ BRANCH="authority-transition-v1"
 
 FN="tally-oauth-refresh-canary"
 ROLE="tally-oauth-canary-role"
+# Access token lives ~60 min → refresh must fire more often or it lapses for the
+# rest of the hour (4h left it dead ~75% of the time). 45 min keeps it live.
 SCHEDULE="tally-oauth-canary-4h"
-RATE="rate(4 hours)"
+RATE="rate(45 minutes)"
 OAUTH_PARAM="/tally/gate5/oauth-token-bundle"
 LEASE_TABLE="tally-gate5-oauth-refresh-lease"
 OAUTH_PARAM_ARN="arn:aws:ssm:${REGION}:${ACCOUNT}:parameter${OAUTH_PARAM}"
@@ -93,7 +95,7 @@ echo "    schedule=$LIVE_RATE state=$LIVE_STATE target=$LIVE_TARGET"
 [ "$LIVE_RATE" = "$RATE" ] && [ "$LIVE_STATE" = "ENABLED" ] && [ "$LIVE_TARGET" = "$FN_ARN" ] \
   && echo "READ-BACK OK" || { echo "READ-BACK FAIL"; exit 1; }
 echo ""
-echo "DONE. The canary fires every 4h. It is not 'shipped' until an unattended"
+echo "DONE. The canary fires every 45 min. It is not 'shipped' until an unattended"
 echo "fire is observed in CloudWatch (/aws/lambda/${FN}). If step 5 returned an"
 echo "oauth_refresh_failed error, the token is currently dead — re-mint once via"
 echo "the interactive bootstrap and the next fire will take over."
