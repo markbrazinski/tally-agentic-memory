@@ -123,6 +123,8 @@ function normalizeQueueRow(inv) {
     disputedMinor: inv.disputed_amount_minor ?? rec.disputed_amount_minor ?? null,
     aggregateStatus: status,
     recommendationType: inv.recommendation_type || rec.recommendation_type || null,
+    // Why NEEDS EVIDENCE is unresolved, shown as the queue-row outcome detail.
+    unresolvedReason: inv.unresolved_reason ?? rec.unresolved_reason ?? null,
     receivedAt: inv.received_at || null,
   };
 }

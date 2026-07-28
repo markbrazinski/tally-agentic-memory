@@ -1,5 +1,5 @@
 import React from "react";
-import { nextWb } from "./api/eventMap.js";
+import { nextWb, STATUS_LABEL } from "./api/eventMap.js";
 
 // Invoice ids arrive in two forms (INV-TLY-1048 vs a uuid); match loosely by
 // the trailing invoice number so the display id and the server id line up.
@@ -16,6 +16,12 @@ function sameInvoice(a, b) {
 function isHeroRow(r) {
   const hay = `${(r && r.invoiceId) || ""} ${(r && r.name) || ""}`;
   return /1048/.test(hay);
+}
+
+// Minor-unit integer (70000) -> display dollars ("$700"), thousands-grouped.
+// ponytail: whole-dollar display only — the design never shows cents in these slots.
+function money(minor) {
+  return "$" + Math.round(minor / 100).toLocaleString("en-US");
 }
 
 /* ------------------------------------------------------------------ *
@@ -270,17 +276,19 @@ export default class Workbench extends React.Component {
       this.forceUpdate();
       return;
     }
-    // Show the approving/sealing transition immediately (optimistic UI).
+    // Show the human's approval immediately (their action just landed), then let
+    // the SERVER decide the seal state — no timers author sealing/ready. The
+    // awaited approve() performs approve+seal atomically; its resolution IS the
+    // server confirming the seal, and SSE `decision.sealed` reconciles wb too.
     this.setState({ wb: "approved", dayOpen: false, sealStep: 1 });
     try {
       const key = `approve-${this.state.invoiceId}-${this.recommendation.id}`;
       await this.provider.approve(
         this.state.invoiceId, this.recommendation.id, this.recommendation.etag, key,
       );
-      // The one atomic call performs approval + seal server-side.
-      this.setState({ wb: "sealing", sealStep: 2 });
-      this.later(() => this.setState({ wb: "readyToSend", sealStep: 3 }), 500);
-      this.later(() => this.setState({ wb: "correspondence" }), 1100);
+      // Sealed per the atomic server response; reveal the composer. sealStep 3
+      // reflects the completed seal, not a timed animation step.
+      this.setState({ wb: "correspondence", sealStep: 3 });
     } catch (e) {
       // Fail closed: surface the block, do not pretend it sealed.
       // eslint-disable-next-line no-console
@@ -291,6 +299,11 @@ export default class Workbench extends React.Component {
   }
   approveSend() {
     this.clearTimers();
+    // LIVE: show the send-gate as verifying, then let the SERVER decide the
+    // outcome. correspondence.sent -> "sent" (disputed), correspondence.send_blocked
+    // -> "sending" + gateBlocked, both via SSE/eventMap. No timer authors the send
+    // result or the gate checks (v3: motion may not create/pace business state).
+    if (this.live) { this.setState({ wb: "sending", gateStep: 0, gateBlocked: false }); return; }
     // The controlled external send is intentionally paused for the demo; the
     // send-gate is backed by the real seal. Advance through the gate visual.
     this.setState({ wb: "sending", gateStep: 0 });
@@ -364,13 +377,45 @@ export default class Workbench extends React.Component {
       const heroRow = this.live && this.liveQueue
         ? this.liveQueue.find(isHeroRow)
         : null;
-      const st1048 = disputed ? "DISPUTED" : view === "workbench" ? sm.status : "RECEIVED";
-      const kind1048 = disputed ? "contested" : view === "workbench" ? sm.kind : "neutral";
-      const working = view === "workbench" && !disputed && ["INITIAL PROCESSING","RECONSTRUCTING"].includes(sm.status);
+      // LIVE: the queue row's status/kind is the server aggregate_status — the
+      // close-out DISPUTED is the backend's, not the client `disputed` timer flag.
+      const heroMeta = heroRow ? (STATUS_LABEL[heroRow.aggregateStatus] || { status: heroRow.aggregateStatus, kind: "neutral" }) : null;
+      const heroDisputed_ = heroMeta ? heroMeta.status === "DISPUTED" : disputed;
+      const st1048 = heroMeta ? (view === "workbench" && !heroDisputed_ ? sm.status : heroMeta.status)
+        : (disputed ? "DISPUTED" : view === "workbench" ? sm.status : "RECEIVED");
+      const kind1048 = heroMeta ? (view === "workbench" && !heroDisputed_ ? sm.kind : heroMeta.kind)
+        : (disputed ? "contested" : view === "workbench" ? sm.kind : "neutral");
+      const disputedRow = heroMeta ? heroDisputed_ : disputed;
+      const working = view === "workbench" && !disputedRow && ["INITIAL PROCESSING","RECONSTRUCTING"].includes(sm.status);
       const heroId = heroRow ? heroRow.invoiceId : "INV-TLY-1048";
-      rows.push({ name: "INV-1048.pdf", sub: "Demurrage · Jun 8–14", container: "TLLU-482931-7", status: st1048, ...this._q(kind1048), amount: disputed ? "$700" : "$2,450", chevron: "›", cursor: "pointer", rowBg: disputed ? "transparent" : "#FBF6EE", nameColor: "#23272F", amountColor: disputed ? "#B4513F" : "#23272F", onOpen: () => this.openInvoice(heroId), anim: view === "queue" ? "tly-row-in" : "", workDot: working ? "" : "display:none;" });
+      // Amount ALWAYS the carrier invoice total (v3: never swap to the $700
+      // dispute). LIVE: read the total from the queue projection; the disputed
+      // amount lives in the outcome DETAIL, not the amount column.
+      const heroTotal = heroRow && heroRow.amountMinor != null
+        ? money(heroRow.amountMinor) : "$2,450";
+      const heroDisputed = heroRow && heroRow.disputedMinor != null
+        ? money(heroRow.disputedMinor) : "$700";
+      const heroSub = disputedRow
+        ? "Demurrage · Jun 8–14 · Disputed " + heroDisputed
+        : "Demurrage · Jun 8–14";
+      rows.push({ name: "INV-1048.pdf", sub: heroSub, container: "TLLU-482931-7", status: st1048, ...this._q(kind1048), amount: heroTotal, chevron: "›", cursor: "pointer", rowBg: disputedRow ? "transparent" : "#FBF6EE", nameColor: "#23272F", amountColor: disputedRow ? "#B4513F" : "#23272F", onOpen: () => this.openInvoice(heroId), anim: view === "queue" ? "tly-row-in" : "", workDot: working ? "" : "display:none;" });
     }
-    if (disputed) {
+    // The second invoice is a persisted refusal row. LIVE: read it straight from
+    // the queue projection — INV-1047, invoice total $875, status NEEDS EVIDENCE,
+    // detail = its unresolved reason. It authorizes NO financial action, so it is
+    // never clickable into a disposition (v3: do not open/recover it here). The
+    // mock scene keeps its original INV-1050 READY-FOR-REVIEW narrative so the
+    // click-audit fixture is unchanged.
+    if (this.live) {
+      const refusal = (this.liveQueue || []).find(
+        (r) => !isHeroRow(r) && !/1041|1039/.test(String(r.invoiceId) + " " + String(r.name)),
+      );
+      if (refusal) {
+        const meta = STATUS_LABEL[refusal.aggregateStatus] || { status: refusal.aggregateStatus, kind: "checking" };
+        const detail = refusal.unresolvedReason || "Governing tariff not verified";
+        rows.push({ name: refusal.name || "INV-1047.pdf", sub: "Demurrage · " + detail, container: refusal.container || "—", status: meta.status, ...this._q(meta.kind), amount: refusal.amountMinor != null ? money(refusal.amountMinor) : "$875", chevron: "›", cursor: "default", rowBg: "transparent", nameColor: "#23272F", amountColor: "#23272F", onOpen: this.noop, anim: "tly-row-in", workDot: "display:none;" });
+      }
+    } else if (disputed) {
       const done = st.inv1050 === "done";
       rows.push({ name: "INV-1050.pdf", sub: "Demurrage · Jun 5–11", container: "HLXU-223874-9", status: done ? "APPROVED FOR PAYMENT" : "READY FOR REVIEW", ...this._q(done ? "verified" : "neutral"), amount: "$875", chevron: "›", cursor: "pointer", rowBg: done ? "transparent" : "#FBF6EE", nameColor: "#23272F", amountColor: done ? "#2F7752" : "#23272F", onOpen: this.openInv1050, anim: "tly-row-in", workDot: "display:none;" });
     }
@@ -450,11 +495,20 @@ export default class Workbench extends React.Component {
     const ruleDone = this.at("ruleVerified");
     const recReady = this.at("recommendation") && !insuf;
     const claimVals = this.at("reconstructing") || insuf;
+    // LIVE: the numeric carrier claims (rate/day, charged days, total) come from
+    // the projection — a charged day's invoice rate and the recommendation's
+    // claimed total. Charge type, B/L, and issue date are invoice metadata not
+    // carried on the reconstruction projection (TODO: expose on the invoice
+    // projection to source live) — literal for now. MOCK keeps all literals.
+    const cdRate = P && this.recon ? (this.recon.charged_days || []).find((d) => d.invoice_rate_minor != null) : null;
+    const claimRate = cdRate ? money(cdRate.invoice_rate_minor) + "/day" : "$350/day";
+    const claimDays = P && P.rec && P.rec.days_total != null ? String(P.rec.days_total) : (P ? String(P.cov.days_total) : "7");
+    const claimTotal = P && P.rec && P.rec.claimed_amount_minor != null ? money(P.rec.claimed_amount_minor) : "$2,450";
     const claims = [
       { label: "Charge type", value: "Demurrage", color: "#23272F", opacity: claimVals ? 1 : 0.35 },
-      { label: "Rate", value: "$350/day", color: "#A9823C", opacity: claimVals ? 1 : 0.35 },
-      { label: "Charged days", value: "7", color: "#23272F", opacity: claimVals ? 1 : 0.35 },
-      { label: "Total", value: "$2,450", color: "#A9823C", opacity: claimVals ? 1 : 0.35 },
+      { label: "Rate", value: claimRate, color: "#A9823C", opacity: claimVals ? 1 : 0.35 },
+      { label: "Charged days", value: claimDays, color: "#23272F", opacity: claimVals ? 1 : 0.35 },
+      { label: "Total", value: claimTotal, color: "#A9823C", opacity: claimVals ? 1 : 0.35 },
       { label: "B/L", value: "OAK-77421", color: "#23272F", opacity: claimVals ? 1 : 0.35 },
       { label: "Issued", value: "Jun 22", color: "#23272F", opacity: claimVals ? 1 : 0.35 },
     ];
@@ -475,28 +529,30 @@ export default class Workbench extends React.Component {
       // gap, the coverage state, and the per-day discrepancy are the server's —
       // not badGap=ix===2 or a wb-rank guess.
       const pd = P ? P.byDate[n] : null;
-      let outcome, outBg, outFg, coverage, covFg, rule, ruleColor, access, disc, discColor;
+      // ponytail: `access` removed with the ledger's ACCESS column (v3: no per-day
+      // access heartbeat). Branches below no longer assign it.
+      let outcome, outBg, outFg, coverage, covFg, rule, ruleColor, disc, discColor;
       disc = ""; discColor = "#B4513F";
       if (pd) {
         const complete = pd.state === "SOURCE_COMPLETE";
         const gap = pd.coverage === "MISSING" || pd.state === "INSUFFICIENT_EVIDENCE";
         const hasRate = pd.applicable_rate_minor != null;
         const discrep = pd.dispute_amount_minor != null && pd.dispute_amount_minor > 0;
-        if (gap) { outcome = "INSUFFICIENT EVIDENCE"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE GAP"; covFg = "#B4513F"; rule = "—"; ruleColor = "#B7AE9C"; access = "no record"; disc = "—"; discColor = "#B7AE9C"; }
-        else if (discrep) { outcome = "RATE DISCREPANCY"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "$" + (pd.applicable_rate_minor / 100).toFixed(0); ruleColor = "#2F7752"; access = "available"; disc = "−$" + (pd.dispute_amount_minor / 100).toFixed(0); }
-        else if (complete && hasRate) { outcome = "SUPPORTED"; outBg = "#E4EEE7"; outFg = "#2F7752"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "$" + (pd.applicable_rate_minor / 100).toFixed(0); ruleColor = "#2F7752"; access = "available"; disc = "$0"; discColor = "#2F7752"; }
-        else if (complete) { outcome = "SOURCE COMPLETE"; outBg = "#E4EEE7"; outFg = "#2F7752"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "verifying"; ruleColor = "#8A7A50"; access = "available"; disc = "…"; discColor = "#8A7A50"; }
-        else { outcome = "UNRESOLVED"; outBg = "#ECEFF1"; outFg = "#40515C"; coverage = "—"; covFg = "#B7AE9C"; rule = "—"; ruleColor = "#B7AE9C"; access = "—"; disc = "—"; discColor = "#B7AE9C"; }
-        return { date: "Jun " + n, claim: "$350", access, rule, ruleColor, outcome, outBg, outFg, coverage, covFg, disc, discColor, rowBg: st.drawer === "day" && st.dayIx === ix ? "#FBF6EE" : "transparent", onOpen: this.openDayDrawer.bind(this, ix) };
+        if (gap) { outcome = "INSUFFICIENT EVIDENCE"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE GAP"; covFg = "#B4513F"; rule = "—"; ruleColor = "#B7AE9C"; disc = "—"; discColor = "#B7AE9C"; }
+        else if (discrep) { outcome = "RATE DISCREPANCY"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "$" + (pd.applicable_rate_minor / 100).toFixed(0); ruleColor = "#2F7752"; disc = "−$" + (pd.dispute_amount_minor / 100).toFixed(0); }
+        else if (complete && hasRate) { outcome = "SUPPORTED"; outBg = "#E4EEE7"; outFg = "#2F7752"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "$" + (pd.applicable_rate_minor / 100).toFixed(0); ruleColor = "#2F7752"; disc = "$0"; discColor = "#2F7752"; }
+        else if (complete) { outcome = "SOURCE COMPLETE"; outBg = "#E4EEE7"; outFg = "#2F7752"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "verifying"; ruleColor = "#8A7A50"; disc = "…"; discColor = "#8A7A50"; }
+        else { outcome = "UNRESOLVED"; outBg = "#ECEFF1"; outFg = "#40515C"; coverage = "—"; covFg = "#B7AE9C"; rule = "—"; ruleColor = "#B7AE9C"; disc = "—"; discColor = "#B7AE9C"; }
+        return { date: "Jun " + n, claim: "$350", rule, ruleColor, outcome, outBg, outFg, coverage, covFg, disc, discColor, rowBg: st.drawer === "day" && st.dayIx === ix ? "#FBF6EE" : "transparent", onOpen: this.openDayDrawer.bind(this, ix) };
       }
       // MOCK/non-live scene: unchanged prototype rendering.
       const badGap = insuf && ix === 2;
-      if (badGap) { outcome = "INSUFFICIENT EVIDENCE"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE GAP"; covFg = "#B4513F"; rule = "—"; ruleColor = "#B7AE9C"; access = "no record"; disc = "—"; discColor = "#B7AE9C"; }
-      else if (ruleDone) { outcome = "RATE DISCREPANCY"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "$250"; ruleColor = "#2F7752"; access = "available"; disc = "−$100"; }
-      else if (reconDone) { outcome = "SOURCE COMPLETE"; outBg = "#E4EEE7"; outFg = "#2F7752"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "verifying"; ruleColor = "#8A7A50"; access = "available"; disc = "…"; discColor = "#8A7A50"; }
-      else if (this.at("reconstructing")) { outcome = "SOURCING"; outBg = "#F3EAD3"; outFg = "#8A7A50"; coverage = "sourcing…"; covFg = "#8A7A50"; rule = "—"; ruleColor = "#B7AE9C"; access = "…"; disc = "—"; discColor = "#B7AE9C"; }
-      else { outcome = "UNRESOLVED"; outBg = "#ECEFF1"; outFg = "#40515C"; coverage = "—"; covFg = "#B7AE9C"; rule = "—"; ruleColor = "#B7AE9C"; access = "—"; disc = "—"; discColor = "#B7AE9C"; }
-      return { date: "Jun " + n, claim: "$350", access, rule, ruleColor, outcome, outBg, outFg, coverage, covFg, disc, discColor, rowBg: st.drawer === "day" && st.dayIx === ix ? "#FBF6EE" : "transparent", onOpen: this.openDayDrawer.bind(this, ix) };
+      if (badGap) { outcome = "INSUFFICIENT EVIDENCE"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE GAP"; covFg = "#B4513F"; rule = "—"; ruleColor = "#B7AE9C"; disc = "—"; discColor = "#B7AE9C"; }
+      else if (ruleDone) { outcome = "RATE DISCREPANCY"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "$250"; ruleColor = "#2F7752"; disc = "−$100"; }
+      else if (reconDone) { outcome = "SOURCE COMPLETE"; outBg = "#E4EEE7"; outFg = "#2F7752"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "verifying"; ruleColor = "#8A7A50"; disc = "…"; discColor = "#8A7A50"; }
+      else if (this.at("reconstructing")) { outcome = "SOURCING"; outBg = "#F3EAD3"; outFg = "#8A7A50"; coverage = "sourcing…"; covFg = "#8A7A50"; rule = "—"; ruleColor = "#B7AE9C"; disc = "—"; discColor = "#B7AE9C"; }
+      else { outcome = "UNRESOLVED"; outBg = "#ECEFF1"; outFg = "#40515C"; coverage = "—"; covFg = "#B7AE9C"; rule = "—"; ruleColor = "#B7AE9C"; disc = "—"; discColor = "#B7AE9C"; }
+      return { date: "Jun " + n, claim: "$350", rule, ruleColor, outcome, outBg, outFg, coverage, covFg, disc, discColor, rowBg: st.drawer === "day" && st.dayIx === ix ? "#FBF6EE" : "transparent", onOpen: this.openDayDrawer.bind(this, ix) };
     });
 
     const A = (name, task, tool, output, state) => {
@@ -525,11 +581,16 @@ export default class Workbench extends React.Component {
 
     const showComposer = rk >= this.rank("correspondence") && !insuf;
     const sendPhase = ["correspondence","sending","sent"].indexOf(st.wb) >= 0;
+    // LIVE: chip values from the projection. v3 forbids fixed/narrated event
+    // counts, so the live chips drop the "6 claims"/"9 events" literals and show
+    // the projection's day count and rates instead. MOCK keeps the literals.
+    const ruleRate = P && this.recon && this.recon.applicable_rule && this.recon.applicable_rule.rate_minor != null
+      ? money(this.recon.applicable_rule.rate_minor) + " / day" : "$250 / day";
     const contextChips = [
-      { label: "Invoice source", val: "$2,450 · 6 claims", on: this.openSourceInvoice },
-      { label: "Reconstruction", val: "9 events · 7 days", on: this.openDayDrawer.bind(this, 2) },
-      { label: "Applicable tariff", val: "$250 / day", on: this.openSourceTariff },
-      { label: "Decision", val: (P && P.rec && P.rec.recommendation_type === "DISPUTE" ? "DISPUTE $" + (P.rec.disputed_amount_minor / 100).toFixed(0) : P && P.rec ? "REQUEST EVIDENCE" : "DISPUTE $700"), on: this.goDecision },
+      { label: "Invoice source", val: P ? claimTotal + " claimed" : "$2,450 · 6 claims", on: this.openSourceInvoice },
+      { label: "Reconstruction", val: P ? claimDays + " charged days" : "9 events · 7 days", on: this.openDayDrawer.bind(this, 2) },
+      { label: "Applicable tariff", val: ruleRate, on: this.openSourceTariff },
+      { label: "Decision", val: (P && P.rec && P.rec.recommendation_type === "DISPUTE" ? "DISPUTE " + money(P.rec.disputed_amount_minor) : P && P.rec ? "REQUEST EVIDENCE" : "DISPUTE $700"), on: this.goDecision },
     ];
     const showGate = st.wb === "sending";
     const showSent = st.wb === "sent";
@@ -542,6 +603,27 @@ export default class Workbench extends React.Component {
       : null;
     if (insuf) { recHead = "REQUEST EVIDENCE"; recColor = "#8A7A50"; recBg = "#FBF6EE"; recBorder = "#E6D6AE"; }
     else { recHead = liveDispute || "DISPUTE $700"; recColor = "#B4513F"; recBg = "#FCFBF8"; recBorder = (P && P.rec ? P.rec.state === "FROZEN" : st.wb === "recommendation") ? "#C8A955" : "#DED6C7"; }
+
+    // Rail reconciliation math. LIVE: every figure is the server's — claimed,
+    // supported, disputed totals from the recommendation revision; coverage
+    // counts from the coverage projection; per-day rates from a charged day.
+    // MOCK/non-live keeps the locked literals so the prototype narrative holds.
+    let recon;
+    if (P && P.rec) {
+      const rec = P.rec;
+      const days = rec.days_total != null ? rec.days_total : (P.cov.days_total || 7);
+      const anyDay = (this.recon.charged_days || []).find((d) => d.invoice_rate_minor != null) || null;
+      const invRate = anyDay ? anyDay.invoice_rate_minor : (rec.claimed_amount_minor != null && days ? rec.claimed_amount_minor / days : null);
+      const appRate = anyDay && anyDay.applicable_rate_minor != null ? anyDay.applicable_rate_minor : (rec.supported_amount_minor != null && days ? rec.supported_amount_minor / days : null);
+      recon = {
+        carrierLine: invRate != null ? `${days} × ${money(invRate)} = ${money(rec.claimed_amount_minor)}` : money(rec.claimed_amount_minor),
+        tariffLine: appRate != null ? `${days} × ${money(appRate)} = ${money(rec.supported_amount_minor)}` : money(rec.supported_amount_minor),
+        difference: rec.disputed_amount_minor != null ? money(rec.disputed_amount_minor) : "$0",
+        coverageLine: `Evidence coverage ${P.cov.days_complete} of ${P.cov.days_total} days`,
+      };
+    } else {
+      recon = { carrierLine: "7 × $350 = $2,450", tariffLine: "7 × $250 = $1,750", difference: "$700", coverageLine: "Evidence coverage 7 of 7 days" };
+    }
 
     const pnode = (name, tool, state) => {
       const map = { complete: { dot: "#2F7752", bg: "#E4EEE7", border: "#B9D3C4", nameColor: "#23272F", pulse: "" }, working: { dot: "#C8A955", bg: "#FBF6EE", border: "#E6D6AE", nameColor: "#23272F", pulse: "tly-work" }, blocked: { dot: "#B4513F", bg: "#F2E1DC", border: "#E3B3A8", nameColor: "#23272F", pulse: "" }, waiting: { dot: "#C9D0D6", bg: "#FCFBF8", border: "#DED6C7", nameColor: "#8A96A0", pulse: "" } };
@@ -615,7 +697,7 @@ export default class Workbench extends React.Component {
       dayOpen: st.dayOpen, day: dayDetail,
       agents,
       showRec: P ? !!P.rec : (recReady || insuf),
-      recHead, recColor, recBg, recBorder,
+      recHead, recColor, recBg, recBorder, recon,
       // Delta §3.6: the financial CTA appears ONLY for a complete DISPUTE
       // recommendation (rev2). REQUEST_EVIDENCE (rev1) never enables approval.
       showApprove: P
@@ -632,6 +714,13 @@ export default class Workbench extends React.Component {
       showGate, gateTitle: st.gateBlocked ? "SEND BLOCKED · MEMORY" : "VERIFYING SEND GATES", gateBorder: st.gateBlocked ? "#B4513F" : "#DED6C7",
       gateChecks, gateBlocked: st.gateBlocked, retrySend: this.retrySend,
       showSent,
+      // The controlled-provider message id is a SERVER send-projection field. It
+      // is not wired on the frontend provider yet (backend send wiring is a
+      // separate in-progress task), so LIVE shows an awaiting-server placeholder
+      // rather than a fabricated id. MOCK keeps its demo id for the click-audit.
+      // TODO(backend): source from the send/correspondence.sent projection
+      // (e.g. provider.getSend(id).message_id) and render it here in live mode.
+      sentMessageId: this.scene === "live" ? null : "demo-8f2a1c",
       annotText: "ROUTE /invoices/INV-TLY-1048 (tabless) · state " + sm.status + " · dominant object: 7-day ledger · Back/refresh restore invoice + selection · progressive states are event-driven (BACKEND REQUIRED)",
     };
   }
@@ -664,7 +753,9 @@ export default class Workbench extends React.Component {
           body: "CHARGED DAY  Jun " + n + ", 2026\nInvoice rate     $350.00\nApplicable rate  —\n----------------------------\nCoverage         MISSING\n\nMissing  " + missing, bound: "Required terminal-access snapshot not yet bound" });
       }
       const refs = pd && pd.event_refs && pd.event_refs.length ? pd.event_refs.join(", ") : "free-time-end (Jun 7), gate-out (Jun 14)";
-      return mk({ kind: "day", title: "Charged day · Jun " + n, meta: [{ k: "Occurred", v: "Jun " + n + ", 2026", color: "#40515C" }, { k: "Chargeable", v: "Yes · beyond free time", color: V }, { k: "Coverage", v: "SOURCE COMPLETE", color: V }], chain: [{ k: "Free-time end", v: "Jun 7 — recorded before invoice", bg: "#E4EEE7", fg: "#2F7752" }, { k: "Availability / access", v: "Container available · movable", bg: "#E4EEE7", fg: "#2F7752" }, { k: "Invoice rate (PDF anchor)", v: "$350 / day · INV-1048 p.1 line 4", bg: "#ECEFF1", fg: "#40515C" }, { k: "Applicable tariff", v: "$250 / day · eff. Jun 1 · exact-version verified", bg: "#FBF1D8", fg: "#A9823C" }, { k: "Daily calculation", v: "$350 − $250", bg: "#F2E1DC", fg: "#B4513F" }, { k: "Financial effect", v: "−$100 discrepancy", bg: "#F2E1DC", fg: "#B4513F" }], usedBy: [{ k: "Recommendation", v: "DISPUTE $700" }, { k: "Charged day", v: "Jun " + n + " of 7" }, { k: "Rolls into", v: "$700 supported difference" }], verification: [{ k: "Bound sources", v: refs, c: V }, { k: "Effective date", v: "VERIFIED", c: V }, { k: "Exact rate", v: "VERIFIED", c: V }, { k: "Scope", v: "VERIFIED", c: V }], body: "CHARGED DAY  Jun " + n + ", 2026\nInvoice rate     $350.00\nApplicable rate  $250.00\n----------------------------\nDiscrepancy      $100.00\n\nEvents  " + refs, bound: "$350 − $250 = $100 · RATE DISCREPANCY" });
+      // v3: derive the day from the operational interval (after free time,
+      // before gate-out) — no per-day "Container available / access" heartbeat row.
+      return mk({ kind: "day", title: "Charged day · Jun " + n, meta: [{ k: "Occurred", v: "Jun " + n + ", 2026", color: "#40515C" }, { k: "Chargeable", v: "Yes · beyond free time", color: V }, { k: "Coverage", v: "COMPLETE", color: V }], chain: [{ k: "Free time ended", v: "Jun 7 — recorded before invoice", bg: "#E4EEE7", fg: "#2F7752" }, { k: "Gate-out", v: "Jun 14 — recorded before invoice", bg: "#E4EEE7", fg: "#2F7752" }, { k: "Operational interval", v: "after free time, before gate-out", bg: "#E4EEE7", fg: "#2F7752" }, { k: "Invoice rate (PDF anchor)", v: "$350 / day · INV-1048 p.1 line 4", bg: "#ECEFF1", fg: "#40515C" }, { k: "Applicable rate", v: "$250 / day · eff. Jun 1 · exact-version verified", bg: "#FBF1D8", fg: "#A9823C" }, { k: "Daily discrepancy", v: "$350 − $250 = $100", bg: "#F2E1DC", fg: "#B4513F" }], usedBy: [{ k: "Recommendation", v: "DISPUTE $700" }, { k: "Charged day", v: "Jun " + n + " of 7" }, { k: "Rolls into", v: "$700 supported difference" }], verification: [{ k: "Bound sources", v: refs, c: V }, { k: "Effective date", v: "VERIFIED", c: V }, { k: "Exact rate", v: "VERIFIED", c: V }, { k: "Scope", v: "VERIFIED", c: V }], body: "CHARGED DAY  Jun " + n + ", 2026\nInvoice rate     $350.00\nApplicable rate  $250.00\n----------------------------\nDiscrepancy      $100.00\n\nEvents  " + refs, bound: "$350 − $250 = $100 · RATE DISCREPANCY" });
     }
     if (d === "invoice") return mk({ title: "INV-1048.pdf", meta: [{ k: "Type", v: "Carrier PDF", color: "#40515C" }, { k: "Received", v: "Jun 22, 2026", color: "#40515C" }, { k: "Exact version", v: "VERIFIED", color: V }, { k: "Affected days", v: "Jun 8–14", color: "#40515C" }], usedBy: [{ k: "Claims", v: "6 fields extracted" }, { k: "Affected days", v: "7 charged days" }, { k: "Recommendation", v: "DISPUTE $700" }], verification: [{ k: "Exact S3 version", v: "VERIFIED", c: V }, { k: "Region anchors", v: "6 linked", c: V }], body: "DEMURRAGE INVOICE\nContainer TLLU-482931-7\nB/L OAK-77421\nPeriod  Jun 8 – Jun 14, 2026\n\nRate    $350.00 / day\nDays    7\n--------------------------\nTotal   $2,450.00\n\nIssued  Jun 22, 2026", bound: "Rate $350.00/day · Total $2,450.00" });
     if (d === "tariff") return mk({ title: "Tariff · Pacific demurrage", meta: [{ k: "Effective", v: "Jun 1, 2026 →", color: "#40515C" }, { k: "Recorded", v: "before invoice", color: V }, { k: "Retrieval", v: "RETRIEVED (vector)", color: "#8A7A50" }, { k: "Applicability", v: "VERIFIED (deterministic)", color: V }], usedBy: [{ k: "Rule for", v: "all 7 charged days" }, { k: "Sets rate", v: "$250 / day" }, { k: "Recommendation", v: "DISPUTE $700" }], verification: [{ k: "Vector candidate", v: "RETRIEVED", c: "#8A7A50" }, { k: "Effective date", v: "VERIFIED", c: V }, { k: "Exact text", v: "VERIFIED", c: V }, { k: "Exact rate", v: "VERIFIED", c: V }, { k: "Scope", v: "VERIFIED", c: V }], body: "PACIFIC DEMURRAGE TARIFF\nSection 4 — Demurrage charges\n\n4.1  Free time: 96 hours from availability.\n4.2  Demurrage rate: $250 per calendar\n     day per container thereafter.\n\nEffective  2026-06-01", bound: "Demurrage rate: $250 per calendar day" });
@@ -1030,7 +1121,6 @@ export default class Workbench extends React.Component {
                       <tr style={css("font-family: 'IBM Plex Mono',monospace; font-size: 9px; letter-spacing: 0.08em; color: #8A96A0; text-align: left;")}>
                         <th scope="col" style={css("padding: 9px 16px; font-weight: 500;")}>DATE</th>
                         <th scope="col" style={css("padding: 9px 6px; font-weight: 500;")}>CLAIM</th>
-                        <th scope="col" style={css("padding: 9px 6px; font-weight: 500;")}>ACCESS</th>
                         <th scope="col" style={css("padding: 9px 6px; font-weight: 500;")}>RULE</th>
                         <th scope="col" style={css("padding: 9px 6px; font-weight: 500;")}>OUTCOME</th>
                         <th scope="col" style={css("padding: 9px 6px; font-weight: 500; text-align:right;")}>Δ / DAY</th>
@@ -1042,7 +1132,6 @@ export default class Workbench extends React.Component {
                         <tr key={i} onClick={d.onOpen} tabIndex={0} role="button" style={S("border-top: 1px solid #F1EBDD; cursor: pointer;", { background: d.rowBg })}>
                           <td style={css("padding: 10px 16px; font-family: 'IBM Plex Mono',monospace; color: #40515C;")}>{d.date}</td>
                           <td style={css("padding: 10px 6px; font-family: 'IBM Plex Mono',monospace; color: #23272F;")}>{d.claim}</td>
-                          <td style={css("padding: 10px 6px; color: #40515C;")}>{d.access}</td>
                           <td style={S("padding: 10px 6px; font-family: 'IBM Plex Mono',monospace;", { color: d.ruleColor })}>{d.rule}</td>
                           <td style={css("padding: 10px 6px;")}><span style={S("font-family: 'IBM Plex Mono',monospace; font-size: 9.5px; font-weight: 600; border-radius: 4px; padding: 3px 7px;", { background: d.outBg, color: d.outFg })}>{d.outcome}</span></td>
                           <td style={S("padding: 10px 6px; text-align:right; font-family: 'IBM Plex Mono',monospace; font-size: 12px;", { color: d.discColor })}>{d.disc}</td>
@@ -1129,7 +1218,7 @@ export default class Workbench extends React.Component {
                       <div style={css("margin-top: 14px; padding: 14px 16px; background: #E4EEE7; border: 1px solid #B9D3C4; border-radius: 8px;")}>
                         <div style={css("font-family: 'IBM Plex Mono',monospace; font-size: 10px; letter-spacing: 0.06em; color: #2F7752; font-weight: 600;")}>✓ SENT TO DEMONSTRATION INBOX</div>
                         <div style={css("margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px 20px; font-family: 'IBM Plex Mono',monospace; font-size: 11px; color: #40515C;")}>
-                          <div>Message ID &nbsp;demo-8f2a1c</div><div>Decision &nbsp;<span style={css("color:#2F7752;")}>sealed</span></div><div>Evidence &nbsp;<span style={css("color:#2F7752;")}>verified</span></div>
+                          <div>Message ID &nbsp;{wb.sentMessageId || "awaiting server…"}</div><div>Decision &nbsp;<span style={css("color:#2F7752;")}>sealed</span></div><div>Evidence &nbsp;<span style={css("color:#2F7752;")}>verified</span></div>
                         </div>
                         <div style={css("margin-top: 10px; font-size: 11px; color: #4E6A5B; line-height: 1.5;")}>Delivery acknowledgement does not indicate carrier receipt or acceptance.</div>
                       </div>
@@ -1163,11 +1252,11 @@ export default class Workbench extends React.Component {
                     <div style={css("font-family: 'IBM Plex Mono',monospace; font-size: 9.5px; letter-spacing: 0.1em; color: #8A96A0;")}>RECOMMENDATION</div>
                     <div style={css("display: flex; align-items: baseline; gap: 10px; margin-top: 8px;")}><span style={S("font-size: 22px; font-weight: 700; letter-spacing: -0.01em;", { color: wb.recColor })}>{wb.recHead}</span></div>
                     <div style={css("margin-top: 12px; display: flex; flex-direction: column; gap: 6px; font-family: 'IBM Plex Mono',monospace; font-size: 12px;")}>
-                      <div style={css("display: flex; justify-content: space-between;")}><span style={css("color:#6F7883;")}>Carrier invoice</span><span>7 × $350 = $2,450</span></div>
-                      <div style={css("display: flex; justify-content: space-between;")}><span style={css("color:#6F7883;")}>Applicable tariff</span><span>7 × $250 = $1,750</span></div>
-                      <div style={css("display: flex; justify-content: space-between; padding-top: 6px; border-top: 1px solid #EFE9DC; color:#B4513F;")}><span>Difference</span><span>$700</span></div>
+                      <div style={css("display: flex; justify-content: space-between;")}><span style={css("color:#6F7883;")}>Carrier invoice</span><span>{wb.recon.carrierLine}</span></div>
+                      <div style={css("display: flex; justify-content: space-between;")}><span style={css("color:#6F7883;")}>Applicable tariff</span><span>{wb.recon.tariffLine}</span></div>
+                      <div style={css("display: flex; justify-content: space-between; padding-top: 6px; border-top: 1px solid #EFE9DC; color:#B4513F;")}><span>Difference</span><span>{wb.recon.difference}</span></div>
                     </div>
-                    <div style={css("margin-top: 12px; font-size: 11.5px; color: #6F7883; line-height: 1.5;")}>Evidence coverage 7 of 7 days</div>
+                    <div style={css("margin-top: 12px; font-size: 11.5px; color: #6F7883; line-height: 1.5;")}>{wb.recon.coverageLine}</div>
                     {wb.showApprove && (<>
                       <div style={css("margin-top: 12px; padding: 11px 13px; background: #FBF6EE; border: 1px solid #E6D6AE; border-radius: 8px; font-size: 12px; color: #40515C; line-height: 1.5;")}>Tally completed the analysis. Your approval authorizes this financial judgment.<div style={css("font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:0.06em; color:#8A7A50; margin-top:6px;")}>HUMAN AUTHORIZATION REQUIRED</div></div>
                       <button onClick={v.approveDispute} style={css("margin-top: 12px; width: 100%; font-size: 14px; font-weight: 600; color: #F5F0E7; background: #1D2A33; border: none; border-radius: 8px; padding: 12px; cursor: pointer;")}>Approve $700 dispute</button>

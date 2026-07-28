@@ -42,6 +42,16 @@ export function createMockProvider() {
           amountMinor: 112000, aggregateStatus: "DISPUTED",
           recommendationType: "DISPUTE", receivedAt: "2026-05-28T00:00:00Z",
         },
+        {
+          // Persisted refusal row (v3): governing tariff unresolved, so no
+          // financial action is authorized. Invoice total $875 is the AMOUNT;
+          // the unresolved reason is the outcome detail.
+          invoiceId: "INV-TLY-1047", name: "INV-1047.pdf", container: "HLXU-223874-9",
+          amountMinor: 87500, aggregateStatus: "NEEDS_EVIDENCE",
+          recommendationType: "REQUEST_EVIDENCE",
+          unresolvedReason: "Governing tariff not verified",
+          receivedAt: "2026-06-11T00:00:00Z",
+        },
         { ...hero },
       ];
     },
