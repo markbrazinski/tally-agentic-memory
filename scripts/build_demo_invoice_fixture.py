@@ -1,18 +1,28 @@
-"""Build the deterministic fictional invoice used by the locked Intake demo."""
+"""Build the deterministic fictional invoices used by the demo (Demo v3).
+
+INV-1048 is the complete-memory hero ($350/day × 7 = $2,450 → DISPUTE $700).
+INV-1050 is the queue-level refusal ($125/day × 7 = $875): a DIFFERENT shipment
+with complete operational history but no governing tariff in the corpus, so the
+evaluator genuinely returns NEEDS EVIDENCE / "Governing tariff not verified".
+"""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
-OUTPUT = Path(__file__).parents[1] / "tests/fixtures/demo/INV-1048.pdf"
+DEMO_DIR = Path(__file__).parents[1] / "tests/fixtures/demo"
 
 
-def _escape_pdf_text(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+@dataclass(frozen=True)
+class InvoiceSpec:
+    filename: str
+    lines: tuple[tuple[int, str], ...]
 
 
-def build_pdf() -> bytes:
-    lines = (
+INV_1048 = InvoiceSpec(
+    filename="INV-1048.pdf",
+    lines=(
         (20, "FICTIONAL DEMO INVOICE - NOT A REAL CARRIER CHARGE"),
         (16, "Asterline Demo Shipping"),
         (12, "Invoice: INV-1048"),
@@ -25,9 +35,35 @@ def build_pdf() -> bytes:
         (12, "Daily Rate: USD $350.00 per day"),
         (14, "Total Amount Due: USD $2,450.00"),
         (10, "Synthetic hackathon fixture. No carrier was contacted."),
-    )
+    ),
+)
+
+INV_1050 = InvoiceSpec(
+    filename="INV-1050.pdf",
+    lines=(
+        (20, "FICTIONAL DEMO INVOICE - NOT A REAL CARRIER CHARGE"),
+        (16, "Harborline Demo Shipping"),
+        (12, "Invoice: INV-1050"),
+        (12, "Issued: June 24, 2026"),
+        (12, "Bill of Lading: LAX-55290"),
+        (12, "Container: MSCU-701145-3"),
+        (12, "Charge Type: Demurrage"),
+        (12, "Charge Period: June 8, 2026 through June 14, 2026"),
+        (12, "Charged Days: 7"),
+        (12, "Daily Rate: USD $125.00 per day"),
+        (14, "Total Amount Due: USD $875.00"),
+        (10, "Synthetic hackathon fixture. No carrier was contacted."),
+    ),
+)
+
+
+def _escape_pdf_text(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def build_pdf(spec: InvoiceSpec) -> bytes:
     commands = ["BT", "/F1 20 Tf", "72 742 Td"]
-    for index, (size, line) in enumerate(lines):
+    for index, (size, line) in enumerate(spec.lines):
         if index:
             commands.extend(("0 -34 Td", f"/F1 {size} Tf"))
         commands.append(f"({_escape_pdf_text(line)}) Tj")
@@ -69,6 +105,8 @@ def build_pdf() -> bytes:
 
 
 if __name__ == "__main__":
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_bytes(build_pdf())
-    print(f"wrote {OUTPUT}")
+    DEMO_DIR.mkdir(parents=True, exist_ok=True)
+    for spec in (INV_1048, INV_1050):
+        out = DEMO_DIR / spec.filename
+        out.write_bytes(build_pdf(spec))
+        print(f"wrote {out}")
