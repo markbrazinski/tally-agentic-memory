@@ -10,10 +10,25 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 from src.external.dal import DAL, Tenant
-from src.platform.reconstruction_api import load_reconstruction_projection
+from src.platform.reconstruction_api import (
+    _unresolved_reason,
+    load_reconstruction_projection,
+)
 from src.platform.reconstruction_repository import _expand_charge_dates
 
 NOW = datetime(2026, 6, 22, 8, 0, tzinfo=UTC)
+
+
+def test_unresolved_reason_maps_missing_tariff():
+    # Demo v3 INV-1050: RULE_NOT_VERIFIED surfaces as the plain refusal sentence.
+    assert _unresolved_reason(["RULE_NOT_VERIFIED"]) == "Governing tariff not verified"
+    # First recognized code wins; raw codes remain machine-facing.
+    assert _unresolved_reason(
+        ["MISSING_DAY_ACCESS_EVIDENCE"]
+    ) == "Required terminal-access snapshot not yet bound"
+    # No reason codes → nothing to resolve.
+    assert _unresolved_reason([]) is None
+    assert _unresolved_reason(["UNKNOWN_CODE"]) is None
 
 
 def test_expand_charge_dates_seven_inclusive():

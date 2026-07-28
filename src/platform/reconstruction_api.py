@@ -164,6 +164,7 @@ def load_reconstruction_projection(
 
     recommendation = None
     if rec_row is not None:
+        reason_codes = _json_list(rec_row[13])
         recommendation = {
             "recommendation_id": str(rec_row[0]),
             "version": int(rec_row[1]),
@@ -178,7 +179,8 @@ def load_reconstruction_projection(
             "state": rec_row[10],
             "summary": rec_row[11],
             "digest": rec_row[12],
-            "reason_codes": _json_list(rec_row[13]),
+            "reason_codes": reason_codes,
+            "unresolved_reason": _unresolved_reason(reason_codes),
             "approval_etag": f'"rec-{rec_row[0]}-v{int(rec_row[1])}-{rec_row[12]}"',
         }
 
@@ -234,6 +236,27 @@ def _json_list(value: Any) -> list[str]:
         return []
     parsed = value if isinstance(value, list) else json.loads(value)
     return [str(item) for item in parsed]
+
+
+# Human-readable unresolved reason for the queue/rail (Demo v3). The raw
+# reason_codes remain machine-facing; this surfaces one plain sentence. Order is
+# the derivation order in resolve_recommendation.
+_REASON_TEXT = {
+    "RULE_NOT_VERIFIED": "Governing tariff not verified",
+    "MISSING_DAY_SOURCE": "Charged day source incomplete",
+    "MISSING_DAY_ACCESS_EVIDENCE": "Required terminal-access snapshot not yet bound",
+    "SOURCE_VERSION_UNAVAILABLE": "Exact source version unavailable",
+    "SOURCE_INTEGRITY_FAILED": "Source integrity check failed",
+}
+
+
+def _unresolved_reason(reason_codes: list[str]) -> str | None:
+    """The first human-readable reason string, or None when there is nothing to
+    resolve (no reason codes)."""
+    for code in reason_codes:
+        if code in _REASON_TEXT:
+            return _REASON_TEXT[code]
+    return None
 
 
 def register_reconstruction_routes(router: APIRouter, *, tenant_id_getter) -> None:

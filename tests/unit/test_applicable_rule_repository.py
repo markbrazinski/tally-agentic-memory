@@ -65,6 +65,10 @@ class FakeCursor:
             self.one = (len(self.conn.candidates),)
         elif n.startswith("SELECT id, rate_minor, validation_state FROM applicable_rules"):
             self.one = None  # replay case: no applicable rule in this fake
+        elif n.startswith("SELECT days_complete, days_total FROM reconstructions"):
+            self.one = self.conn.coverage
+        elif n.startswith("INSERT INTO workflow_tasks"):
+            self.conn.judgment_emitted += 1
         elif n.startswith("SELECT status_sequence FROM invoices"):
             self.one = (self.conn.status_sequence,)
         elif n.startswith("INSERT INTO rule_retrieval_runs"):
@@ -102,6 +106,9 @@ class FakeConn:
         self.outbox = 0
         self.bindings = 0
         self.stamped_rate = None
+        # (days_complete, days_total). Default: coverage complete.
+        self.coverage = (7, 7)
+        self.judgment_emitted = 0
         self.log = []
 
     def cursor(self):
@@ -173,17 +180,41 @@ def test_verified_persists_rule_and_stamps_rate():
     assert conn.outbox == 1
 
 
-def test_rejected_writes_no_applicable_rule():
+def test_rejected_with_complete_coverage_hands_off_to_judgment():
+    # Demo v3 INV-1050: no verified rule BUT coverage complete → NEEDS_EVIDENCE
+    # AND the judgment task is emitted, so the evaluator produces a genuine
+    # REQUEST_EVIDENCE + RULE_NOT_VERIFIED recommendation (not a stalled task).
     conn = FakeConn()
-    cands = [_candidate(eff_from=date(2026, 7, 1))]  # wrong date
+    conn.coverage = (7, 7)
+    cands = [_candidate(eff_from=date(2026, 7, 1))]  # wrong date → rejected
     decision = decide_applicable_rule(cands, _query())
     result = _complete(conn, cands, decision)
     assert result.state == "REJECTED"
-    assert len(conn.runs) == 1
-    assert len(conn.candidates) == 1  # candidate persisted...
-    assert len(conn.applicable_rules) == 0  # ...but no applicable rule
+    assert len(conn.applicable_rules) == 0  # no applicable rule
     assert conn.stamped_rate is None
     assert "evidence.rule_not_applicable" in conn.events
+    assert conn.judgment_emitted == 1  # handed off to judgment
+
+
+def test_rejected_with_incomplete_coverage_does_not_judge():
+    # A reconstruction that is itself incomplete already refused at the
+    # reconstruction stage; a no-rule outcome must NOT re-judge it.
+    conn = FakeConn()
+    conn.coverage = (6, 7)
+    cands = [_candidate(eff_from=date(2026, 7, 1))]
+    decision = decide_applicable_rule(cands, _query())
+    result = _complete(conn, cands, decision)
+    assert result.state == "REJECTED"
+    assert conn.judgment_emitted == 0  # no handoff
+
+
+def test_verified_still_hands_off_to_judgment():
+    conn = FakeConn()
+    cands = [_candidate()]
+    decision = decide_applicable_rule(cands, _query())
+    result = _complete(conn, cands, decision)
+    assert result.state == "VERIFIED"
+    assert conn.judgment_emitted == 1  # hero path unchanged
 
 
 def test_conflicting_rates_writes_no_rule():

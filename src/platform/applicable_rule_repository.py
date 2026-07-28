@@ -50,6 +50,25 @@ def _emit_judgment_task(cur, *, tenant_id, lease, reconstruction_id) -> None:
     )
 
 
+def _coverage_complete(cur, tenant_id: str, reconstruction_id: str) -> bool:
+    """True if this reconstruction sourced every charged day (days_complete ==
+    days_total, total > 0). Used to decide whether a no-rule outcome should still
+    be judged (missing-tariff refusal) versus having already refused at the
+    reconstruction stage for incomplete coverage."""
+    cur.execute(
+        """
+        SELECT days_complete, days_total FROM reconstructions
+        WHERE tenant_id=%s AND id=%s;
+        """,
+        (tenant_id, reconstruction_id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return False
+    days_complete, days_total = row
+    return bool(days_total) and days_complete == days_total
+
+
 @dataclass(frozen=True)
 class RuleTaskLease:
     task_id: str
@@ -279,8 +298,17 @@ def complete_rule(
                 )
 
             _finish_task(cur, tenant_id, lease)
-            # Hand off to Gate 4 only when a rule was verified.
-            if applicable_rule_id is not None:
+            # Hand off to Gate 4 (judgment) when a rule verified, OR when no rule
+            # verified but reconstruction coverage is complete. The latter is the
+            # missing-governing-tariff refusal (Demo v3 INV-1050): every charged
+            # day is source-complete but has no applicable rate, so the judgment
+            # engine deterministically produces REQUEST_EVIDENCE + RULE_NOT_VERIFIED
+            # — a genuine evaluator output, not a task failure. A reconstruction
+            # that is itself incomplete already refused at the reconstruction
+            # stage and must not be re-judged here.
+            if applicable_rule_id is not None or _coverage_complete(
+                cur, tenant_id, lease.reconstruction_id
+            ):
                 _emit_judgment_task(
                     cur, tenant_id=tenant_id, lease=lease,
                     reconstruction_id=lease.reconstruction_id,

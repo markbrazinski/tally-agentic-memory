@@ -79,10 +79,13 @@ def run_one_rule_task(
                   retryable=True)
         return None
 
-    if not hits:
-        fail_rule(dal, lease=lease, error_code="NO_APPLICABLE_RULE", retryable=False)
-        return None
-
+    # No candidate clause found is NOT a task failure: it is a genuine
+    # missing-governing-tariff outcome. Fall through to decide_applicable_rule
+    # with an empty candidate set (→ REJECTED / NO_APPLICABLE_RULE) and persist it
+    # via complete_rule, which sets NEEDS_EVIDENCE and — when reconstruction
+    # coverage is complete — hands off to judgment so the evaluator produces
+    # REQUEST_EVIDENCE + RULE_NOT_VERIFIED (Demo v3 INV-1050). fail_rule would
+    # instead stall the task with no recommendation.
     candidates = [_hit_to_candidate(hit, rank) for rank, hit in enumerate(hits, 1)]
     query = ApplicabilityQuery(
         charged_dates=charge_dates,

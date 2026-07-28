@@ -3,7 +3,8 @@
 Proves: a hero clause hit produces a VERIFIED applicable rule; a wrong-date
 distractor that ranks first is rejected deterministically; vector-search
 unavailability and embedding failure route to fail_rule (never complete);
-empty hits refuse with NO_APPLICABLE_RULE. Zero-network via monkeypatch.
+empty hits are a genuine REJECTED refusal via complete_rule (not a task failure).
+Zero-network via monkeypatch.
 """
 
 from __future__ import annotations
@@ -144,15 +145,21 @@ def test_embedding_failure_fails_closed(monkeypatch):
     assert failed["error_code"] == "VECTOR_EMBED_UNAVAILABLE"
 
 
-def test_empty_hits_refuses(monkeypatch):
+def test_empty_hits_is_genuine_refusal_not_task_failure(monkeypatch):
+    # Demo v3: no candidate clause is a genuine missing-governing-tariff outcome,
+    # not a task failure. It routes through complete_rule with an empty candidate
+    # set (REJECTED / NO_APPLICABLE_RULE), so the invoice reaches NEEDS_EVIDENCE
+    # and — when coverage is complete — the evaluator produces REQUEST_EVIDENCE +
+    # RULE_NOT_VERIFIED. fail_rule (which would stall the task) is never called.
     completed, failed = _patch(monkeypatch, lease=_lease())
     result = worker.run_one_rule_task(
         object(), worker_id="w1", embedder=_Embedder(), search=_Search([])
     )
-    assert result is None
-    assert not completed
-    assert failed["error_code"] == "NO_APPLICABLE_RULE"
-    assert failed["retryable"] is False
+    assert failed == {}  # not a task failure
+    assert completed["candidates"] == []
+    assert completed["decision"].state.value == "REJECTED"
+    assert completed["decision"].public_error == "NO_APPLICABLE_RULE"
+    assert result is not None and result.state == "REJECTED"
 
 
 def test_no_charge_dates_fails(monkeypatch):
