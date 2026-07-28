@@ -35,6 +35,7 @@ from src.platform.authority_seal_repository import approve_and_seal
 # Distinct identity from the hero (TLLU4829317) and the INV-1047 refusal
 # (MSCU7011453). OAK terminal, 6 chargeable days, $90/day = $540, 0 discrepancy.
 CARRIER = "20000000-0000-4000-8000-000000000041"
+CONTAINER = "OOLU-840112-5"  # distinct from hero + refusal; matches INV-1041 fixture
 CUTOFF = datetime(2026, 5, 18, 8, 0, tzinfo=timezone.utc)
 CHARGE_DATES = [date(2026, 5, d) for d in range(4, 10)]  # 2026-05-04 .. 05-09 (6)
 DAILY_RATE_MINOR = 9000  # $90.00
@@ -105,6 +106,15 @@ def _seed_frozen_approval(cur, tenant_id: str) -> tuple[str, str, str]:
             (tenant_id, str(uuid4()), claim_set_id, field,
              json.dumps(f"{minor / 100:.2f}"), minor),
         )
+    # Container claim so the queue/detail row shows an identifier (STRING claim).
+    cur.execute(
+        """
+        INSERT INTO extracted_claims (tenant_id,id,claim_set_id,field_name,
+            value_type,normalized_value,currency,validation_state)
+        VALUES (%s,%s,%s,'container_number','STRING',%s,NULL,'VERIFIED');
+        """,
+        (tenant_id, str(uuid4()), claim_set_id, json.dumps(CONTAINER)),
+    )
     task_id = str(uuid4())
     cur.execute(
         """

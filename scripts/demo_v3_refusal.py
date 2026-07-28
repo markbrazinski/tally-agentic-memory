@@ -28,6 +28,7 @@ from src.core.judgment import (
 )
 
 CARRIER = "20000000-0000-4000-8000-000000000047"
+CONTAINER = "MSCU-701145-3"  # matches the INV-1047 fixture; distinct shipment
 CUTOFF = datetime(2026, 6, 24, 8, 0, tzinfo=timezone.utc)
 CHARGE_DATES = [date(2026, 6, d) for d in range(8, 15)]  # Jun 8..14 (7)
 DAILY_RATE_MINOR = 12500  # $125.00 (carrier claim)
@@ -103,6 +104,15 @@ def _seed_refusal(cur, tenant_id: str) -> str:
             (tenant_id, str(uuid4()), claim_set_id, field,
              json.dumps(f"{minor / 100:.2f}"), minor),
         )
+    # Container claim so the queue/detail row shows an identifier (STRING claim).
+    cur.execute(
+        """
+        INSERT INTO extracted_claims (tenant_id,id,claim_set_id,field_name,
+            value_type,normalized_value,currency,validation_state)
+        VALUES (%s,%s,%s,'container_number','STRING',%s,NULL,'VERIFIED');
+        """,
+        (tenant_id, str(uuid4()), claim_set_id, json.dumps(CONTAINER)),
+    )
     task_id = str(uuid4())
     cur.execute(
         """
