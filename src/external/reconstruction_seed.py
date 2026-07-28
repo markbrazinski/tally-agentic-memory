@@ -23,6 +23,15 @@ FIXTURE = (
     / "tests" / "fixtures" / "demo" / "INV-1048.reconstruction-events.json"
 )
 
+# Isolated fail-closed proof (Demo v3): the incomplete-memory / held-source variant
+# with a per-day PENDING access snapshot. Used ONLY by the authority fail-closed
+# test, never by the hero seed — so the incomplete-memory mechanic cannot drive
+# the complete-memory hero.
+INCOMPLETE_MEMORY_FIXTURE = (
+    Path(__file__).resolve().parents[2]
+    / "tests" / "fixtures" / "demo" / "INCOMPLETE-MEMORY-SAFETY.reconstruction-events.json"
+)
+
 
 def load_source_package(path: Path | None = None) -> dict[str, Any]:
     return json.loads((path or FIXTURE).read_text())

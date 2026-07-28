@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "classification": "SYNTHETIC DEMO — FICTIONAL DATA",
+  "disclosure": "Representative demonstration data. Not a live carrier or terminal feed.",
+  "provenance_classification": "DEMO_SCENARIO",
+  "shipment_ref": "TLLU4829317",
+  "container_ref": "TLLU4829317",
+  "bill_of_lading": "OAK-77421",
+  "effective_timezone": "America/Los_Angeles",
+  "source_artifacts": [
+    {
+      "public_ref": "SRC-MILESTONE-INV-1048",
+      "source_type": "MILESTONE_EXPORT",
+      "display_name": "Container milestone export (representative)",
+      "mime_type": "application/json",
+      "adapter_name": "representative_container_milestone_adapter"
+    },
+    {
+      "public_ref": "SRC-AVAILABILITY-INV-1048",
+      "source_type": "AVAILABILITY_NOTICE",
+      "display_name": "Terminal availability notice (representative)",
+      "mime_type": "application/json",
+      "adapter_name": "representative_availability_notice_adapter"
+    },
+    {
+      "public_ref": "SRC-ACCESS-INV-1048",
+      "source_type": "TERMINAL_ACCESS_LOG",
+      "display_name": "Terminal access snapshot log (representative)",
+      "mime_type": "application/json",
+      "adapter_name": "representative_terminal_access_adapter"
+    }
+  ],
+  "events": [
+    {
+      "public_ref": "SE-INV1048-001",
+      "event_type": "DISCHARGED",
+      "occurred_at": "2026-06-02T15:00:00-07:00",
+      "recorded_at": "2026-06-02T16:10:00-07:00",
+      "source_public_ref": "SRC-MILESTONE-INV-1048",
+      "display_anchor": "milestone row: DISCHARGED 2026-06-02",
+      "normalized_facts": {"milestone": "DISCHARGED"}
+    },
+    {
+      "public_ref": "SE-INV1048-002",
+      "event_type": "AVAILABLE",
+      "occurred_at": "2026-06-03T09:00:00-07:00",
+      "recorded_at": "2026-06-03T09:30:00-07:00",
+      "source_public_ref": "SRC-AVAILABILITY-INV-1048",
+      "display_anchor": "availability notice: AVAILABLE 2026-06-03",
+      "normalized_facts": {"status": "AVAILABLE_FOR_PICKUP"}
+    },
+    {
+      "public_ref": "SE-INV1048-003",
+      "event_type": "FREE_TIME_START",
+      "occurred_at": "2026-06-03T09:00:00-07:00",
+      "recorded_at": "2026-06-03T09:30:00-07:00",
+      "source_public_ref": "SRC-AVAILABILITY-INV-1048",
+      "display_anchor": "availability notice: free time begins 2026-06-03",
+      "normalized_facts": {"free_time_days": 4}
+    },
+    {
+      "public_ref": "SE-INV1048-004",
+      "event_type": "FREE_TIME_END",
+      "occurred_at": "2026-06-07T23:59:00-07:00",
+      "recorded_at": "2026-06-07T23:59:00-07:00",
+      "source_public_ref": "SRC-AVAILABILITY-INV-1048",
+      "display_anchor": "availability notice: free time ends 2026-06-07",
+      "normalized_facts": {"free_time_days": 4}
+    },
+    {
+      "public_ref": "SE-INV1048-005",
+      "event_type": "GATE_OUT",
+      "occurred_at": "2026-06-14T17:00:00-07:00",
+      "recorded_at": "2026-06-14T18:05:00-07:00",
+      "source_public_ref": "SRC-MILESTONE-INV-1048",
+      "display_anchor": "milestone row: GATE_OUT 2026-06-14",
+      "normalized_facts": {"milestone": "GATE_OUT"}
+    },
+
+    {
+      "public_ref": "SE-INV1048-AX-0608",
+      "event_type": "TERMINAL_ACCESS_SNAPSHOT",
+      "occurred_at": "2026-06-08T12:00:00-07:00",
+      "recorded_at": "2026-06-08T12:15:00-07:00",
+      "effective_from": "2026-06-08",
+      "source_public_ref": "SRC-ACCESS-INV-1048",
+      "source_version_state": "VERIFIED",
+      "display_anchor": "terminal access snapshot: AVAILABLE / gate OPEN 2026-06-08",
+      "normalized_facts": {"access_status": "AVAILABLE", "gate_status": "OPEN", "blocking_hold": "NONE"}
+    },
+    {
+      "public_ref": "SE-INV1048-AX-0609",
+      "event_type": "TERMINAL_ACCESS_SNAPSHOT",
+      "occurred_at": "2026-06-09T12:00:00-07:00",
+      "recorded_at": "2026-06-09T12:15:00-07:00",
+      "effective_from": "2026-06-09",
+      "source_public_ref": "SRC-ACCESS-INV-1048",
+      "source_version_state": "VERIFIED",
+      "display_anchor": "terminal access snapshot: AVAILABLE / gate OPEN 2026-06-09",
+      "normalized_facts": {"access_status": "AVAILABLE", "gate_status": "OPEN", "blocking_hold": "NONE"}
+    },
+    {
+      "public_ref": "SE-INV1048-AX-0610",
+      "event_type": "TERMINAL_ACCESS_SNAPSHOT",
+      "occurred_at": "2026-06-10T12:00:00-07:00",
+      "recorded_at": "2026-06-10T12:15:00-07:00",
+      "effective_from": "2026-06-10",
+      "source_public_ref": "SRC-ACCESS-INV-1048",
+      "source_version_state": "VERIFIED",
+      "display_anchor": "terminal access snapshot: AVAILABLE / gate OPEN 2026-06-10",
+      "normalized_facts": {"access_status": "AVAILABLE", "gate_status": "OPEN", "blocking_hold": "NONE"}
+    },
+    {
+      "public_ref": "SE-INV1048-AX-0611",
+      "event_type": "TERMINAL_ACCESS_SNAPSHOT",
+      "occurred_at": "2026-06-11T12:00:00-07:00",
+      "recorded_at": "2026-06-11T12:15:00-07:00",
+      "effective_from": "2026-06-11",
+      "source_public_ref": "SRC-ACCESS-INV-1048",
+      "source_version_state": "PENDING",
+      "display_anchor": "terminal access snapshot: AVAILABLE / gate OPEN 2026-06-11",
+      "normalized_facts": {"access_status": "AVAILABLE", "gate_status": "OPEN", "blocking_hold": "NONE"}
+    },
+    {
+      "public_ref": "SE-INV1048-AX-0612",
+      "event_type": "TERMINAL_ACCESS_SNAPSHOT",
+      "occurred_at": "2026-06-12T12:00:00-07:00",
+      "recorded_at": "2026-06-12T12:15:00-07:00",
+      "effective_from": "2026-06-12",
+      "source_public_ref": "SRC-ACCESS-INV-1048",
+      "source_version_state": "VERIFIED",
+      "display_anchor": "terminal access snapshot: AVAILABLE / gate OPEN 2026-06-12",
+      "normalized_facts": {"access_status": "AVAILABLE", "gate_status": "OPEN", "blocking_hold": "NONE"}
+    },
+    {
+      "public_ref": "SE-INV1048-AX-0613",
+      "event_type": "TERMINAL_ACCESS_SNAPSHOT",
+      "occurred_at": "2026-06-13T12:00:00-07:00",
+      "recorded_at": "2026-06-13T12:15:00-07:00",
+      "effective_from": "2026-06-13",
+      "source_public_ref": "SRC-ACCESS-INV-1048",
+      "source_version_state": "VERIFIED",
+      "display_anchor": "terminal access snapshot: AVAILABLE / gate OPEN 2026-06-13",
+      "normalized_facts": {"access_status": "AVAILABLE", "gate_status": "OPEN", "blocking_hold": "NONE"}
+    },
+    {
+      "public_ref": "SE-INV1048-AX-0614",
+      "event_type": "TERMINAL_ACCESS_SNAPSHOT",
+      "occurred_at": "2026-06-14T12:00:00-07:00",
+      "recorded_at": "2026-06-14T12:15:00-07:00",
+      "effective_from": "2026-06-14",
+      "source_public_ref": "SRC-ACCESS-INV-1048",
+      "source_version_state": "VERIFIED",
+      "display_anchor": "terminal access snapshot: AVAILABLE / gate OPEN 2026-06-14",
+      "normalized_facts": {"access_status": "AVAILABLE", "gate_status": "OPEN", "blocking_hold": "NONE"}
+    }
+  ]
+}

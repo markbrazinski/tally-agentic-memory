@@ -79,9 +79,37 @@ def _dal(conn):
     return DAL(conn, Tenant(TENANT, "reconstruction-seed"))
 
 
-def test_seed_marks_only_june11_access_pending():
+def test_hero_seed_is_complete_memory_no_access_heartbeat():
+    # Demo v3: the HERO (default) fixture is complete-memory. It carries only the
+    # boundary events (availability / free-time / gate-out) and NO per-day
+    # terminal-access snapshot, so reconstruction resolves 7/7 automatically —
+    # no held source, no operator release. This is the filmed hero.
+    from src.external.reconstruction_seed import load_source_package
+
     conn = FakeConn()
     seed_reconstruction_memory(_dal(conn), invoice_id="inv-1")
+    access = [e for e in conn.events if e["event_type"] == "TERMINAL_ACCESS_SNAPSHOT"]
+    assert access == []  # no access heartbeat in the hero
+    # The default package ships only the boundary events + their two artifacts.
+    pkg = load_source_package()
+    assert not any(e["event_type"] == "TERMINAL_ACCESS_SNAPSHOT" for e in pkg["events"])
+    assert {a["public_ref"] for a in pkg["source_artifacts"]} == {
+        "SRC-MILESTONE-INV-1048", "SRC-AVAILABILITY-INV-1048",
+    }
+
+
+def test_incomplete_memory_safety_fixture_marks_only_june11_pending():
+    # Preserved fail-closed proof (Demo v3 "technical proof only"): the ISOLATED
+    # incomplete-memory fixture still holds June-11 PENDING among 7 access
+    # snapshots. Loaded explicitly — it never drives the hero seed.
+    from src.external.reconstruction_seed import (
+        INCOMPLETE_MEMORY_FIXTURE,
+        load_source_package,
+    )
+
+    pkg = load_source_package(INCOMPLETE_MEMORY_FIXTURE)
+    conn = FakeConn()
+    seed_reconstruction_memory(_dal(conn), invoice_id="inv-1", package=pkg)
 
     access = [e for e in conn.events if e["event_type"] == "TERMINAL_ACCESS_SNAPSHOT"]
     assert len(access) == 7  # one per charged day, June 8..14
@@ -139,9 +167,12 @@ def test_seed_insert_columns_exist_in_schema():
 
 
 def test_all_access_recorded_before_invoice():
-    # Every access snapshot is retained pre-invoice (recorded_at < received_at,
-    # the June-22 cutoff). Uses the fixture directly for the timestamps.
-    pkg = load_source_package()
+    # Every access snapshot in the ISOLATED incomplete-memory proof is retained
+    # pre-invoice (recorded_at < received_at, the June-22 cutoff). This property
+    # belongs to the fail-closed test fixture, not the complete-memory hero.
+    from src.external.reconstruction_seed import INCOMPLETE_MEMORY_FIXTURE
+
+    pkg = load_source_package(INCOMPLETE_MEMORY_FIXTURE)
     cutoff = datetime.fromisoformat("2026-06-22T08:00:00-07:00")
     access = [e for e in pkg["events"] if e["event_type"] == "TERMINAL_ACCESS_SNAPSHOT"]
     assert len(access) == 7
