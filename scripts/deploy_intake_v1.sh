@@ -45,7 +45,13 @@ SOURCE_CONFIG="$(jq -n \
         TALLY_INTAKE_DEMO_ENABLED:"true",
         TALLY_INTAKE_WORKER_ENABLED:"true",
         TALLY_PUBLIC_DEMO_ENABLED:"false",
-        TALLY_STATIC_DIR:"/app/ui"
+        TALLY_STATIC_DIR:"/app/ui",
+        # Managed MCP OAuth (reconstruction worker reads these at runtime — the
+        # bundle SSM param the canary refreshes + the refresh lease table). Must
+        # be in the deploy block or a redeploy regresses reconstruction to
+        # KeyError: 'TALLY_OAUTH_TOKEN_PARAMETER'.
+        TALLY_OAUTH_TOKEN_PARAMETER:"/tally/gate5/oauth-token-bundle",
+        TALLY_OAUTH_REFRESH_LEASE_TABLE:"tally-gate5-oauth-refresh-lease"
       }
     }
   },

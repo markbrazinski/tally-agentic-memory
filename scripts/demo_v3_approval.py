@@ -61,6 +61,7 @@ def _seed_frozen_approval(cur, tenant_id: str) -> tuple[str, str, str]:
         """,
         (tenant_id, invoice_id, CARRIER, CUTOFF, uuid4().hex),
     )
+    source_id = str(uuid4())
     cur.execute(
         """
         INSERT INTO invoice_sources (tenant_id,id,invoice_id,source_type,
@@ -71,16 +72,28 @@ def _seed_frozen_approval(cur, tenant_id: str) -> tuple[str, str, str]:
             'demo-bucket','intake/INV-1041.pdf','v1','VERSION_VERIFIED',
             'DEMO_SCENARIO','Representative demonstration data',%s,%s);
         """,
-        (tenant_id, str(uuid4()), invoice_id, uuid4().hex, CUTOFF, CUTOFF),
+        (tenant_id, source_id, invoice_id, uuid4().hex, CUTOFF, CUTOFF),
     )
-    # Claim set + the total claim so the queue amount column reads $540.
-    claim_set_id = str(uuid4())
+    # Extraction run → claim set → the two money claims, so the queue amount
+    # column reads $540 (the projection JOINs extracted_claims ⋈ claim_sets on
+    # active_claim_set_version). Column names match the live schema exactly.
+    extraction_run_id, claim_set_id = str(uuid4()), str(uuid4())
     cur.execute(
         """
-        INSERT INTO claim_sets (tenant_id,id,invoice_id,claim_set_version,state)
-        VALUES (%s,%s,%s,1,'ACTIVE') ON CONFLICT DO NOTHING;
+        INSERT INTO extraction_runs (tenant_id,id,invoice_id,source_id,
+            source_sha256,source_version_ref_private,model_id,schema_version,
+            template_version,attempt,requested_at,validation_state)
+        VALUES (%s,%s,%s,%s,%s,'v1','representative',1,1,1,%s,'VERIFIED');
         """,
-        (tenant_id, claim_set_id, invoice_id),
+        (tenant_id, extraction_run_id, invoice_id, source_id, uuid4().hex, CUTOFF),
+    )
+    cur.execute(
+        """
+        INSERT INTO claim_sets (tenant_id,id,invoice_id,claim_set_version,
+            extraction_run_id,validation_state)
+        VALUES (%s,%s,%s,1,%s,'VERIFIED') ON CONFLICT DO NOTHING;
+        """,
+        (tenant_id, claim_set_id, invoice_id, extraction_run_id),
     )
     for field, minor in (("total", TOTAL_MINOR), ("daily_rate", DAILY_RATE_MINOR)):
         cur.execute(
@@ -228,9 +241,9 @@ def drive_inv_1041_approval(conn, tenant_id: str) -> dict[str, object]:
     """
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, digest FROM recommendations r "
+            "SELECT r.id, r.digest FROM recommendations r "
             "JOIN invoices i ON i.tenant_id=r.tenant_id AND i.id=r.invoice_id "
-            "WHERE r.tenant_id=%s AND i.invoice_no='INV-1041' "
+            "WHERE r.tenant_id=%s AND i.display_name='INV-1041.pdf' "
             "AND r.superseded_by IS NULL ORDER BY r.version DESC LIMIT 1;",
             (tenant_id,),
         )

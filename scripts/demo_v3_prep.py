@@ -27,6 +27,7 @@ import argparse
 import json
 import os
 import uuid
+from pathlib import Path
 
 import psycopg
 
@@ -50,8 +51,8 @@ REFUSAL_TOTAL_MINOR = 87500  # INV-1047: $125/day × 7 = $875 (carrier total)
 
 HERO_FIXTURE = None  # default fixture = complete-memory hero
 REFUSAL_FIXTURE = (
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    + "/tests/fixtures/demo/INV-1047.reconstruction-events.json"
+    Path(__file__).resolve().parents[1]
+    / "tests" / "fixtures" / "demo" / "INV-1047.reconstruction-events.json"
 )
 HERO_SHIPMENT = "TLLU4829317"
 
@@ -133,11 +134,27 @@ def main() -> int:
     print(f"hero memory seeded: {hero_counts}")
 
     # Seed the INV-1047 refusal shipment (complete history, distinct shipment).
+    # reconstruction_source_artifacts.invoice_id is FK → invoices(id), so the
+    # memory must attach to the REAL imported INV-1047 invoice (not a placeholder).
+    # Resolve it by display_name; the operator import must have run first.
     refusal_pkg = load_source_package(REFUSAL_FIXTURE)
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM invoices WHERE tenant_id=%s AND display_name=%s "
+            "ORDER BY received_at DESC LIMIT 1;",
+            (tenant_id, "INV-1047.pdf"),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise SystemExit(
+            "INV-1047 not imported yet — run the operator PDF import first "
+            "(scripts/prep_demo_v3_rows.sh does this), then re-run."
+        )
+    refusal_invoice_id = str(row[0])
     refusal_counts = seed_reconstruction_memory(
-        dal, invoice_id=args.invoice_refusal, package=refusal_pkg
+        dal, invoice_id=refusal_invoice_id, package=refusal_pkg
     )
-    print(f"refusal memory seeded: {refusal_counts}")
+    print(f"refusal memory seeded (invoice {refusal_invoice_id}): {refusal_counts}")
 
     # Read-back: assert the hero has NO access heartbeat and the refusal shipment
     # is present.
