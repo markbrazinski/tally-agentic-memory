@@ -39,3 +39,5 @@ TALLY_CLEAN_ROOM_BRIEF.md
 TALLY_INTERNAL_AUDIT.md
 ui/node_modules
 ui/dist
+ui-next/node_modules
+ui-next/dist

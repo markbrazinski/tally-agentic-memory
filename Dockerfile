@@ -1,9 +1,11 @@
 FROM node:24-slim AS ui-build
 
 WORKDIR /ui
-COPY ui/package.json ui/package-lock.json ./
+# ui-next/ is the projection-driven authority-transition workbench (the deployed
+# SPA). The older ui/ (public-replay demo) is not shipped.
+COPY ui-next/package.json ui-next/package-lock.json ./
 RUN npm ci
-COPY ui/ ./
+COPY ui-next/ ./
 RUN npm run build
 
 
