@@ -46,7 +46,11 @@ from src.platform.intake_repository import (
     reserve_ingestion,
 )
 from src.platform.intake_tasks import retry_extraction_task
-from src.platform.reconstruction_api import register_reconstruction_routes
+from src.platform.reconstruction_api import (
+    _json_list,
+    _unresolved_reason,
+    register_reconstruction_routes,
+)
 
 MAX_PDF_PAGES = 10
 MAX_PDF_PARSE_SECONDS = 5.0
@@ -457,6 +461,32 @@ def load_invoice_projection(invoice_id: str) -> tuple[dict[str, Any], int]:
                 }
                 for task in cur.fetchall()
             ]
+            # The active (non-superseded) recommendation, if any, so the queue can
+            # show the outcome detail (Disputed $700) or unresolved reason
+            # (Governing tariff not verified) without a second round-trip. Amount
+            # semantics: the queue amount column stays the carrier total; the
+            # dispute/reason live here in the detail.
+            cur.execute(
+                """
+                SELECT recommendation_type, disputed_amount_minor, currency,
+                       reason_codes
+                FROM recommendations
+                WHERE tenant_id=%s AND invoice_id=%s AND superseded_by IS NULL
+                ORDER BY version DESC LIMIT 1;
+                """,
+                (dal.tenant.tenant_id, invoice_id),
+            )
+            rec_row = cur.fetchone()
+    recommendation = None
+    if rec_row is not None:
+        reason_codes = _json_list(rec_row[3])
+        recommendation = {
+            "recommendation_type": rec_row[0],
+            "disputed_amount_minor": int(rec_row[1]),
+            "currency": rec_row[2],
+            "reason_codes": reason_codes,
+            "unresolved_reason": _unresolved_reason(reason_codes),
+        }
     source_id = str(row[8])
     snapshot = {
         "classification": "SYNTHETIC DEMO — FICTIONAL DATA",
@@ -477,7 +507,10 @@ def load_invoice_projection(invoice_id: str) -> tuple[dict[str, Any], int]:
             },
             "claims": claims,
             "tasks": tasks,
-            "recommendation": None,
+            "recommendation": recommendation,
+            "unresolved_reason": (
+                recommendation["unresolved_reason"] if recommendation else None
+            ),
             "next_action": None,
         },
         "links": {
