@@ -54,7 +54,11 @@ from src.platform.reconstruction_api import (
 
 MAX_PDF_PAGES = 10
 MAX_PDF_PARSE_SECONDS = 5.0
-ALLOWED_SCENARIOS = frozenset({"locked-inv-1048"})
+# The hero and the one pre-existing refusal row imported through real intake.
+# The scenario name is a validation gate + idempotency salt only — it selects no
+# fixture/claims; the uploaded PDF drives extraction. INV-1041 does not import
+# here: it is a sealed historical approval driven directly (scripts/demo_v3_approval).
+ALLOWED_SCENARIOS = frozenset({"locked-inv-1048", "locked-inv-1047"})
 
 
 class IntakeUnavailableError(RuntimeError):
