@@ -300,7 +300,7 @@ def complete_rule(
             _finish_task(cur, tenant_id, lease)
             # Hand off to Gate 4 (judgment) when a rule verified, OR when no rule
             # verified but reconstruction coverage is complete. The latter is the
-            # missing-governing-tariff refusal (Demo v3 INV-1050): every charged
+            # missing-governing-tariff refusal (Demo v3 INV-1047): every charged
             # day is source-complete but has no applicable rate, so the judgment
             # engine deterministically produces REQUEST_EVIDENCE + RULE_NOT_VERIFIED
             # — a genuine evaluator output, not a task failure. A reconstruction

@@ -1,7 +1,7 @@
 """Build the deterministic fictional invoices used by the demo (Demo v3).
 
 INV-1048 is the complete-memory hero ($350/day × 7 = $2,450 → DISPUTE $700).
-INV-1050 is the queue-level refusal ($125/day × 7 = $875): a DIFFERENT shipment
+INV-1047 is the queue-level refusal ($125/day × 7 = $875): a DIFFERENT shipment
 with complete operational history but no governing tariff in the corpus, so the
 evaluator genuinely returns NEEDS EVIDENCE / "Governing tariff not verified".
 """
@@ -39,11 +39,11 @@ INV_1048 = InvoiceSpec(
 )
 
 INV_1050 = InvoiceSpec(
-    filename="INV-1050.pdf",
+    filename="INV-1047.pdf",
     lines=(
         (20, "FICTIONAL DEMO INVOICE - NOT A REAL CARRIER CHARGE"),
         (16, "Harborline Demo Shipping"),
-        (12, "Invoice: INV-1050"),
+        (12, "Invoice: INV-1047"),
         (12, "Issued: June 24, 2026"),
         (12, "Bill of Lading: LAX-55290"),
         (12, "Container: MSCU-701145-3"),

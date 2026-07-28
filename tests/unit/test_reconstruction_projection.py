@@ -20,7 +20,7 @@ NOW = datetime(2026, 6, 22, 8, 0, tzinfo=UTC)
 
 
 def test_unresolved_reason_maps_missing_tariff():
-    # Demo v3 INV-1050: RULE_NOT_VERIFIED surfaces as the plain refusal sentence.
+    # Demo v3 INV-1047: RULE_NOT_VERIFIED surfaces as the plain refusal sentence.
     assert _unresolved_reason(["RULE_NOT_VERIFIED"]) == "Governing tariff not verified"
     # First recognized code wins; raw codes remain machine-facing.
     assert _unresolved_reason(

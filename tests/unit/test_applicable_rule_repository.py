@@ -181,7 +181,7 @@ def test_verified_persists_rule_and_stamps_rate():
 
 
 def test_rejected_with_complete_coverage_hands_off_to_judgment():
-    # Demo v3 INV-1050: no verified rule BUT coverage complete → NEEDS_EVIDENCE
+    # Demo v3 INV-1047: no verified rule BUT coverage complete → NEEDS_EVIDENCE
     # AND the judgment task is emitted, so the evaluator produces a genuine
     # REQUEST_EVIDENCE + RULE_NOT_VERIFIED recommendation (not a stalled task).
     conn = FakeConn()

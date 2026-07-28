@@ -84,7 +84,7 @@ def run_one_rule_task(
     # with an empty candidate set (→ REJECTED / NO_APPLICABLE_RULE) and persist it
     # via complete_rule, which sets NEEDS_EVIDENCE and — when reconstruction
     # coverage is complete — hands off to judgment so the evaluator produces
-    # REQUEST_EVIDENCE + RULE_NOT_VERIFIED (Demo v3 INV-1050). fail_rule would
+    # REQUEST_EVIDENCE + RULE_NOT_VERIFIED (Demo v3 INV-1047). fail_rule would
     # instead stall the task with no recommendation.
     candidates = [_hit_to_candidate(hit, rank) for rank, hit in enumerate(hits, 1)]
     query = ApplicabilityQuery(

@@ -7,17 +7,17 @@
   "container_ref": "MSCU7011453",
   "bill_of_lading": "LAX-55290",
   "effective_timezone": "America/Los_Angeles",
-  "_note": "INV-1050 queue refusal (Demo v3): complete operational history (boundary events), a DIFFERENT shipment than the hero. The governing tariff for this shipment is absent from the vector corpus, so the evaluator returns NEEDS EVIDENCE / 'Governing tariff not verified' — a genuine refusal, not a hardcoded status. Never opened in the film.",
+  "_note": "INV-1047 queue refusal (Demo v3): complete operational history (boundary events), a DIFFERENT shipment than the hero. The governing tariff for this shipment is absent from the vector corpus, so the evaluator returns NEEDS EVIDENCE / 'Governing tariff not verified' — a genuine refusal, not a hardcoded status. Never opened in the film.",
   "source_artifacts": [
     {
-      "public_ref": "SRC-MILESTONE-INV-1050",
+      "public_ref": "SRC-MILESTONE-INV-1047",
       "source_type": "MILESTONE_EXPORT",
       "display_name": "Container milestone export (representative)",
       "mime_type": "application/json",
       "adapter_name": "representative_container_milestone_adapter"
     },
     {
-      "public_ref": "SRC-AVAILABILITY-INV-1050",
+      "public_ref": "SRC-AVAILABILITY-INV-1047",
       "source_type": "AVAILABILITY_NOTICE",
       "display_name": "Terminal availability notice (representative)",
       "mime_type": "application/json",
@@ -30,7 +30,7 @@
       "event_type": "DISCHARGED",
       "occurred_at": "2026-06-02T14:00:00-07:00",
       "recorded_at": "2026-06-02T15:20:00-07:00",
-      "source_public_ref": "SRC-MILESTONE-INV-1050",
+      "source_public_ref": "SRC-MILESTONE-INV-1047",
       "display_anchor": "milestone row: DISCHARGED 2026-06-02",
       "normalized_facts": {"milestone": "DISCHARGED"}
     },
@@ -39,7 +39,7 @@
       "event_type": "AVAILABLE",
       "occurred_at": "2026-06-03T08:30:00-07:00",
       "recorded_at": "2026-06-03T09:00:00-07:00",
-      "source_public_ref": "SRC-AVAILABILITY-INV-1050",
+      "source_public_ref": "SRC-AVAILABILITY-INV-1047",
       "display_anchor": "availability notice: AVAILABLE 2026-06-03",
       "normalized_facts": {"status": "AVAILABLE_FOR_PICKUP"}
     },
@@ -48,7 +48,7 @@
       "event_type": "FREE_TIME_START",
       "occurred_at": "2026-06-03T08:30:00-07:00",
       "recorded_at": "2026-06-03T09:00:00-07:00",
-      "source_public_ref": "SRC-AVAILABILITY-INV-1050",
+      "source_public_ref": "SRC-AVAILABILITY-INV-1047",
       "display_anchor": "availability notice: free time begins 2026-06-03",
       "normalized_facts": {"free_time_days": 4}
     },
@@ -57,7 +57,7 @@
       "event_type": "FREE_TIME_END",
       "occurred_at": "2026-06-07T23:59:00-07:00",
       "recorded_at": "2026-06-07T23:59:00-07:00",
-      "source_public_ref": "SRC-AVAILABILITY-INV-1050",
+      "source_public_ref": "SRC-AVAILABILITY-INV-1047",
       "display_anchor": "availability notice: free time ends 2026-06-07",
       "normalized_facts": {"free_time_days": 4}
     },
@@ -66,7 +66,7 @@
       "event_type": "GATE_OUT",
       "occurred_at": "2026-06-14T16:00:00-07:00",
       "recorded_at": "2026-06-14T17:10:00-07:00",
-      "source_public_ref": "SRC-MILESTONE-INV-1050",
+      "source_public_ref": "SRC-MILESTONE-INV-1047",
       "display_anchor": "milestone row: GATE_OUT 2026-06-14",
       "normalized_facts": {"milestone": "GATE_OUT"}
     }
