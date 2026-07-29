@@ -25,6 +25,7 @@ from src.core.reconstruction import (
 )
 from src.external.cockroach_mcp import CockroachManagedMCP, MCPUnavailableError
 from src.external.dal import DAL
+from src.external.oauth_tokens import OAuthTokenError
 from src.external.reconstruction_mcp import (
     read_reconstruction_memory,
     read_reconstruction_memory_via_driver,
@@ -71,7 +72,11 @@ def run_one_reconstruction_task(
                 knowledge_cutoff_iso=_iso(lease.knowledge_cutoff_at),
                 correlation_id=lease.task_id,
             )
-    except MCPUnavailableError as exc:
+    except (MCPUnavailableError, OAuthTokenError) as exc:
+        # Catch BOTH the MCP transport/auth errors AND credential-build failures
+        # (a dead OAuth refresh token raises OAuthTokenError from the factory
+        # before the client is even built). Either way the MCP is unusable — fall
+        # back to the driver rather than crash the worker.
         # The Managed MCP is the SHOWCASED path, but it must never be able to
         # stall reconstruction (e.g. an OAuth token lapse). Fall back to reading
         # the SAME view via the app's existing non-expiring psycopg connection,

@@ -207,6 +207,23 @@ def test_mcp_malformed_falls_back_to_driver(monkeypatch):
     assert result.state == ReconstructionState.COMPLETE.value
 
 
+def test_oauth_token_dead_falls_back_to_driver(monkeypatch):
+    # A dead OAuth refresh token raises OAuthTokenError from the factory (before
+    # the MCP client is built). That must ALSO route to the driver fallback, not
+    # crash the worker — this is the exact judge-idle failure the fix targets.
+    from src.external.oauth_tokens import OAuthTokenError
+
+    completed, failed = _patch(
+        monkeypatch, lease=_lease(), raise_exc=OAuthTokenError("oauth_refresh_failed"),
+        driver_memory=_hero_memory(),
+    )
+    dal = _FakeDAL()
+    result = worker.run_one_reconstruction_task(dal, worker_id="w", mcp_factory=_MCPCtx)
+    assert not failed
+    assert result.state == ReconstructionState.COMPLETE.value
+    assert dal.fallback_logged
+
+
 def test_mcp_down_and_driver_also_fails_is_closed(monkeypatch):
     # If the MCP is down AND the driver read fails too (a real DB problem, not a
     # token lapse), THEN fail closed — the fallback is a safety net, not a mask.
