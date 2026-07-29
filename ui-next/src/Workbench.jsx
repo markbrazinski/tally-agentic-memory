@@ -453,7 +453,11 @@ export default class Workbench extends React.Component {
           const meta = STATUS_LABEL[r.aggregateStatus] || { status: r.aggregateStatus, kind: "checking" };
           // NEEDS EVIDENCE shows its unresolved reason; a cleared row shows its charge.
           const detail = r.unresolvedReason || "Demurrage";
-          rows.push({ name: r.name || (r.invoiceId ? r.invoiceId + ".pdf" : "—"), sub: detail, container: r.container || "—", status: meta.status, ...this._q(meta.kind), amount: r.amountMinor != null ? money(r.amountMinor) : "—", chevron: "›", cursor: "default", rowBg: "transparent", nameColor: "#23272F", amountColor: "#23272F", onOpen: this.noop, anim: "tly-row-in", workDot: "display:none;" });
+          // anim "" (not tly-row-in): these pre-existing rows are already on
+          // screen from the first-paint seed, so the live reconcile must NOT
+          // re-trigger the entrance animation (that was the flash). Only the hero
+          // animates in.
+          rows.push({ name: r.name || (r.invoiceId ? r.invoiceId + ".pdf" : "—"), sub: detail, container: r.container || "—", status: meta.status, ...this._q(meta.kind), amount: r.amountMinor != null ? money(r.amountMinor) : "—", chevron: "›", cursor: "default", rowBg: "transparent", nameColor: "#23272F", amountColor: "#23272F", onOpen: this.noop, anim: "", workDot: "display:none;" });
         });
     } else if (disputed) {
       const done = st.inv1050 === "done";
@@ -755,12 +759,16 @@ export default class Workbench extends React.Component {
         : (ruleDone ? "7 of 7 days · SOURCE COMPLETE" : reconDone ? "7 of 7 sourced" : "reconstructing…"),
       dayOpen: st.dayOpen, day: dayDetail,
       agents,
-      showRec: P ? !!P.rec : (recReady || insuf),
+      // LIVE: the recommendation block appears only once the replay animation has
+      // reached the `recommendation` rank (i.e. AFTER evidence/validation has
+      // visibly completed) AND the projection actually carries a rec — never on
+      // frame 1 just because the data was fetched (that read as a bogus reveal).
+      showRec: P ? (!!P.rec && (recReady || insuf)) : (recReady || insuf),
       recHead, recColor, recBg, recBorder, recon,
       // Delta §3.6: the financial CTA appears ONLY for a complete DISPUTE
       // recommendation (rev2). REQUEST_EVIDENCE (rev1) never enables approval.
       showApprove: P
-        ? !!(P.rec && P.rec.recommendation_type === "DISPUTE" && P.rec.state === "FROZEN")
+        ? !!(P.rec && P.rec.recommendation_type === "DISPUTE" && P.rec.state === "FROZEN" && recReady)
         : st.wb === "recommendation",
       // Approve CTA label: LIVE reads the exact disputed amount from the frozen
       // recommendation; MOCK keeps "$700".
@@ -1031,8 +1039,8 @@ export default class Workbench extends React.Component {
           <div className="tly-qh" style={css("display: grid; grid-template-columns: 1.7fr 1fr 1.1fr 1fr 40px; gap: 12px; padding: 11px 20px; border-bottom: 1px solid #EFE9DC; font-family: 'IBM Plex Mono',monospace; font-size: 9.5px; letter-spacing: 0.1em; color: #8A96A0;")}>
             <div>INVOICE SOURCE</div><div className="tly-col-hide">CONTAINER</div><div className="tly-col-hide">STATUS</div><div style={css("text-align:right;")}>AMOUNT</div><div />
           </div>
-          {v.queueRows.map((r, i) => (
-            <div key={i} className={"tly-q " + r.anim} onClick={r.onOpen} tabIndex={0} role="button" style={S("display: grid; grid-template-columns: 1.7fr 1fr 1.1fr 1fr 40px; gap: 12px; padding: 15px 20px; border-bottom: 1px solid #EFE9DC; align-items: center;", { cursor: r.cursor, background: r.rowBg })}>
+          {v.queueRows.map((r) => (
+            <div key={r.name} className={"tly-q " + r.anim} onClick={r.onOpen} tabIndex={0} role="button" style={S("display: grid; grid-template-columns: 1.7fr 1fr 1.1fr 1fr 40px; gap: 12px; padding: 15px 20px; border-bottom: 1px solid #EFE9DC; align-items: center;", { cursor: r.cursor, background: r.rowBg })}>
               <div style={css("min-width: 0;")}>
                 <div style={S("font-size: 14px; font-weight: 600;", { color: r.nameColor })}>{r.name}</div>
                 <div style={css("font-family: 'IBM Plex Mono',monospace; font-size: 10.5px; color: #8A96A0; margin-top: 3px;")}>{r.sub}</div>
