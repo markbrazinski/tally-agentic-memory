@@ -17,25 +17,52 @@ from src.platform.intake_worker import run_one_intake_task
 from src.platform.judgment_worker import run_one_judgment_task
 from src.platform.reconstruction_worker import run_one_reconstruction_task
 
+# SSM SecureString holding a CockroachDB Cloud service-account API key — a
+# long-lived (non-expiring) machine credential for the Managed MCP. When present,
+# it is used INSTEAD of the rotating user-OAuth token, so the MCP path can never
+# lapse on idle. Same Bearer transport; the MCP server accepts either token shape.
+MCP_API_KEY_PARAMETER = "/tally/gate5/mcp-api-key"
+
+
+def _read_mcp_api_key(region: str) -> str | None:
+    """Return the service-account API key from SSM, or None if not configured."""
+    try:
+        resp = boto3.client("ssm", region_name=region).get_parameter(
+            Name=MCP_API_KEY_PARAMETER, WithDecryption=True
+        )
+        value = (resp["Parameter"]["Value"] or "").strip()
+        return value or None
+    except Exception:  # noqa: BLE001 — absent/unreadable key → fall back to OAuth
+        return None
+
 
 def _reconstruction_mcp_factory():
-    """Build a fresh read-only Managed MCP client from OAuth-manager state.
+    """Build a fresh read-only Managed MCP client.
 
-    Imported lazily so the intake-only runtime never requires OAuth wiring until
-    a reconstruction task is actually leased. No direct-DB fallback is possible:
-    the factory returns only a Managed MCP client.
+    Prefers a long-lived service-account API key (SSM) as the bearer credential —
+    it never expires, so the MCP path survives idle periods and unattended judge
+    use. Falls back to the rotating OAuth token bundle only when the API key is
+    not configured. Imported lazily so the intake-only runtime needs no OAuth
+    wiring until a reconstruction task is actually leased. (A separate DRIVER
+    fallback in reconstruction_worker still guarantees reconstruction can't stall
+    even if the MCP itself is unreachable.)
     """
-    from src.external.oauth_tokens import (
-        DynamoDBRefreshLease,
-        OAuthTokenManager,
-        SSMTokenStore,
-    )
 
     def _factory() -> CockroachManagedMCP:
-        # Build the OAuth manager the same way app.py:_get_oauth_manager does
-        # (there is no OAuthTokenManager.from_env): an SSM-backed token store plus
-        # a DynamoDB refresh lease, from the same env the hero deploy uses.
         region = os.environ.get("AWS_REGION", "us-east-1")
+        api_key = _read_mcp_api_key(region)
+        if api_key is not None:
+            config = ManagedMCPConfig.from_env(access_token=api_key)
+            return CockroachManagedMCP(config)
+
+        # No API key yet — use the OAuth bundle (SSM token store + DynamoDB
+        # refresh lease), same wiring as app.py:_get_oauth_manager.
+        from src.external.oauth_tokens import (
+            DynamoDBRefreshLease,
+            OAuthTokenManager,
+            SSMTokenStore,
+        )
+
         parameter_name = os.environ["TALLY_OAUTH_TOKEN_PARAMETER"]
         lease_table = os.environ["TALLY_OAUTH_REFRESH_LEASE_TABLE"]
         store = SSMTokenStore(

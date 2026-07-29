@@ -150,3 +150,65 @@ def read_reconstruction_memory(
         returned_row_count=result.trace.row_count,
         server_request_id=result.trace.server_request_id,
     )
+
+
+def read_reconstruction_memory_via_driver(
+    dal,
+    *,
+    shipment_ref: str,
+    container_ref: str,
+    knowledge_cutoff_iso: str,
+    correlation_id: str,
+) -> ReconstructionMemoryResult:
+    """Driver fallback for the reconstruction read: the SAME fixed SELECT against
+    the SAME view, over the app's existing (non-expiring) psycopg connection.
+
+    Used only when the Managed MCP is unavailable (e.g. an OAuth token lapse), so
+    a dead MCP credential can never stall reconstruction. The query is byte-for-byte
+    the one build_reconstruction_query produces, so the two paths are row-for-row
+    equivalent. The DAL query-log records this SELECT as a driver fallback (the
+    caller logs the substitution), per the 'MCP reads fall back to the driver and
+    print the fallback' rule — it is transparent, never a hidden substitution.
+    """
+    query = build_reconstruction_query(
+        shipment_ref=shipment_ref,
+        container_ref=container_ref,
+        knowledge_cutoff_iso=knowledge_cutoff_iso,
+    )
+    with dal.conn.cursor() as cur:
+        cur.execute(query)
+        col_names = [d[0] for d in cur.description]
+        fetched = cur.fetchall()
+    rows: list[RawEventRow] = []
+    for raw in fetched:
+        # Normalize to the same shapes the MCP JSON returns: datetimes/dates as
+        # ISO strings (psycopg hands back native objects), so downstream parsing
+        # (datetime.fromisoformat) sees identical input on both paths.
+        row = {
+            name: (val.isoformat() if hasattr(val, "isoformat") else val)
+            for name, val in zip(col_names, raw, strict=True)
+        }
+        rows.append(
+            RawEventRow(
+                public_ref=_required(row, "public_ref"),
+                event_type=_required(row, "event_type"),
+                shipment_ref=_required(row, "shipment_ref"),
+                container_ref=_required(row, "container_ref"),
+                source_public_ref=_required(row, "source_public_ref"),
+                source_verification_state=_required(row, "source_verification_state"),
+                display_anchor=_required(row, "display_anchor"),
+                provenance_classification=_required(row, "provenance_classification"),
+                occurred_at=_required(row, "occurred_at"),
+                recorded_at=_required(row, "recorded_at"),
+                observed_at=_row_field(row, "observed_at"),
+                effective_from=_row_field(row, "effective_from"),
+                effective_to=_row_field(row, "effective_to"),
+            )
+        )
+    return ReconstructionMemoryResult(
+        rows=tuple(rows),
+        correlation_id=correlation_id,
+        elapsed_ms=0,
+        returned_row_count=len(rows),
+        server_request_id=None,
+    )

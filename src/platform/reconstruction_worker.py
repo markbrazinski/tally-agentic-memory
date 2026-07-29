@@ -25,7 +25,10 @@ from src.core.reconstruction import (
 )
 from src.external.cockroach_mcp import CockroachManagedMCP, MCPUnavailableError
 from src.external.dal import DAL
-from src.external.reconstruction_mcp import read_reconstruction_memory
+from src.external.reconstruction_mcp import (
+    read_reconstruction_memory,
+    read_reconstruction_memory_via_driver,
+)
 from src.platform.reconstruction_repository import (
     ReconstructionCompletion,
     claim_next_reconstruction_task,
@@ -58,6 +61,7 @@ def run_one_reconstruction_task(
         )
         return None
 
+    memory = None
     try:
         with mcp_factory() as mcp:
             memory = read_reconstruction_memory(
@@ -68,27 +72,52 @@ def run_one_reconstruction_task(
                 correlation_id=lease.task_id,
             )
     except MCPUnavailableError as exc:
-        # Fail closed. Transport/timeout is retryable; auth/protocol is terminal.
-        # Log the diagnostic cause (type + message + underlying cause) so a
-        # deployed reconstruction failure is not silent. Public-safe: MCP errors
-        # carry no token/locator text.
+        # The Managed MCP is the SHOWCASED path, but it must never be able to
+        # stall reconstruction (e.g. an OAuth token lapse). Fall back to reading
+        # the SAME view via the app's existing non-expiring psycopg connection,
+        # and print the fallback in the query log — per 'MCP reads fall back to
+        # the driver, and print the fallback'. If the driver read ALSO fails, only
+        # then fail closed (that is a real DB problem, not an auth/token lapse).
         import logging
 
         cause = exc.__cause__ or exc.__context__
-        logging.getLogger("tally.reconstruction").error(
-            "reconstruction MCP failure: code=%s type=%s msg=%s cause=%s:%s",
+        logging.getLogger("tally.reconstruction").warning(
+            "reconstruction MCP unavailable (code=%s type=%s msg=%s cause=%s:%s) "
+            "— using driver fallback",
             _safe_mcp_code(exc), type(exc).__name__, str(exc),
             type(cause).__name__ if cause else None, str(cause) if cause else None,
         )
-        retryable = _is_retryable_mcp(exc)
-        fail_reconstruction(
-            dal,
-            lease=lease,
-            error_code=_safe_mcp_code(exc),
-            retryable=retryable,
-            terminal_state=ReconstructionState.BLOCKED_MEMORY_UNAVAILABLE,
-        )
-        return None
+        try:
+            # Visible fallback marker in the query log (no private SQL/locators).
+            # dal.execute prepends tenant_id as the first bound param, so the SQL
+            # takes two placeholders: tenant_id, then the human marker.
+            dal.execute(
+                "SELECT %s::uuid AS tenant_id, %s::text AS note",
+                (f"MCP unavailable ({_safe_mcp_code(exc)}) — reconstruction read "
+                 "served via direct driver fallback",),
+                tag="reconstruction-driver-fallback",
+                render_source="driver-fallback",
+            )
+            memory = read_reconstruction_memory_via_driver(
+                dal,
+                shipment_ref=lease.shipment_ref,
+                container_ref=lease.container_ref,
+                knowledge_cutoff_iso=_iso(lease.knowledge_cutoff_at),
+                correlation_id=lease.task_id,
+            )
+        except Exception as driver_exc:  # noqa: BLE001 — logged, then fail closed
+            logging.getLogger("tally.reconstruction").error(
+                "reconstruction driver fallback also failed: %s: %s",
+                type(driver_exc).__name__, str(driver_exc),
+            )
+            fail_reconstruction(
+                dal,
+                lease=lease,
+                error_code=_safe_mcp_code(exc),
+                retryable=_is_retryable_mcp(exc),
+                terminal_state=ReconstructionState.BLOCKED_MEMORY_UNAVAILABLE,
+            )
+            return None
 
     validation = validate_events(
         list(memory.rows),
