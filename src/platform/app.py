@@ -190,6 +190,14 @@ async def restrict_public_demo_surface(request: Request, call_next):
             or path.startswith("/assets/")
             or (method == "GET" and path.startswith("/api/invoices"))
             or (method == "POST" and path == "/api/demo/invoices")
+            # Human approval of the frozen recommendation (Gate 5 seal). Without
+            # this the approve POST is 404'd by this filter BEFORE the route runs,
+            # so "Approve $700 dispute" fails and the workbench gets stuck.
+            or (
+                method == "POST"
+                and path.startswith("/api/invoices/")
+                and path.endswith("/approve")
+            )
             or (
                 method == "POST"
                 and path.startswith("/api/invoices/")

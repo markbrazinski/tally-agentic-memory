@@ -159,7 +159,7 @@ export default class Workbench extends React.Component {
 
   applyScene() {
     const s = this.scene;
-    if (s === "live") { this.later(() => this.setState({ arrived: true }), 1300); return; }
+    if (s === "live") { this.later(() => this.setState({ arrived: true }), 1000); return; }
     const base = { view: "workbench", invoiceId: "INV-TLY-1048", arrived: true };
     if (s === "recommendation") this.setState({ ...base, wb: "recommendation", dayOpen: true });
     else if (s === "sendGate") this.setState({ ...base, wb: "sending", gateStep: 5, disputed: false });
@@ -193,9 +193,12 @@ export default class Workbench extends React.Component {
   // Timer reveal through the pipeline ranks up to `target`, for the section-
   // populate animation. Used by the prototype and the live cosmetic replay.
   replayReveal(target) {
+    // The recommendation is the CONSEQUENCE of evidence completing — it lands the
+    // same beat as ruleVerified (validation done → $ conclusion), not on its own
+    // detached timer (#1: "make the recommendation hit once the evidence is done").
     const steps = [
       ["reconstructing", 1200], ["reconstructed", 2600], ["retrieving", 3600],
-      ["ruleVerified", 4800], ["recommendation", 5600],
+      ["ruleVerified", 4800], ["recommendation", 4950],
     ];
     const targetRank = this.rank(target);
     steps.forEach(([wb, ms]) => {
@@ -375,6 +378,7 @@ export default class Workbench extends React.Component {
     const sm = this.statusMeta();
     const disputed = st.disputed;
     const rows = [];
+    let heroRowObj = null;  // built in the `arrived` block; appended last for live (#4)
     // LIVE: the two pre-existing queue rows (INV-1041 APPROVED, INV-1047 NEEDS
     // EVIDENCE) are REAL persisted evaluator outputs read from the projection
     // below — never hardcoded here (v3 §6: do not hardcode either disposition).
@@ -410,7 +414,10 @@ export default class Workbench extends React.Component {
       const heroSub = disputedRow
         ? "Demurrage · Jun 8–14 · Disputed " + heroDisputed
         : "Demurrage · Jun 8–14";
-      rows.push({ name: "INV-1048.pdf", sub: heroSub, container: "TLLU-482931-7", status: st1048, ...this._q(kind1048), amount: heroTotal, chevron: "›", cursor: "pointer", rowBg: disputedRow ? "transparent" : "#FBF6EE", nameColor: "#23272F", amountColor: disputedRow ? "#B4513F" : "#23272F", onOpen: () => this.openInvoice(heroId), anim: view === "queue" ? "tly-row-in" : "", workDot: working ? "" : "display:none;" });
+      heroRowObj = { name: "INV-1048.pdf", sub: heroSub, container: "TLLU-482931-7", status: st1048, ...this._q(kind1048), amount: heroTotal, chevron: "›", cursor: "pointer", rowBg: disputedRow ? "transparent" : "#FBF6EE", nameColor: "#23272F", amountColor: disputedRow ? "#B4513F" : "#23272F", onOpen: () => this.openInvoice(heroId), anim: view === "queue" ? "tly-row-in" : "", workDot: working ? "" : "display:none;" };
+      // LIVE: the hero is appended AFTER the pre-existing rows below (#4: INV-1048
+      // sits at the bottom of the list). MOCK keeps it at the top as before.
+      if (!this.live) rows.push(heroRowObj);
     }
     // LIVE: render every pre-existing (non-hero) queue row straight from the
     // server projection — INV-1041 ($540 APPROVED FOR PAYMENT) and INV-1047
@@ -432,6 +439,8 @@ export default class Workbench extends React.Component {
       const done = st.inv1050 === "done";
       rows.push({ name: "INV-1050.pdf", sub: "Demurrage · Jun 5–11", container: "HLXU-223874-9", status: done ? "APPROVED FOR PAYMENT" : "READY FOR REVIEW", ...this._q(done ? "verified" : "neutral"), amount: "$875", chevron: "›", cursor: "pointer", rowBg: done ? "transparent" : "#FBF6EE", nameColor: "#23272F", amountColor: done ? "#2F7752" : "#23272F", onOpen: this.openInv1050, anim: "tly-row-in", workDot: "display:none;" });
     }
+    // LIVE: hero last, so INV-1048 sits at the bottom of the list (#4).
+    if (this.live && heroRowObj) rows.push(heroRowObj);
 
     const bucketOf = (status) => { if (["READY FOR REVIEW","NEEDS EVIDENCE","READY TO SEND","BLOCKED","SEND BLOCKED"].indexOf(status) >= 0) return "attention"; if (["DISPUTED","APPROVED FOR PAYMENT"].indexOf(status) >= 0) return "completed"; return "processing"; };
     const qcounts = { attention: 0, processing: 0, completed: 0, all: rows.length };
@@ -720,7 +729,7 @@ export default class Workbench extends React.Component {
       // in-app drawer opens instead (click-audit unchanged).
       sourceUrl: this.live ? (this.sourceUrl || null) : null,
       claimsLabel: claimVals ? "EXTRACTED CLAIMS" : "EXTRACTING CLAIMS…", claims,
-      timeline: tl, timelineEmpty: tl.length === 0, timelineCount: tl.length ? tl.length + " of 9 events" : "",
+      timeline: tl, timelineEmpty: tl.length === 0, timelineCount: tl.length ? tl.length + (tl.length === 1 ? " event" : " events") : "",
       days, coverageLine: P
         ? `${P.cov.days_complete} of ${P.cov.days_total} days${P.cov.days_complete === P.cov.days_total ? " · SOURCE COMPLETE" : " · evidence required"}`
         : (ruleDone ? "7 of 7 days · SOURCE COMPLETE" : reconDone ? "7 of 7 sourced" : "reconstructing…"),
