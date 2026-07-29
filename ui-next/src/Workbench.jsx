@@ -438,7 +438,15 @@ export default class Workbench extends React.Component {
     // is clickable into a disposition (v3: do not open/recover them in the film).
     // Amount column is always the carrier invoice total. MOCK scene keeps its
     // original INV-1050 READY-FOR-REVIEW narrative so the click-audit is unchanged.
-    if (this.live) {
+    if (this.live && this.liveQueue === null) {
+      // FIRST PAINT (queue fetch not back yet): render the two pre-existing rows
+      // instantly from their fixed, known values so there is zero load flash.
+      // These are constant rows (their displayed name/amount/status never change);
+      // the live projection reconciles them in place a moment later with the same
+      // values. Only INV-1048 (the hero) is genuinely dynamic and waits for data.
+      rows.push({ name: "INV-1041.pdf", sub: "Demurrage", container: "OOLU-840112-5", status: "APPROVED FOR PAYMENT", ...this._q("verified"), amount: "$540", chevron: "›", cursor: "default", rowBg: "transparent", nameColor: "#23272F", amountColor: "#23272F", onOpen: this.noop, anim: "", workDot: "display:none;" });
+      rows.push({ name: "INV-1047.pdf", sub: "Governing tariff not verified", container: "MSCU-701145-3", status: "NEEDS EVIDENCE", ...this._q("checking"), amount: "$875", chevron: "›", cursor: "default", rowBg: "transparent", nameColor: "#23272F", amountColor: "#23272F", onOpen: this.noop, anim: "", workDot: "display:none;" });
+    } else if (this.live) {
       (this.liveQueue || [])
         .filter((r) => !isHeroRow(r))
         .forEach((r) => {
