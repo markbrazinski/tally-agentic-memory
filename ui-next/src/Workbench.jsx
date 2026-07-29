@@ -86,20 +86,32 @@ export default class Workbench extends React.Component {
 
   // ---- LIVE MODE plumbing (replaces the timer stand-ins) ----
   startLive() {
-    this.loadQueue();
+    // Initial load: the pre-existing rows (INV-1041, INV-1047) render straight
+    // away; the hero (INV-1048) animates in ~1s later, as if it just arrived on
+    // the platform after the window opened. So we do NOT flip `arrived` from the
+    // hero merely already being in the queue — we delay it here.
+    this.loadQueue({ deferHero: true });
     // Subscribe to the aggregate SSE stream; advance wb from real events.
     this._unsub = this.provider.subscribe(
       (evt) => this.onLiveEvent(evt),
       () => { /* EventSource auto-reconnects; nothing to do */ },
     );
   }
-  async loadQueue() {
+  async loadQueue(opts) {
+    const deferHero = opts && opts.deferHero;
     try {
       this.liveQueue = await this.provider.listInvoices();
       const hero = this.liveQueue.find(isHeroRow);
       this._liveErr = null;
-      if (hero) this.setState({ arrived: true });
-      else this.forceUpdate();
+      if (hero && deferHero && !this.state.arrived) {
+        // Pre-existing rows show now; the hero appears ~1s later.
+        this.forceUpdate();
+        this.later(() => this.setState({ arrived: true }), 1000);
+      } else if (hero) {
+        this.setState({ arrived: true });
+      } else {
+        this.forceUpdate();
+      }
     } catch (e) {
       // Surface the error instead of silently hiding the hero row.
       // eslint-disable-next-line no-console
