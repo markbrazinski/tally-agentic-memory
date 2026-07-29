@@ -6,9 +6,22 @@
 
 const BASE = import.meta.env.VITE_API_BASE || "";
 
+// The deployed judge lane gates mutating routes behind a fixed demo bearer token
+// (src/platform/auth.py). It is injected at build time (VITE_DEMO_TOKEN) and
+// scoped to this one demo tenant — there is no per-user login on this lane, so
+// the browser carries the token itself. authHeaders() merges it into every
+// request; reads are public but sending it is harmless.
+const DEMO_TOKEN = import.meta.env.VITE_DEMO_TOKEN || "";
+
+function authHeaders(extra) {
+  const h = { ...(extra || {}) };
+  if (DEMO_TOKEN) h.Authorization = `Bearer ${DEMO_TOKEN}`;
+  return h;
+}
+
 async function getJson(path) {
   const res = await fetch(BASE + path, {
-    headers: { Accept: "application/json" },
+    headers: authHeaders({ Accept: "application/json" }),
     credentials: "same-origin",
   });
   if (!res.ok) throw new Error(`GET ${path} -> ${res.status}`);
@@ -33,7 +46,7 @@ export function createLiveProvider() {
     async getReconstruction(invoiceId) {
       // 404 before reconstruction exists is normal (not an error state).
       const res = await fetch(BASE + `/api/invoices/${invoiceId}/reconstruction`, {
-        headers: { Accept: "application/json" },
+        headers: authHeaders({ Accept: "application/json" }),
         credentials: "same-origin",
       });
       if (res.status === 404) return null;
@@ -43,7 +56,7 @@ export function createLiveProvider() {
 
     async getDecision(invoiceId) {
       const res = await fetch(BASE + `/api/invoices/${invoiceId}/decision`, {
-        headers: { Accept: "application/json" },
+        headers: authHeaders({ Accept: "application/json" }),
         credentials: "same-origin",
       });
       if (res.status === 404) return null;
@@ -79,11 +92,11 @@ export function createLiveProvider() {
         BASE + `/api/invoices/${invoiceId}/recommendations/${recommendationId}/approve`,
         {
           method: "POST",
-          headers: {
+          headers: authHeaders({
             "Content-Type": "application/json",
             "Idempotency-Key": idempotencyKey,
             "If-Match": approvalEtag,
-          },
+          }),
           credentials: "same-origin",
         },
       );

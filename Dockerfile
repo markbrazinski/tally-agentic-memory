@@ -6,6 +6,13 @@ WORKDIR /ui
 COPY ui-next/package.json ui-next/package-lock.json ./
 RUN npm ci
 COPY ui-next/ ./
+# The isolated judge lane gates mutations behind a fixed demo bearer token and
+# has no per-user login, so the SPA must carry the token to import/approve. Vite
+# inlines VITE_* at build time; the deploy passes it as a build arg. NOTE: this
+# bakes the demo-tenant-scoped token into the JS bundle — acceptable ONLY on this
+# isolated demo lane, never a production posture.
+ARG VITE_DEMO_TOKEN=""
+ENV VITE_DEMO_TOKEN=${VITE_DEMO_TOKEN}
 RUN npm run build
 
 

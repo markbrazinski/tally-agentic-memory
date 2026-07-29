@@ -18,7 +18,13 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
-docker build --platform linux/amd64 -t "${REPOSITORY}:${IMAGE_TAG}" -f Dockerfile .
+# The SPA carries the demo bearer token (no per-user login on this lane), baked
+# into the bundle at build time. Read it from SSM and pass as a build arg.
+DEMO_TOKEN="$(aws ssm get-parameter --name "${PREFIX}/demo-token" --with-decryption \
+  --profile "$PROFILE" --region "$REGION" --query 'Parameter.Value' --output text)"
+docker build --platform linux/amd64 \
+  --build-arg "VITE_DEMO_TOKEN=${DEMO_TOKEN}" \
+  -t "${REPOSITORY}:${IMAGE_TAG}" -f Dockerfile .
 aws ecr get-login-password --profile "$PROFILE" --region "$REGION" |
   docker login --username AWS --password-stdin \
     "${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com" >/dev/null
