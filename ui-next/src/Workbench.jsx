@@ -517,6 +517,10 @@ export default class Workbench extends React.Component {
       invNavBg: inv.bg, invNavFg: inv.fg, covNavBg: cov.bg, covNavFg: cov.fg,
       invAria: view === "queue" ? "page" : "false",
       toggleAnnot: this.toggleAnnot, replay: this.replay, annot: st.annot, internal: !!(this.props && this.props.internal),
+      // Source coverage is a prototype-static screen (2 rows COVERED, 2 BACKEND
+      // REQUIRED). Hide the nav item in the LIVE demo so there's no non-live
+      // screen to stumble into on camera; keep it in the mock/click-audit scene.
+      showCoverageNav: !this.live,
       annotFg: st.annot ? "#8A7A50" : "#6F7883", annotBg: st.annot ? "#F3EAD3" : "#FCFBF8",
       crumb: view === "queue" ? "Invoices" : view === "coverage" ? "Source coverage" : view === "handoff" ? "Handoff" : view === "wb1050" ? "Invoices / INV-TLY-1050" : "Invoices / INV-TLY-1048",
       announce: view === "workbench" ? sm.status + " — " + (wb.agents.find((a) => a.state === "working") || { name: "Idle" }).name : arrived ? "New invoice INV-1048 received" : "Invoices",
@@ -1019,10 +1023,12 @@ export default class Workbench extends React.Component {
             <a href="#" onClick={v.goQueue} aria-current={v.invAria} style={S("display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 8px; font-size: 13.5px; font-weight: 600;", { background: v.invNavBg, color: v.invNavFg })}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={css("opacity:0.9; flex:0 0 auto;")}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /><line x1="8.5" y1="13" x2="15.5" y2="13" /><line x1="8.5" y1="16.5" x2="13" y2="16.5" /></svg>Invoices
             </a>
-            <div style={css("font-family: 'IBM Plex Mono',monospace; font-size: 9.5px; letter-spacing: 0.16em; color: #56656F; padding: 18px 10px 8px;")}>RECORD</div>
-            <a href="#" onClick={v.goCoverage} style={S("display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 8px; font-size: 13.5px; font-weight: 600;", { background: v.covNavBg, color: v.covNavFg })}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={css("opacity:0.9; flex:0 0 auto;")}><path d="M12 3 3 7.5 12 12l9-4.5z" /><path d="M3 12l9 4.5L21 12" /><path d="M3 16.5 12 21l9-4.5" /></svg>Source coverage
-            </a>
+            {v.showCoverageNav && (<>
+              <div style={css("font-family: 'IBM Plex Mono',monospace; font-size: 9.5px; letter-spacing: 0.16em; color: #56656F; padding: 18px 10px 8px;")}>RECORD</div>
+              <a href="#" onClick={v.goCoverage} style={S("display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 8px; font-size: 13.5px; font-weight: 600;", { background: v.covNavBg, color: v.covNavFg })}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={css("opacity:0.9; flex:0 0 auto;")}><path d="M12 3 3 7.5 12 12l9-4.5z" /><path d="M3 12l9 4.5L21 12" /><path d="M3 16.5 12 21l9-4.5" /></svg>Source coverage
+              </a>
+            </>)}
           </div>
           <div className="tly-navfooter" style={css("margin-top: auto; padding: 16px;")}>
             {v.internal && (<a href="#" onClick={v.goHandoff} style={css("display: block; font-family: 'IBM Plex Mono',monospace; font-size: 10px; letter-spacing: 0.08em; color: #6E7F8B; padding: 8px 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 7px; text-align: center;")}>DESIGN &amp; ENG HANDOFF →</a>)}
