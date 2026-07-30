@@ -523,7 +523,7 @@ export default class Workbench extends React.Component {
       isQueue: view === "queue", isWorkbench: view === "workbench", isCoverage: view === "coverage", isHandoff: view === "handoff", isWb1050: view === "wb1050",
       openInv1050: this.openInv1050,
       wb1050days: ["Jun 5","Jun 6","Jun 7","Jun 8","Jun 9","Jun 10","Jun 11"].map((d) => ({ date: d })),
-      queueRows: shownRows, queueCount: rows.length, queueFilters, show1050Prompt: disputed && st.inv1050 !== "done",
+      queueRows: shownRows, queueCount: rows.length, queueFilters, show1050Prompt: !this.live && disputed && st.inv1050 !== "done",
       qrEvid: st.qrEvid, toggleQrEvid: this.toggleQrEvid, openQuickReview: this.openQuickReview,
       wb,
       approveDispute: this.approveDispute, approveSend: this.approveSend, retrySend: this.retrySend,
