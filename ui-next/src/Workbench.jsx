@@ -476,6 +476,10 @@ export default class Workbench extends React.Component {
     } else if (this.live) {
       (this.liveQueue || [])
         .filter((r) => !isHeroRow(r))
+        // Stable display order: the pre-existing rows always render 1041 then
+        // 1047 (by invoice name), never the server's return order — otherwise
+        // they visibly flip when the hero's arrival triggers a queue refresh.
+        .sort((a, b) => String(a.name || a.invoiceId).localeCompare(String(b.name || b.invoiceId)))
         .forEach((r) => {
           const meta = STATUS_LABEL[r.aggregateStatus] || { status: r.aggregateStatus, kind: "checking" };
           // NEEDS EVIDENCE shows its unresolved reason; a cleared row shows its charge.
