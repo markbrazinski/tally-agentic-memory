@@ -203,6 +203,16 @@ async def restrict_public_demo_surface(request: Request, call_next):
                 and path.startswith("/api/invoices/")
                 and path.endswith("/intake/retry")
             )
+            # Gate 6 draft + gated send POSTs. Same reason as /approve above: the
+            # public-surface filter 404s them BEFORE the route runs unless
+            # allowlisted. The GET projection is already covered by the generic
+            # "GET and path.startswith('/api/invoices')" rule below.
+            or (
+                method == "POST"
+                and path.startswith("/api/invoices/")
+                and (path.endswith("/correspondence/draft")
+                     or path.endswith("/correspondence/send"))
+            )
             or (
                 method == "POST"
                 and path.startswith("/api/invoices/")

@@ -319,16 +319,43 @@ export default class Workbench extends React.Component {
   }
   approveSend() {
     this.clearTimers();
-    // LIVE: show the send-gate as verifying, then let the SERVER decide the
-    // outcome. correspondence.sent -> "sent" (disputed), correspondence.send_blocked
-    // -> "sending" + gateBlocked, both via SSE/eventMap. No timer authors the send
-    // result or the gate checks (v3: motion may not create/pace business state).
-    if (this.live) { this.setState({ wb: "sending", gateStep: 0, gateBlocked: false }); return; }
+    // LIVE: draft from the sealed decision, then the second-authorization gated
+    // send. The awaited calls drive the Sealed -> Sending -> Sent transition;
+    // SSE correspondence.sent/send_blocked still reconcile via eventMap, but we
+    // do NOT depend only on SSE. On block/fail we surface it, never fake a send.
+    if (this.live) { this.approveSendLive(); return; }
     // The controlled external send is intentionally paused for the demo; the
     // send-gate is backed by the real seal. Advance through the gate visual.
     this.setState({ wb: "sending", gateStep: 0 });
     for (let i = 1; i <= 5; i++) this.later(() => this.setState({ gateStep: i }), i * 400);
     this.later(() => this.setState({ wb: "sent", disputed: true }), 2400);
+  }
+  async approveSendLive() {
+    const id = this.state.invoiceId;
+    this.setState({ wb: "sending", gateBlocked: false });
+    try {
+      await this.provider.draft(id);
+      // A fresh attempt each click so a retry after a transient block/fail is a
+      // real new send, not an idempotent replay of the blocked attempt. The
+      // provider is still idempotent on its own key, so no duplicate delivery.
+      const key = `send-${id}-${this._sendTry = (this._sendTry || 0) + 1}`;
+      const res = await this.provider.approveSend(id, key);
+      if (res.send_state === "SENT") {
+        this.sentMsgId = res.provider_message_id
+          || (await this.provider.getCorrespondence(id).catch(() => null))?.provider_message_id
+          || null;
+        this.setState({ wb: "sent", disputed: true, gateBlocked: false });
+      } else {
+        // SEND_BLOCKED / SEND_FAILED_RETRYABLE — surface it, do not pretend sent.
+        this._liveErr = "Send " + res.send_state + (res.blocked_reason ? " · " + res.blocked_reason : "");
+        this.setState({ wb: "sending", gateBlocked: true });
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[Tally] send FAILED:", e);
+      this._liveErr = "Send failed: " + (e && e.message ? e.message : e);
+      this.setState({ wb: "sending", gateBlocked: true });
+    }
   }
   retrySend() { this.setState({ gateBlocked: false }); this.approveSend(); }
   goQueue(e) { if (e && e.preventDefault) e.preventDefault(); this.clearTimers(); this.setState({ view: "queue", drawer: null }); }
@@ -785,14 +812,22 @@ export default class Workbench extends React.Component {
       manifest: [{ label: "INV-1048.pdf", on: this.openSourceInvoice }, { label: "Applicable tariff clause", on: this.openSourceTariff }, { label: "7 charged-day calculation", on: this.goDecision }, { label: "Decision record", on: this.goDecision }],
       showGate, gateTitle: st.gateBlocked ? "SEND BLOCKED · MEMORY" : "VERIFYING SEND GATES", gateBorder: st.gateBlocked ? "#B4513F" : "#DED6C7",
       gateChecks, gateBlocked: st.gateBlocked, retrySend: this.retrySend,
+      // LIVE: the clean 3-step beat (Sealed -> Sending -> Sent). The backend still
+      // runs all real gates; the UI just shows the story. MOCK keeps the 5-row
+      // gate ceremony above (click-audit unchanged). "done" = past, "active" = now.
+      liveSend: this.live,
+      sendSteps: [
+        { label: "Sealed", state: "done" },
+        { label: "Sending", state: st.wb === "sent" ? "done" : st.gateBlocked ? "blocked" : "active" },
+        { label: "Sent", state: st.wb === "sent" ? "done" : "pending" },
+      ],
       showSent,
-      // The controlled-provider message id is a SERVER send-projection field. It
-      // is not wired on the frontend provider yet (backend send wiring is a
-      // separate in-progress task), so LIVE shows an awaiting-server placeholder
-      // rather than a fabricated id. MOCK keeps its demo id for the click-audit.
-      // TODO(backend): source from the send/correspondence.sent projection
-      // (e.g. provider.getSend(id).message_id) and render it here in live mode.
-      sentMessageId: this.scene === "live" ? null : "demo-8f2a1c",
+      // The controlled-provider message id is the SERVER send-projection field.
+      // LIVE sources it from the real send response (this.sentMsgId, set in
+      // approveSendLive from provider_message_id, e.g. "demo-…"); until the send
+      // resolves it is null and the composer shows an awaiting-server placeholder.
+      // MOCK keeps its demo id for the click-audit.
+      sentMessageId: this.live ? (this.sentMsgId || null) : "demo-8f2a1c",
       annotText: "ROUTE /invoices/INV-TLY-1048 (tabless) · state " + sm.status + " · dominant object: 7-day ledger · Back/refresh restore invoice + selection · progressive states are event-driven (BACKEND REQUIRED)",
     };
   }
@@ -1278,7 +1313,21 @@ export default class Workbench extends React.Component {
                         <button onClick={v.approveSend} style={css("width: 100%; font-size: 14px; font-weight: 600; color: #F5F0E7; background: #1D2A33; border: none; border-radius: 8px; padding: 12px; cursor: pointer;")}>Approve &amp; Send</button>
                       </div>
                     )}
-                    {wb.showGate && (
+                    {/* LIVE: clean 3-step Sealed -> Sending -> Sent (backend still runs
+                        every real gate). MOCK: the original 5-row gate ceremony. */}
+                    {wb.liveSend && (wb.showGate || wb.showSent) && (
+                      <div style={css("margin-top: 14px; padding-top: 14px; border-top: 1px solid #EFE9DC;")}>
+                        <div style={css("display: flex; align-items: center; gap: 10px;")}>
+                          {wb.sendSteps.map((s, i) => {
+                            const color = s.state === "done" ? "#2F7752" : s.state === "active" ? "#8A7A50" : s.state === "blocked" ? "#B4513F" : "#B7AE9C";
+                            const icon = s.state === "done" ? "✓" : s.state === "active" ? "◌" : s.state === "blocked" ? "✕" : "·";
+                            return (<React.Fragment key={i}>{i > 0 && <span style={css("flex:1; height:1px; background:#E4DCCB;")} />}<span style={S("display:flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600;", { color })}>{icon} {s.label}</span></React.Fragment>);
+                          })}
+                        </div>
+                        {wb.gateBlocked && (<button onClick={v.retrySend} style={css("margin-top: 12px; width: 100%; font-size: 12.5px; font-weight: 600; color: #23272F; background: #F3EEE3; border: 1px solid #DED6C7; border-radius: 7px; padding: 9px; cursor: pointer;")}>Retry blocked send</button>)}
+                      </div>
+                    )}
+                    {!wb.liveSend && wb.showGate && (
                       <div style={css("margin-top: 14px; padding-top: 14px; border-top: 1px solid #EFE9DC;")}>
                         <div style={css("font-family: 'IBM Plex Mono',monospace; font-size: 9.5px; letter-spacing: 0.1em; color: #8A96A0;")}>{wb.gateTitle}</div>
                         <div style={css("margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px;")}>

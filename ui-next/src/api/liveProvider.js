@@ -106,6 +106,54 @@ export function createLiveProvider() {
       }
       return await res.json();
     },
+
+    // Draft the adjustment request from the sealed decision (idempotent per seal).
+    async draft(invoiceId) {
+      const res = await fetch(
+        BASE + `/api/invoices/${invoiceId}/correspondence/draft`,
+        {
+          method: "POST",
+          headers: authHeaders({ "Content-Type": "application/json" }),
+          credentials: "same-origin",
+        },
+      );
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(`draft -> ${res.status} ${JSON.stringify(detail)}`);
+      }
+      return await res.json();
+    },
+
+    // Second authorization: run fresh send gates, then controlled send (idempotent).
+    async approveSend(invoiceId, idempotencyKey) {
+      const res = await fetch(
+        BASE + `/api/invoices/${invoiceId}/correspondence/send`,
+        {
+          method: "POST",
+          headers: authHeaders({
+            "Content-Type": "application/json",
+            "Idempotency-Key": idempotencyKey,
+          }),
+          credentials: "same-origin",
+        },
+      );
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(`send -> ${res.status} ${JSON.stringify(detail)}`);
+      }
+      return await res.json();
+    },
+
+    // Latest draft + send projection (or null) — backs the sent status + message id.
+    async getCorrespondence(invoiceId) {
+      const res = await fetch(BASE + `/api/invoices/${invoiceId}/correspondence`, {
+        headers: authHeaders({ Accept: "application/json" }),
+        credentials: "same-origin",
+      });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`GET correspondence -> ${res.status}`);
+      return await res.json();
+    },
   };
 }
 

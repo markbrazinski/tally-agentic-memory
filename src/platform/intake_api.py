@@ -34,6 +34,7 @@ from src.external.invoice_source_store import (
 from src.platform.access_evidence_repository import release_access_evidence
 from src.platform.auth import AuthedActor
 from src.platform.authority_seal_api import register_authority_seal_routes
+from src.platform.correspondence_api import register_correspondence_routes
 from src.platform.intake_events import load_event_history, sse_stream
 from src.platform.intake_repository import (
     FinalizeReceipt,
@@ -265,6 +266,10 @@ def make_router(*, require_auth) -> APIRouter:
     register_reconstruction_routes(router, tenant_id_getter=_tenant_id)
     # Gate 5 human approval + atomic seal.
     register_authority_seal_routes(
+        router, tenant_id_getter=_tenant_id, require_auth=require_auth
+    )
+    # Gate 6 sealed-record draft + gated controlled send.
+    register_correspondence_routes(
         router, tenant_id_getter=_tenant_id, require_auth=require_auth
     )
 
