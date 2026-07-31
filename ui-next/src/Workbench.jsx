@@ -35,6 +35,11 @@ const DEMO_PACING_MS = {
   // stops (GROWTH_SETTLE_MS with no height change) or on any manual scroll.
   SECTION_GROWTH_POLL_MS: 250,       // how often to re-check the growing section
   SECTION_GROWTH_WATCH_MS: 12000,    // how long to keep following one section
+  // Review: the recommendation renders late and grows the page a lot. Wait for
+  // the height to hold still before snapping to the top, so the decision panel
+  // lands once instead of bouncing.
+  REVIEW_SETTLE_MS: 600,             // height unchanged this long => settled
+  REVIEW_SETTLE_MAX_MS: 8000,        // hard cap: snap anyway
 };
 
 // PIPELINE FOLLOW maps. A chip turns ACTIVE at the wb rank that first drives it
@@ -62,7 +67,8 @@ const PIPELINE_SECTION_FOR_CHIP = {
   reconstruction: "sec-timeline",
   ledger: "sec-days",     // the seven charged days, as they populate
   evidence: "sec-days",   // applicability checks land in the same section
-  review: "sec-inputs",
+  // review has no section anchor: it snaps to the TOP of the page (see
+  // snapToTopWhenSettled) so the whole case file reads top-down.
   correspondence: "sec-corr",
 };
 
@@ -213,11 +219,41 @@ export default class Workbench extends React.Component {
     }
     // Review: the human inspects the whole case, so re-open the sections that
     // stateOpen() closes as the rank advances. Expansions land FIRST (all at
-    // once — staggering ripples the page), then scroll, or the target moves
-    // mid-flight. Sections stay open from here; nothing re-collapses them.
+    // once — staggering ripples the page), then we snap to the TOP so the case
+    // file reads top-down the way a reviewer would work it.
+    //
+    // The recommendation panel renders a beat AFTER this transition and grows the
+    // page hard (~199 -> 516px of scroll range). Scrolling before that settles is
+    // what made the decision bounce around mid-page: the growth-follow left over
+    // from Evidence was chasing the bottom while this scroll pulled the other way.
+    // So: stop the follow, wait for the height to stop changing, THEN snap once.
+    this._growthRun = (this._growthRun || 0) + 1;   // supersede any running follow
+    clearTimeout(this._growthTimer);
     const ud = Object.assign({}, this.state.discWb === this.state.wb ? this.state.userDisc : {}, { source: true, timeline: true, days: true });
     this.setState({ userDisc: ud, discWb: this.state.wb });
-    this.later(() => this.jump("sec-inputs"), DEMO_PACING_MS.SECTION_EXPAND_MS);
+    this.later(() => this.snapToTopWhenSettled(), DEMO_PACING_MS.SECTION_EXPAND_MS);
+  }
+  // Wait for the page height to stop changing, then scroll to the very top in one
+  // smooth move. Bounded so a page that never settles still snaps.
+  snapToTopWhenSettled() {
+    const P = DEMO_PACING_MS;
+    const c = document.getElementById("tly-scroll");
+    if (!c) return;
+    let lastH = -1, stable = 0, waited = 0;
+    const settle = () => {
+      if (this.userScrolled) return;
+      const h = c.scrollHeight;
+      stable = h === lastH ? stable + P.SECTION_GROWTH_POLL_MS : 0;
+      lastH = h;
+      waited += P.SECTION_GROWTH_POLL_MS;
+      if (stable >= P.REVIEW_SETTLE_MS || waited >= P.REVIEW_SETTLE_MAX_MS) {
+        c.scrollTo({ top: 0, behavior: this.reduced ? "auto" : "smooth" });
+        return;
+      }
+      this._growthTimer = setTimeout(settle, P.SECTION_GROWTH_POLL_MS);
+    };
+    clearTimeout(this._growthTimer);
+    this._growthTimer = setTimeout(settle, P.SECTION_GROWTH_POLL_MS);
   }
   // GROWTH FOLLOW — the anchored section keeps getting taller as its content
   // reveals (ledger rows, then evidence checks), pushing its bottom under the
@@ -1514,10 +1550,9 @@ export default class Workbench extends React.Component {
         </div>
 
         <div className="tly-wb-grid" style={S("display: grid; gap: 20px; align-items: start;", { gridTemplateColumns: v.gridCols })}>
-          {/* LEFT — `sec-inputs` is the Review anchor: the top of the evidence
-              stack. At sendPhase this is the sealed-inputs (COMPLETED ✓) strip;
-              before that the strip isn't rendered yet, so the same anchor puts
-              the case file's first section under the pipeline row. */}
+          {/* LEFT — the evidence stack. At sendPhase its first child is the
+              sealed-inputs (COMPLETED ✓) strip. Keeps its id as a stable anchor
+              for in-page links; Review itself snaps to the top of the scroller. */}
           <div id="sec-inputs" style={css("display: flex; flex-direction: column; gap: 18px; min-width: 0; scroll-margin-top: 80px;")}>
             {wb.sendPhase && (
               <div style={css("display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 11px 14px; background: #F0EBE0; border: 1px solid #E1D9C9; border-radius: 10px;")}>
