@@ -13,8 +13,9 @@ const DEMO_PACING_MS = {
   INTAKE_CLAIM_FIELD_STAGGER_MS: 700,    // each claim field appears (6 fields)
   // Reconstruction
   RECONSTRUCTION_TIMELINE_EVENT_STAGGER_MS: 900,  // each timeline event
-  RECONSTRUCTION_LEDGER_COVERAGE_DELAY_MS: 800,   // after last event, before the ledger rows start
-  RECONSTRUCTION_LEDGER_ROW_STAGGER_MS: 350,      // each of the 7 charged-day rows appears
+  RECONSTRUCTION_LEDGER_COVERAGE_DELAY_MS: 800,   // after last event, before the ledger lead-in
+  RECONSTRUCTION_LEDGER_LEAD_IN_MS: 1000,         // ledger section visible -> row 1 appears
+  RECONSTRUCTION_LEDGER_ROW_STAGGER_MS: 450,      // each of the 7 charged-day rows appears
   // Evidence
   EVIDENCE_CANDIDATE_TO_VERIFY_START_MS: 2200,    // candidate shown -> checks begin
   EVIDENCE_VERIFY_CHECK_STAGGER_MS: 1600,         // each of 4 checks flips VERIFIED
@@ -112,7 +113,6 @@ export default class Workbench extends React.Component {
       ledgerRowsShown: 0,    // 0..7 charged-day rows revealed one at a time
       coverageFilled: false, // ledger COVERAGE column filled (SOURCE COMPLETE)
       checksShown: 0,        // 0..4 evidence checks flipped VERIFIED
-      ledgerRuleFilled: false, // ledger RULE/Δ columns filled
       auditEntry: 0,         // 0..3 seal audit-trail entries revealed
     };
     this._timers = [];
@@ -231,7 +231,7 @@ export default class Workbench extends React.Component {
     // Prototype scenes jump straight to a terminal state — there's no paced reveal
     // to run, so mark every paced sub-step already-revealed (full ledger/timeline/
     // claims/audit) rather than leaving them at the pre-reveal 0 baseline.
-    const revealed = { intakeState: 1, claimFieldsShown: 6, eventsShown: 6, ledgerRowsShown: 7, coverageFilled: true, checksShown: 4, ledgerRuleFilled: true, auditEntry: 3 };
+    const revealed = { intakeState: 1, claimFieldsShown: 6, eventsShown: 6, ledgerRowsShown: 7, coverageFilled: true, checksShown: 4, auditEntry: 3 };
     const base = { view: "workbench", invoiceId: "INV-TLY-1048", arrived: true, ...revealed };
     if (s === "recommendation") this.setState({ ...base, wb: "recommendation", dayOpen: true });
     else if (s === "sendGate") this.setState({ ...base, wb: "sending", gateStep: 5, disputed: false });
@@ -247,7 +247,7 @@ export default class Workbench extends React.Component {
   openInvoice(realId) {
     this.clearTimers();
     // Fresh reveal: reset every paced sub-step counter so re-opening replays clean.
-    const pacingReset = { intakeState: 0, claimFieldsShown: 0, eventsShown: 0, ledgerRowsShown: 0, coverageFilled: false, checksShown: 0, ledgerRuleFilled: false, auditEntry: 0 };
+    const pacingReset = { intakeState: 0, claimFieldsShown: 0, eventsShown: 0, ledgerRowsShown: 0, coverageFilled: false, checksShown: 0, auditEntry: 0 };
     if (this.live) {
       const id = typeof realId === "string" ? realId
         : (this.liveQueue && this.liveQueue.find(isHeroRow)?.invoiceId)
@@ -293,14 +293,17 @@ export default class Workbench extends React.Component {
       step(P.RECONSTRUCTION_TIMELINE_EVENT_STAGGER_MS, () => this.setState({ eventsShown: i }));
     }
 
-    // 3. After the last event, the 7 charged-day rows populate ONE AT A TIME
-    //    (post-reconstruction), then COVERAGE fills SOURCE COMPLETE; RULE/Δ pending.
+    // 3. After the last event, the ledger section appears, holds for a beat
+    //    (LEAD_IN), then the 7 charged-day rows populate ONE AT A TIME. Each row
+    //    lands COMPLETE — real RULE ($250) and Δ (−$100) — because the projection
+    //    was fully fetched before this replay began; there is no pending state to
+    //    resolve later. COVERAGE fills SOURCE COMPLETE with the first row.
     if (!reach("reconstructed")) return;
-    step(P.RECONSTRUCTION_LEDGER_COVERAGE_DELAY_MS, () => this.setState({ wb: "reconstructed", ledgerRowsShown: 1 }));
+    step(P.RECONSTRUCTION_LEDGER_COVERAGE_DELAY_MS, () => this.setState({ wb: "reconstructed" }));
+    step(P.RECONSTRUCTION_LEDGER_LEAD_IN_MS, () => this.setState({ coverageFilled: true, ledgerRowsShown: 1 }));
     for (let i = 2; i <= 7; i++) {
       step(P.RECONSTRUCTION_LEDGER_ROW_STAGGER_MS, () => this.setState({ ledgerRowsShown: i }));
     }
-    step(P.RECONSTRUCTION_LEDGER_ROW_STAGGER_MS, () => this.setState({ coverageFilled: true }));
 
     // 4. Enter Evidence — candidate header shows immediately — then flip the 4 checks.
     if (!reach("retrieving")) return;
@@ -313,7 +316,7 @@ export default class Workbench extends React.Component {
     // 5. After the 4th check: APPLICABILITY VERIFIED badge, then fill ledger RULE/Δ
     //    across all 7 rows at once + land the recommendation (tied to ruleVerified).
     if (!reach("ruleVerified")) return;
-    step(P.EVIDENCE_VERIFIED_TO_LEDGER_FILL_MS, () => this.setState({ wb: "ruleVerified", ledgerRuleFilled: true }));
+    step(P.EVIDENCE_VERIFIED_TO_LEDGER_FILL_MS, () => this.setState({ wb: "ruleVerified" }));
     if (!reach("recommendation")) return;
     step(150, () => this.setState({ wb: "recommendation" }));
   }
@@ -480,7 +483,7 @@ export default class Workbench extends React.Component {
   closeQuickReview() { this.setState({ quickOpen: false }); }
   approvePayment() { this.setState({ inv1050: "done" }); }
   toggleAnnot() { this.setState({ annot: !this.state.annot }); }
-  replay() { this.clearTimers(); this.setState({ view: "queue", wb: "intake", arrived: false, disputed: false, dayOpen: false, drawer: null, quickOpen: false, inv1050: "pending", gateStep: 0, gateBlocked: false, sealStep: 0, intakeState: 0, claimFieldsShown: 0, eventsShown: 0, ledgerRowsShown: 0, coverageFilled: false, checksShown: 0, ledgerRuleFilled: false, auditEntry: 0 }); this.later(() => this.setState({ arrived: true }), 900); }
+  replay() { this.clearTimers(); this.setState({ view: "queue", wb: "intake", arrived: false, disputed: false, dayOpen: false, drawer: null, quickOpen: false, inv1050: "pending", gateStep: 0, gateBlocked: false, sealStep: 0, intakeState: 0, claimFieldsShown: 0, eventsShown: 0, ledgerRowsShown: 0, coverageFilled: false, checksShown: 0, auditEntry: 0 }); this.later(() => this.setState({ arrived: true }), 900); }
   stop(e) { e.stopPropagation(); }
   jump(id, e) { if (e && e.preventDefault) e.preventDefault(); const c = document.getElementById("tly-scroll"); const el = document.getElementById(id); if (c && el) { const top = el.getBoundingClientRect().top - c.getBoundingClientRect().top + c.scrollTop - 74; c.scrollTo({ top: Math.max(0, top), behavior: this.reduced ? "auto" : "smooth" }); } }
   stateOpen(key) { const w = this.state.wb; if (key === "source") return w === "intake"; if (key === "timeline") return w === "reconstructing" || w === "reconstructed"; if (key === "days") return ["reconstructing","reconstructed","retrieving","ruleVerified","recommendation","insufficient"].indexOf(w) >= 0; if (key === "corr") return ["correspondence","sending","sent"].indexOf(w) >= 0; return false; }
@@ -752,24 +755,26 @@ export default class Workbench extends React.Component {
     // from projection availability. The DATA (coverage/rule/disc values) is fully
     // computed below from pd (live) or the mock branch; this only decides WHEN the
     // COVERAGE column vs the RULE/Δ columns become visible, driven by two booleans
-    // that startPacedReveal flips (coverageFilled, then ledgerRuleFilled). insuf
+    // that startPacedReveal flips (coverageFilled gates the whole row). insuf
     // (evidence-gap scene) bypasses the gate so its SOURCE GAP shows immediately.
     // Reveal predicate: a sub-step is shown when the paced counter reached it OR the
     // wb rank is already past its milestone (so an SSE-driven advance past the replay
     // still renders correctly — the ANIMATION never couples to SSE, but the final
     // projection stays correct).
     const covShown = st.coverageFilled || this.at("reconstructed");
-    const ruleShown = st.ledgerRuleFilled || this.at("ruleVerified");
     const PEND = { rule: "—", ruleColor: "#B7AE9C", disc: "—", discColor: "#B7AE9C" };
+    // A row that is visible is COMPLETE: real RULE and Δ, no `verifying`/`…` stage.
+    // The projection (incl. the verified $250 rate and each day's dispute amount) is
+    // fetched in full before this replay starts, so a pending state would depict
+    // work-in-progress for work already finished — and it forced all 7 rows to snap
+    // to their real values at once, which is the jolt this removes. Rows are still
+    // revealed one at a time via ledgerRowsShown; only the second pass is gone.
     const gateLedger = (row, isGap) => {
       if (insuf || isGap) return row;                 // gaps & the insuf scene: as-is
       if (!covShown) {                                 // before COVERAGE fills: nothing sourced yet
         return { ...row, coverage: "sourcing…", covFg: "#8A7A50", outcome: "SOURCING", outBg: "#F3EAD3", outFg: "#8A7A50", ...PEND };
       }
-      if (!ruleShown) {                                // COVERAGE shown; RULE/Δ still pending
-        return { ...row, coverage: "SOURCE COMPLETE", covFg: "#2F7752", outcome: "SOURCE COMPLETE", outBg: "#E4EEE7", outFg: "#2F7752", rule: "verifying", ruleColor: "#8A7A50", disc: "…", discColor: "#8A7A50" };
-      }
-      return row;                                      // fully revealed: real values
+      return row;                                      // visible => fully revealed
     };
     const days = dayNums.map((n, ix) => {
       // LIVE: read this day's persisted state from the projection. The June-11
@@ -796,8 +801,10 @@ export default class Workbench extends React.Component {
       // MOCK/non-live scene: unchanged prototype rendering.
       const badGap = insuf && ix === 2;
       if (badGap) { outcome = "INSUFFICIENT EVIDENCE"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE GAP"; covFg = "#B4513F"; rule = "—"; ruleColor = "#B7AE9C"; disc = "—"; discColor = "#B7AE9C"; }
-      else if (ruleDone) { outcome = "RATE DISCREPANCY"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "$250"; ruleColor = "#2F7752"; disc = "−$100"; }
-      else if (reconDone) { outcome = "SOURCE COMPLETE"; outBg = "#E4EEE7"; outFg = "#2F7752"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "verifying"; ruleColor = "#8A7A50"; disc = "…"; discColor = "#8A7A50"; }
+      // A visible row lands COMPLETE (real $250 / −$100) from reconstruction on —
+      // same rule as the live branch: no `verifying` second pass, so the seven rows
+      // never snap to their values together. The stagger still reveals them singly.
+      else if (ruleDone || reconDone) { outcome = "RATE DISCREPANCY"; outBg = "#F2E1DC"; outFg = "#B4513F"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "$250"; ruleColor = "#2F7752"; disc = "−$100"; }
       else if (this.at("reconstructing")) { outcome = "SOURCING"; outBg = "#F3EAD3"; outFg = "#8A7A50"; coverage = "sourcing…"; covFg = "#8A7A50"; rule = "—"; ruleColor = "#B7AE9C"; disc = "—"; discColor = "#B7AE9C"; }
       else { outcome = "UNRESOLVED"; outBg = "#ECEFF1"; outFg = "#40515C"; coverage = "—"; covFg = "#B7AE9C"; rule = "—"; ruleColor = "#B7AE9C"; disc = "—"; discColor = "#B7AE9C"; }
       const mockRow = { date: "Jun " + n, claim: "$350", rule, ruleColor, outcome, outBg, outFg, coverage, covFg, disc, discColor, rowBg: st.drawer === "day" && st.dayIx === ix ? "#FBF6EE" : "transparent", onOpen: this.openDayDrawer.bind(this, ix) };
@@ -970,9 +977,11 @@ export default class Workbench extends React.Component {
       claimsLabel: (st.claimFieldsShown >= 6 || this.at("reconstructing") || insuf) ? "EXTRACTED CLAIMS" : "EXTRACTING CLAIMS…", claims,
       timeline: tl, timelineEmpty: tl.length === 0, timelineCount: tl.length ? tl.length + (tl.length === 1 ? " event" : " events") : "",
       // The 7 charged-day rows reveal one at a time (ledgerRowsShown), post-
-      // reconstruction. Fallback: show all once the rank is past reconstructed
-      // (SSE-advanced) or coverage has filled — the stagger only governs the reveal.
-      days: (this.at("retrieving") || st.coverageFilled) ? days : days.slice(0, st.ledgerRowsShown),
+      // reconstruction. Fallback to the full set only
+      // once the rank is past reconstruction (SSE-advanced or a non-paced entry) —
+      // NOT on coverageFilled, which now fires with row 1 and would show all seven
+      // at once, defeating the stagger.
+      days: this.at("retrieving") ? days : days.slice(0, st.ledgerRowsShown),
       coverageLine: P
         ? `${P.cov.days_complete} of ${P.cov.days_total} days${P.cov.days_complete === P.cov.days_total ? " · SOURCE COMPLETE" : " · evidence required"}`
         : (ruleDone ? "7 of 7 days · SOURCE COMPLETE" : reconDone ? "7 of 7 sourced" : "reconstructing…"),
