@@ -1770,7 +1770,7 @@ export default class Workbench extends React.Component {
           </div>
 
           {/* RIGHT RAIL */}
-          <div className="tly-rail" style={css("display: flex; flex-direction: column; gap: 16px; position: sticky; top: 12px;")}>
+          <div className="tly-rail" style={css("display: flex; flex-direction: column; gap: 16px; position: sticky; top: 60px;")}>
             {v.railOpen && (
               <div style={{ display: "contents" }}>
                 <div style={css("background: #FCFBF8; border: 1px solid #DED6C7; border-radius: 12px; padding: 13px 15px;")}>
@@ -1871,7 +1871,7 @@ export default class Workbench extends React.Component {
               </table>
             </div>
           </div>
-          <div className="tly-rail" style={css("display: flex; flex-direction: column; gap: 16px; position: sticky; top: 12px;")}>
+          <div className="tly-rail" style={css("display: flex; flex-direction: column; gap: 16px; position: sticky; top: 60px;")}>
             {v.railOpen && (
               <div style={{ display: "contents" }}>
                 <div style={css("background:#FCFBF8; border:1px solid #DED6C7; border-radius:12px; padding:13px 15px;")}>

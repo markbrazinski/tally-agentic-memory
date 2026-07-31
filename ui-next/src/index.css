@@ -19,14 +19,23 @@ a:hover { color: #5C4C24; }
 .tly-row-in { animation: tly-in 0.4s ease both; }
 .tly-work { animation: tly-pulse 1.2s ease-in-out infinite; }
 .tly-wb-grid > div > div, .tly-rail > div { animation: tly-card-in 0.42s cubic-bezier(0.22,0.61,0.36,1) both; }
-.tly-rail { transition: none; }
+/* The rail sticks BELOW the sticky PIPELINE row (top:60px in the inline style),
+   not below the scroll container — otherwise the pipeline overlaps its top by the
+   pipeline's height and the first card's heading is clipped. The height cap keeps
+   a tall rail (recommendation + drawer) scrolling inside itself rather than
+   letting its top slide up under the pipeline. */
+.tly-rail { transition: none; max-height: calc(100vh - 72px); overflow-y: auto; overscroll-behavior: contain; }
+/* The cap must not clip the card-in animation's transform on first paint. */
+.tly-rail > div { flex: 0 0 auto; }
 .tly-wb-grid { transition: grid-template-columns 0.34s cubic-bezier(0.22,0.61,0.36,1); }
 @media (prefers-reduced-motion: reduce) { .tly-row-in, .tly-work, .tly-wb-grid > div > div, .tly-rail > div { animation: none !important; } .tly-wb-grid { transition: none !important; } }
 .tly-shell { height: 100vh; overflow: hidden; }
 .tly-ledger { overflow-x: auto; overflow-y: hidden; }
 @media (max-width: 1180px) {
   .tly-wb-grid { grid-template-columns: 1fr !important; }
-  .tly-rail { position: static !important; top: auto !important; }
+  /* Stacked single-column: the rail is just another block, so drop the sticky
+     offset AND the height cap (otherwise it scrolls inside itself on mobile). */
+  .tly-rail { position: static !important; top: auto !important; max-height: none !important; overflow-y: visible !important; }
 }
 @media (max-width: 700px) {
   .tly-shell { flex-direction: column !important; }
