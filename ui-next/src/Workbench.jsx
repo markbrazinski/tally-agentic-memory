@@ -8,22 +8,25 @@ import { nextWb, STATUS_LABEL } from "./api/eventMap.js";
 // — only WHEN each already-computed sub-element becomes visible. Owner tunes these
 // during dry runs. Cumulative-timing rationale for the defaults is in the report.
 const DEMO_PACING_MS = {
+  // Every reveal stage below is the original pacing x1.5 — the first cut read too
+  // fast on camera. Whole run ~21s -> ~31s. To retune, scale these together so the
+  // rhythm between phases stays put; the scroll/settle constants further down are
+  // behaviour, not pacing, and are deliberately NOT scaled.
   // Intake
-  INTAKE_STATE_TRANSITION_MS: 1200,      // RECEIVED -> INITIAL PROCESSING hold
-  INTAKE_CLAIM_FIELD_STAGGER_MS: 700,    // each claim field appears (6 fields)
+  INTAKE_STATE_TRANSITION_MS: 1800,      // RECEIVED -> INITIAL PROCESSING hold
+  INTAKE_CLAIM_FIELD_STAGGER_MS: 1050,   // each claim field appears (6 fields)
   // Reconstruction
-  RECONSTRUCTION_TIMELINE_EVENT_STAGGER_MS: 900,  // each timeline event
-  RECONSTRUCTION_LEDGER_COVERAGE_DELAY_MS: 800,   // after last event, before the ledger lead-in
-  RECONSTRUCTION_LEDGER_LEAD_IN_MS: 1000,         // ledger section visible -> row 1 appears
-  RECONSTRUCTION_LEDGER_ROW_STAGGER_MS: 450,      // each of the 7 charged-day rows appears
+  RECONSTRUCTION_TIMELINE_EVENT_STAGGER_MS: 1350, // each timeline event
+  RECONSTRUCTION_LEDGER_COVERAGE_DELAY_MS: 1200,  // after last event, before the ledger lead-in
+  RECONSTRUCTION_LEDGER_LEAD_IN_MS: 1500,         // ledger section visible -> row 1 appears
+  RECONSTRUCTION_LEDGER_ROW_STAGGER_MS: 675,      // each of the 7 charged-day rows appears
   // Evidence
-  EVIDENCE_CANDIDATE_TO_VERIFY_START_MS: 2200,    // candidate shown -> checks begin
-  EVIDENCE_VERIFY_CHECK_STAGGER_MS: 1600,         // each of 4 checks flips VERIFIED
-  EVIDENCE_VERIFIED_TO_LEDGER_FILL_MS: 1400,      // after 4th check -> ledger RULE/Δ fill
-  // Evidence phase = START + 3×STAGGER + FILL = 2200 + 4800 + 1400 = 8.4s (in the
-  // 8–10s acceptance window). Owner tunes these during dry runs.
+  EVIDENCE_CANDIDATE_TO_VERIFY_START_MS: 3300,    // candidate shown -> checks begin
+  EVIDENCE_VERIFY_CHECK_STAGGER_MS: 2400,         // each of 4 checks flips VERIFIED
+  EVIDENCE_VERIFIED_TO_LEDGER_FILL_MS: 2100,      // after 4th check -> ledger RULE/Δ fill
+  // Evidence phase = START + 3×STAGGER + FILL = 3300 + 7200 + 2100 = 12.6s.
   // Seal audit trail (item 6)
-  SEAL_AUDIT_ENTRY_STAGGER_MS: 600,
+  SEAL_AUDIT_ENTRY_STAGGER_MS: 900,
   // Pipeline-follow scrolling: when a chip goes ACTIVE, bring its section under
   // the sticky chip row. Review first expands the prior sections (so the target
   // position is final before the scroll starts), then scrolls to the top.
@@ -34,7 +37,9 @@ const DEMO_PACING_MS = {
   // the fold. Poll while it grows and keep the bottom in view. Ends when growth
   // stops (GROWTH_SETTLE_MS with no height change) or on any manual scroll.
   SECTION_GROWTH_POLL_MS: 250,       // how often to re-check the growing section
-  SECTION_GROWTH_WATCH_MS: 12000,    // how long to keep following one section
+  // Must outlast the longest single phase or the follow expires mid-growth and
+  // the section's bottom slides under the fold again. Evidence is now ~12.6s.
+  SECTION_GROWTH_WATCH_MS: 18000,    // how long to keep following one section
   // Review: the recommendation renders late and grows the page a lot. Wait for
   // the height to hold still before snapping to the top, so the decision panel
   // lands once instead of bouncing.
