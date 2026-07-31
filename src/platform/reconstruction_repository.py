@@ -61,6 +61,14 @@ def _emit_rule_task(cur, *, tenant_id, lease, reconstruction_id, version) -> Non
     )
 
 
+class MissingSourceArtifactError(RuntimeError):
+    """An event's source_public_ref has no reconstruction_source_artifacts row.
+
+    Not retryable: the artifact is absent from retained memory, so re-running the
+    same task reproduces it exactly. Seed the artifact, then re-import.
+    """
+
+
 @dataclass(frozen=True)
 class ReconstructionTaskLease:
     task_id: str
@@ -379,6 +387,18 @@ def complete_reconstruction(
                         tenant_id, event.source_public_ref,
                     ),
                 )
+                # INSERT ... SELECT writes ZERO rows when no source artifact matches
+                # source_public_ref, but event_id_by_ref already holds the generated
+                # id — so the day bindings below would reference an event row that
+                # was never written, and the failure would surface as an opaque
+                # recon_day_binding_event_fk violation several statements later.
+                # Fail here instead, naming the artifact that is actually missing.
+                if cur.rowcount != 1:
+                    raise MissingSourceArtifactError(
+                        "MISSING_SOURCE_ARTIFACT: no reconstruction_source_artifacts "
+                        f"row for public_ref={event.source_public_ref!r} "
+                        f"(event {event.public_ref!r})"
+                    )
 
             for day in days:
                 day_id = str(uuid4())

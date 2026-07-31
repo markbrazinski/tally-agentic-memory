@@ -31,6 +31,7 @@ from src.external.reconstruction_mcp import (
     read_reconstruction_memory_via_driver,
 )
 from src.platform.reconstruction_repository import (
+    MissingSourceArtifactError,
     ReconstructionCompletion,
     claim_next_reconstruction_task,
     complete_reconstruction,
@@ -159,6 +160,64 @@ def run_one_reconstruction_task(
     terminal_state = resolve_terminal_state(days)
     day_event_roles = _day_event_roles(days, validation.accepted, boundary)
 
+    # The completing write is the last thing that can fail, and until now it failed
+    # SILENTLY: an exception escaped with no private_error_code recorded, so the
+    # attempt stayed RUNNING and the lease-expiry loop retried it forever (observed:
+    # 8+ identical FK violations, ~91s apart, zero events written). Record the
+    # failure and fail closed. MissingSourceArtifactError is never retryable — the
+    # artifact is absent from retained memory, so a retry reproduces it exactly.
+    try:
+        return _complete_or_raise(
+            dal,
+            lease=lease,
+            validation=validation,
+            days=days,
+            coverage=coverage,
+            terminal_state=terminal_state,
+            day_event_roles=day_event_roles,
+            memory=memory,
+        )
+    except MissingSourceArtifactError as exc:
+        import logging
+
+        logging.getLogger("tally.reconstruction").error(
+            "reconstruction completion failed: %s", exc
+        )
+        fail_reconstruction(
+            dal,
+            lease=lease,
+            error_code="MISSING_SOURCE_ARTIFACT",
+            retryable=False,
+            terminal_state=ReconstructionState.NEEDS_EVIDENCE,
+        )
+        return None
+    except Exception as exc:  # noqa: BLE001 — recorded, then fail closed
+        import logging
+
+        logging.getLogger("tally.reconstruction").error(
+            "reconstruction completion failed (%s): %s", type(exc).__name__, exc
+        )
+        fail_reconstruction(
+            dal,
+            lease=lease,
+            error_code="RECONSTRUCTION_COMPLETION_FAILED",
+            retryable=False,
+            terminal_state=ReconstructionState.NEEDS_EVIDENCE,
+        )
+        return None
+
+
+def _complete_or_raise(
+    dal,
+    *,
+    lease,
+    validation,
+    days,
+    coverage,
+    terminal_state,
+    day_event_roles,
+    memory,
+):
     return complete_reconstruction(
         dal,
         lease=lease,

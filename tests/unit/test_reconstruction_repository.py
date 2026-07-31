@@ -22,6 +22,7 @@ from src.core.reconstruction import (
 )
 from src.platform.intake_tasks import TaskLeaseLostError
 from src.platform.reconstruction_repository import (
+    MissingSourceArtifactError,
     ReconstructionTaskLease,
     complete_reconstruction,
     fail_reconstruction,
@@ -135,6 +136,43 @@ def test_complete_writes_one_atomic_version():
     types = [e["type"] for e in conn.events]
     assert "reconstruction.completed" in types
     assert types[-1] == "reconstruction.coverage_updated"
+
+
+def test_missing_source_artifact_raises_instead_of_violating_the_binding_fk():
+    """A silent zero-row event insert must fail HERE, naming the real cause.
+
+    reconstruction_events is written via INSERT ... SELECT FROM
+    reconstruction_source_artifacts. When no artifact matches the event's
+    source_public_ref the statement writes zero rows, but event_id_by_ref already
+    holds the generated id -- so the day bindings then reference an event row that
+    does not exist and CockroachDB raises an opaque recon_day_binding_event_fk
+    violation. That is what crash-looped the deployed reconstruction worker.
+    """
+    conn = FakeConn()
+    conn.missing_source_artifact = True
+    seed_running_task(conn)
+    dal = make_dal(conn)
+
+    with pytest.raises(MissingSourceArtifactError) as excinfo:
+        complete_reconstruction(
+            dal,
+            lease=_lease(),
+            events=_hero_events(),
+            days=_seven_complete_days(),
+            coverage=_coverage(),
+            terminal_state=ReconstructionState.COMPLETE,
+            day_event_roles={},
+            mcp_correlation_id="corr-1",
+            mcp_query_ref_private="srv-1",
+            issue_codes=(),
+        )
+
+    # The error names the missing artifact, not the downstream FK.
+    assert "MISSING_SOURCE_ARTIFACT" in str(excinfo.value)
+    # Fail closed: not one event row was written (the counter never even fires),
+    # and no day bindings were attempted against a phantom event id.
+    assert conn.counts.get("reconstruction_events", 0) == 0
+    assert conn.counts.get("reconstruction_day_event_bindings", 0) == 0
 
 
 def _six_of_seven_days():

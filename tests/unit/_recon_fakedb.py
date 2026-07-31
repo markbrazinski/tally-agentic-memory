@@ -35,6 +35,12 @@ class FakeCursor:
         self.conn = conn
         self.one = None
         self._rows: list[tuple] = []
+        # Real psycopg cursors expose rowcount; the repository reads it after the
+        # events INSERT ... SELECT to catch a silent zero-row write (a missing
+        # source artifact). Default 1 = "the statement affected its row", which is
+        # what every statement in these fakes represents. Tests that need the
+        # missing-artifact path set `missing_source_artifact` on the connection.
+        self.rowcount = 1
 
     def __enter__(self):
         return self
@@ -48,6 +54,7 @@ class FakeCursor:
         self.conn.log.append((n, p))
         self.one = None
         self._rows = []
+        self.rowcount = 1
 
         if n == "SELECT now();":
             self.one = (NOW,)
@@ -93,7 +100,12 @@ class FakeCursor:
                 rid, p[3], p[9], p[10], p[11], p[12]
             )
         elif n.startswith("INSERT INTO reconstruction_events"):
-            self.conn.count("reconstruction_events")
+            # INSERT ... SELECT FROM reconstruction_source_artifacts: writes zero
+            # rows when the artifact is missing (the real cause of the FK crash).
+            if getattr(self.conn, "missing_source_artifact", False):
+                self.rowcount = 0
+            else:
+                self.conn.count("reconstruction_events")
         elif n.startswith("INSERT INTO reconstruction_charged_days"):
             self.conn.count("reconstruction_charged_days")
         elif n.startswith("INSERT INTO reconstruction_day_event_bindings"):
