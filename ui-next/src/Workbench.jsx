@@ -24,6 +24,46 @@ const DEMO_PACING_MS = {
   // 8–10s acceptance window). Owner tunes these during dry runs.
   // Seal audit trail (item 6)
   SEAL_AUDIT_ENTRY_STAGGER_MS: 600,
+  // Pipeline-follow scrolling: when a chip goes ACTIVE, bring its section under
+  // the sticky chip row. Review first expands the prior sections (so the target
+  // position is final before the scroll starts), then scrolls to the top.
+  SECTION_SCROLL_DURATION_MS: 700,   // smooth scroll to the active section
+  SECTION_EXPAND_MS: 300,            // Review: expand prior sections, then scroll
+  // The active section keeps GROWING while its content reveals (7 ledger rows,
+  // then 4 evidence checks), so a single anchor scroll leaves its bottom below
+  // the fold. Poll while it grows and keep the bottom in view. Ends when growth
+  // stops (GROWTH_SETTLE_MS with no height change) or on any manual scroll.
+  SECTION_GROWTH_POLL_MS: 250,       // how often to re-check the growing section
+  SECTION_GROWTH_WATCH_MS: 12000,    // how long to keep following one section
+};
+
+// PIPELINE FOLLOW maps. A chip turns ACTIVE at the wb rank that first drives it
+// amber (see the `pipeline`/`agents` state derivation): intake -> Intake,
+// reconstructing -> Reconstruction, retrieving -> Evidence, recommendation ->
+// Review, correspondence -> Correspondence. Only the FIRST wb value per chip is
+// listed, so the scroll fires on the transition INTO active, never on completion.
+const PIPELINE_CHIP_FOR_WB = {
+  intake: "intake",
+  reconstructing: "reconstruction",
+  // `reconstructed` is when the LEDGER appears and starts filling with the seven
+  // charged-day rows. It belongs to the Reconstruction chip (still amber), but it
+  // needs its own entry: the ledger is a different section from the timeline, and
+  // it is the one that grows off the bottom of the screen.
+  reconstructed: "ledger",
+  retrieving: "evidence",
+  recommendation: "review",
+  correspondence: "correspondence",
+};
+// Each chip's anchor is the section HEADER element, so it lands under the chip
+// row rather than the section's content top. Review anchors on the sealed-inputs
+// strip instead, with the full evidence stack in reading order beneath it.
+const PIPELINE_SECTION_FOR_CHIP = {
+  intake: "sec-source",
+  reconstruction: "sec-timeline",
+  ledger: "sec-days",     // the seven charged days, as they populate
+  evidence: "sec-days",   // applicability checks land in the same section
+  review: "sec-inputs",
+  correspondence: "sec-corr",
 };
 
 // Invoice ids arrive in two forms (INV-TLY-1048 vs a uuid); match loosely by
@@ -124,6 +164,9 @@ export default class Workbench extends React.Component {
     this.provider = (props && props.provider) || null;
     this.live = !!this.provider;
     this._unsub = null;
+    this._followed = {};          // chips already auto-scrolled to (once each)
+    this.userScrolled = false;    // operator took over => stop all auto-scroll
+    this._offScroll = null;
     this.recon = null;            // latest reconstruction projection
     this.liveQueue = null;        // rows from provider.listInvoices()
     this.recommendation = null;   // frozen recommendation (id + etag) for approve
@@ -135,10 +178,91 @@ export default class Workbench extends React.Component {
       .forEach((m) => (this[m] = this[m].bind(this)));
   }
   componentDidMount() {
+    // Manual-scroll guard. Listen for the INPUT (wheel/touch/keys), not the
+    // `scroll` event — `scroll` fires for our own smooth scrolls too and would
+    // switch the follow off the instant it started working.
+    const c = document.getElementById("tly-scroll");
+    if (c) {
+      const off = () => { this.userScrolled = true; };
+      const keys = (e) => { if (["PageDown","PageUp","Home","End","ArrowDown","ArrowUp"," "].indexOf(e.key) >= 0) off(); };
+      c.addEventListener("wheel", off, { passive: true });
+      c.addEventListener("touchmove", off, { passive: true });
+      window.addEventListener("keydown", keys);
+      this._offScroll = () => {
+        c.removeEventListener("wheel", off);
+        c.removeEventListener("touchmove", off);
+        window.removeEventListener("keydown", keys);
+      };
+    }
     if (this.live) { this.startLive(); return; }
     this.applyScene();
   }
-  componentWillUnmount() { this.clearTimers(); if (this._unsub) this._unsub(); }
+  // PIPELINE FOLLOW — when a chip goes ACTIVE, bring its section under the sticky
+  // chip row so the operator never scrolls to keep up on camera. Keyed on the wb
+  // rank transition that turns a chip amber, NOT on completion, and fired at most
+  // once per chip (this._followed) so a manual scroll afterward is never undone.
+  componentDidUpdate(_prevProps, prevState) {
+    if (this.state.view !== "workbench" || this.state.wb === prevState.wb) return;
+    const chip = PIPELINE_CHIP_FOR_WB[this.state.wb];
+    if (!chip || this._followed[chip] || this.userScrolled) return;
+    this._followed[chip] = true;
+    if (chip !== "review") {
+      const id = PIPELINE_SECTION_FOR_CHIP[chip];
+      this.later(() => { this.jump(id); this.followGrowth(id); }, 0);
+      return;
+    }
+    // Review: the human inspects the whole case, so re-open the sections that
+    // stateOpen() closes as the rank advances. Expansions land FIRST (all at
+    // once — staggering ripples the page), then scroll, or the target moves
+    // mid-flight. Sections stay open from here; nothing re-collapses them.
+    const ud = Object.assign({}, this.state.discWb === this.state.wb ? this.state.userDisc : {}, { source: true, timeline: true, days: true });
+    this.setState({ userDisc: ud, discWb: this.state.wb });
+    this.later(() => this.jump("sec-inputs"), DEMO_PACING_MS.SECTION_EXPAND_MS);
+  }
+  // GROWTH FOLLOW — the anchored section keeps getting taller as its content
+  // reveals (ledger rows, then evidence checks), pushing its bottom under the
+  // fold. Poll while it grows and scroll just enough to keep the bottom visible;
+  // never scroll past the section's own header, so the title stays under the
+  // pipeline row. Stops when the height settles, and stops for good the moment
+  // the operator touches the wheel (userScrolled) — auto-scroll never fights.
+  followGrowth(id) {
+    const P = DEMO_PACING_MS;
+    if (this.reduced) return;
+    const started = this._growthRun = (this._growthRun || 0) + 1;
+    let elapsed = 0;
+    const tick = () => {
+      if (this._growthRun !== started || this.userScrolled) return;   // superseded / manual scroll
+      const c = document.getElementById("tly-scroll");
+      const el = document.getElementById(id);
+      if (!c || !el) return;
+      // Watch for a fixed window rather than stopping at the first settle: the
+      // ledger rows finish, the height holds for seconds, THEN the evidence
+      // checks grow it again. Exiting on the first settle missed that second
+      // growth and left the ledger 91px short mid-Evidence. A superseding chip
+      // transition (this._growthRun) or a manual scroll ends it earlier.
+      elapsed += P.SECTION_GROWTH_POLL_MS;
+      if (elapsed > P.SECTION_GROWTH_WATCH_MS) return;
+      const r = el.getBoundingClientRect();
+      const cr = c.getBoundingClientRect();
+      const overflow = r.bottom - cr.bottom;
+      // Chase downward only. Prefer keeping the header under the sticky pipeline,
+      // but once the section is TALLER than the space below the pipeline that is
+      // impossible — then following the growing bottom wins, or the new rows can
+      // never be seen at all. Clamp to the container's own scroll range.
+      const headroom = r.top - (cr.top + this.stickyOffset());
+      const fits = r.height <= cr.height - this.stickyOffset();
+      const want = fits ? Math.min(overflow, Math.max(0, headroom)) : overflow;
+      const delta = Math.min(Math.max(0, want), c.scrollHeight - c.clientHeight - c.scrollTop);
+      if (delta > 2) c.scrollTo({ top: c.scrollTop + delta, behavior: "smooth" });
+      this._growthTimer = setTimeout(tick, P.SECTION_GROWTH_POLL_MS);
+    };
+    // Own timer, NOT this.later(): the reveal's clearTimers() (openInvoice,
+    // approve, nav) would otherwise wipe the follow's next tick and silently
+    // strand the section mid-growth — which is exactly what it did.
+    clearTimeout(this._growthTimer);
+    this._growthTimer = setTimeout(tick, P.SECTION_GROWTH_POLL_MS);
+  }
+  componentWillUnmount() { this.clearTimers(); clearTimeout(this._growthTimer); if (this._unsub) this._unsub(); if (this._offScroll) this._offScroll(); }
 
   // ---- LIVE MODE plumbing (replaces the timer stand-ins) ----
   startLive() {
@@ -246,6 +370,7 @@ export default class Workbench extends React.Component {
 
   openInvoice(realId) {
     this.clearTimers();
+    this._followed = {}; this.userScrolled = false; clearTimeout(this._growthTimer);   // fresh open => follow again
     // Fresh reveal: reset every paced sub-step counter so re-opening replays clean.
     const pacingReset = { intakeState: 0, claimFieldsShown: 0, eventsShown: 0, ledgerRowsShown: 0, coverageFilled: false, checksShown: 0, auditEntry: 0 };
     if (this.live) {
@@ -483,9 +608,19 @@ export default class Workbench extends React.Component {
   closeQuickReview() { this.setState({ quickOpen: false }); }
   approvePayment() { this.setState({ inv1050: "done" }); }
   toggleAnnot() { this.setState({ annot: !this.state.annot }); }
-  replay() { this.clearTimers(); this.setState({ view: "queue", wb: "intake", arrived: false, disputed: false, dayOpen: false, drawer: null, quickOpen: false, inv1050: "pending", gateStep: 0, gateBlocked: false, sealStep: 0, intakeState: 0, claimFieldsShown: 0, eventsShown: 0, ledgerRowsShown: 0, coverageFilled: false, checksShown: 0, auditEntry: 0 }); this.later(() => this.setState({ arrived: true }), 900); }
+  replay() { this.clearTimers(); this._followed = {}; this.userScrolled = false; this.setState({ view: "queue", wb: "intake", arrived: false, disputed: false, dayOpen: false, drawer: null, quickOpen: false, inv1050: "pending", gateStep: 0, gateBlocked: false, sealStep: 0, intakeState: 0, claimFieldsShown: 0, eventsShown: 0, ledgerRowsShown: 0, coverageFilled: false, checksShown: 0, auditEntry: 0 }); this.later(() => this.setState({ arrived: true }), 900); }
   stop(e) { e.stopPropagation(); }
-  jump(id, e) { if (e && e.preventDefault) e.preventDefault(); const c = document.getElementById("tly-scroll"); const el = document.getElementById(id); if (c && el) { const top = el.getBoundingClientRect().top - c.getBoundingClientRect().top + c.scrollTop - 74; c.scrollTo({ top: Math.max(0, top), behavior: this.reduced ? "auto" : "smooth" }); } }
+  // Height of the sticky PIPELINE chip row, measured from the DOM so the anchor
+  // stays correct if the row wraps to two lines on a narrow viewport. Falls back
+  // to the 74px this used to hardcode.
+  stickyOffset() {
+    const c = document.getElementById("tly-scroll");
+    const p = document.getElementById("tly-pipeline");
+    if (!c || !p) return 74;
+    const h = p.getBoundingClientRect().bottom - c.getBoundingClientRect().top;
+    return h > 0 ? h + 12 : 74;   // +12: breathing room so the header isn't flush
+  }
+  jump(id, e) { if (e && e.preventDefault) e.preventDefault(); const c = document.getElementById("tly-scroll"); const el = document.getElementById(id); if (c && el) { const top = el.getBoundingClientRect().top - c.getBoundingClientRect().top + c.scrollTop - this.stickyOffset(); c.scrollTo({ top: Math.max(0, top), behavior: this.reduced ? "auto" : "smooth" }); } }
   stateOpen(key) { const w = this.state.wb; if (key === "source") return w === "intake"; if (key === "timeline") return w === "reconstructing" || w === "reconstructed"; if (key === "days") return ["reconstructing","reconstructed","retrieving","ruleVerified","recommendation","insufficient"].indexOf(w) >= 0; if (key === "corr") return ["correspondence","sending","sent"].indexOf(w) >= 0; return false; }
   secOpen(key) { const s = this.state; if (s.discWb === s.wb && Object.prototype.hasOwnProperty.call(s.userDisc, key)) return s.userDisc[key]; return this.stateOpen(key); }
   toggleSection(key, e) { if (e && e.preventDefault) e.preventDefault(); if (e && e.stopPropagation) e.stopPropagation(); const same = this.state.discWb === this.state.wb; const cur = same && Object.prototype.hasOwnProperty.call(this.state.userDisc, key) ? this.state.userDisc[key] : this.stateOpen(key); const ud = Object.assign({}, same ? this.state.userDisc : {}); ud[key] = !cur; this.setState({ userDisc: ud, discWb: this.state.wb }); }
@@ -1353,7 +1488,7 @@ export default class Workbench extends React.Component {
         </div>
         <div style={css("font-family: 'IBM Plex Mono',monospace; font-size: 11px; color: #8A96A0; margin-bottom: 12px;")}>{wb.meta}</div>
 
-        <div style={css("position: sticky; top: 0; z-index: 20; margin: 0 -24px 16px; padding: 8px 24px 10px; background: #F5F0E7; border-bottom: 1px solid #E1D9C9; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;")}>
+        <div id="tly-pipeline" style={css("position: sticky; top: 0; z-index: 20; margin: 0 -24px 16px; padding: 8px 24px 10px; background: #F5F0E7; border-bottom: 1px solid #E1D9C9; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;")}>
           <span style={css("font-family: 'IBM Plex Mono',monospace; font-size: 9px; letter-spacing: 0.12em; color: #8A96A0; margin-right: 4px;")}>PIPELINE</span>
           {wb.pipeline.map((s, i) => (
             <div key={i} title={s.title} style={S("display: flex; align-items: center; gap: 7px; border-radius: 8px; padding: 6px 11px;", { background: s.bg, border: "1px solid " + s.border })}>
@@ -1379,8 +1514,11 @@ export default class Workbench extends React.Component {
         </div>
 
         <div className="tly-wb-grid" style={S("display: grid; gap: 20px; align-items: start;", { gridTemplateColumns: v.gridCols })}>
-          {/* LEFT */}
-          <div style={css("display: flex; flex-direction: column; gap: 18px; min-width: 0;")}>
+          {/* LEFT — `sec-inputs` is the Review anchor: the top of the evidence
+              stack. At sendPhase this is the sealed-inputs (COMPLETED ✓) strip;
+              before that the strip isn't rendered yet, so the same anchor puts
+              the case file's first section under the pipeline row. */}
+          <div id="sec-inputs" style={css("display: flex; flex-direction: column; gap: 18px; min-width: 0; scroll-margin-top: 80px;")}>
             {wb.sendPhase && (
               <div style={css("display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 11px 14px; background: #F0EBE0; border: 1px solid #E1D9C9; border-radius: 10px;")}>
                 <span style={css("font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:0.1em; color:#8A96A0; margin-right:2px;")}>COMPLETED</span>
