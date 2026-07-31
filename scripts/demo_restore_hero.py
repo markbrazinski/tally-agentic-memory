@@ -151,12 +151,12 @@ def _seed_dispute(cur, tenant_id: str, invoice_id: str, carrier_id: str) -> None
             INSERT INTO reconstruction_charged_days (tenant_id,id,reconstruction_id,
                 invoice_id,charge_date,invoice_claim_field,chargeability,
                 coverage_state,state,invoice_rate_minor,applicable_rate_minor,
-                currency,outcome,missing_requirements)
+                currency,outcome,dispute_amount_minor,missing_requirements)
             VALUES (%s,%s,%s,%s,%s,'daily_rate','CHARGEABLE','PRESENT_VERIFIED',
-                'SOURCE_COMPLETE',%s,%s,'USD','PENDING','[]');
+                'SOURCE_COMPLETE',%s,%s,'USD','RATE_DISCREPANCY',%s,'[]');
             """,
             (tenant_id, did, recon_id, invoice_id, d, INVOICE_RATE_MINOR,
-             APPLICABLE_RATE_MINOR),
+             APPLICABLE_RATE_MINOR, INVOICE_RATE_MINOR - APPLICABLE_RATE_MINOR),
         )
     cur.execute(
         """

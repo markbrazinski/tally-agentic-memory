@@ -13,7 +13,8 @@ const DEMO_PACING_MS = {
   INTAKE_CLAIM_FIELD_STAGGER_MS: 700,    // each claim field appears (6 fields)
   // Reconstruction
   RECONSTRUCTION_TIMELINE_EVENT_STAGGER_MS: 900,  // each timeline event
-  RECONSTRUCTION_LEDGER_COVERAGE_DELAY_MS: 800,   // after last event, before COVERAGE fills
+  RECONSTRUCTION_LEDGER_COVERAGE_DELAY_MS: 800,   // after last event, before the ledger rows start
+  RECONSTRUCTION_LEDGER_ROW_STAGGER_MS: 350,      // each of the 7 charged-day rows appears
   // Evidence
   EVIDENCE_CANDIDATE_TO_VERIFY_START_MS: 2200,    // candidate shown -> checks begin
   EVIDENCE_VERIFY_CHECK_STAGGER_MS: 1600,         // each of 4 checks flips VERIFIED
@@ -108,6 +109,7 @@ export default class Workbench extends React.Component {
       intakeState: 0,        // 0 RECEIVED, 1 INITIAL PROCESSING
       claimFieldsShown: 0,   // 0..6 intake claim fields revealed
       eventsShown: 0,        // 0..N reconstruction timeline events revealed
+      ledgerRowsShown: 0,    // 0..7 charged-day rows revealed one at a time
       coverageFilled: false, // ledger COVERAGE column filled (SOURCE COMPLETE)
       checksShown: 0,        // 0..4 evidence checks flipped VERIFIED
       ledgerRuleFilled: false, // ledger RULE/Δ columns filled
@@ -229,7 +231,7 @@ export default class Workbench extends React.Component {
     // Prototype scenes jump straight to a terminal state — there's no paced reveal
     // to run, so mark every paced sub-step already-revealed (full ledger/timeline/
     // claims/audit) rather than leaving them at the pre-reveal 0 baseline.
-    const revealed = { intakeState: 1, claimFieldsShown: 6, eventsShown: 6, coverageFilled: true, checksShown: 4, ledgerRuleFilled: true, auditEntry: 3 };
+    const revealed = { intakeState: 1, claimFieldsShown: 6, eventsShown: 6, ledgerRowsShown: 7, coverageFilled: true, checksShown: 4, ledgerRuleFilled: true, auditEntry: 3 };
     const base = { view: "workbench", invoiceId: "INV-TLY-1048", arrived: true, ...revealed };
     if (s === "recommendation") this.setState({ ...base, wb: "recommendation", dayOpen: true });
     else if (s === "sendGate") this.setState({ ...base, wb: "sending", gateStep: 5, disputed: false });
@@ -245,7 +247,7 @@ export default class Workbench extends React.Component {
   openInvoice(realId) {
     this.clearTimers();
     // Fresh reveal: reset every paced sub-step counter so re-opening replays clean.
-    const pacingReset = { intakeState: 0, claimFieldsShown: 0, eventsShown: 0, coverageFilled: false, checksShown: 0, ledgerRuleFilled: false, auditEntry: 0 };
+    const pacingReset = { intakeState: 0, claimFieldsShown: 0, eventsShown: 0, ledgerRowsShown: 0, coverageFilled: false, checksShown: 0, ledgerRuleFilled: false, auditEntry: 0 };
     if (this.live) {
       const id = typeof realId === "string" ? realId
         : (this.liveQueue && this.liveQueue.find(isHeroRow)?.invoiceId)
@@ -291,9 +293,14 @@ export default class Workbench extends React.Component {
       step(P.RECONSTRUCTION_TIMELINE_EVENT_STAGGER_MS, () => this.setState({ eventsShown: i }));
     }
 
-    // 3. After the last event, fill COVERAGE (SOURCE COMPLETE); RULE/Δ stay pending.
+    // 3. After the last event, the 7 charged-day rows populate ONE AT A TIME
+    //    (post-reconstruction), then COVERAGE fills SOURCE COMPLETE; RULE/Δ pending.
     if (!reach("reconstructed")) return;
-    step(P.RECONSTRUCTION_LEDGER_COVERAGE_DELAY_MS, () => this.setState({ wb: "reconstructed", coverageFilled: true }));
+    step(P.RECONSTRUCTION_LEDGER_COVERAGE_DELAY_MS, () => this.setState({ wb: "reconstructed", ledgerRowsShown: 1 }));
+    for (let i = 2; i <= 7; i++) {
+      step(P.RECONSTRUCTION_LEDGER_ROW_STAGGER_MS, () => this.setState({ ledgerRowsShown: i }));
+    }
+    step(P.RECONSTRUCTION_LEDGER_ROW_STAGGER_MS, () => this.setState({ coverageFilled: true }));
 
     // 4. Enter Evidence — candidate header shows immediately — then flip the 4 checks.
     if (!reach("retrieving")) return;
@@ -473,7 +480,7 @@ export default class Workbench extends React.Component {
   closeQuickReview() { this.setState({ quickOpen: false }); }
   approvePayment() { this.setState({ inv1050: "done" }); }
   toggleAnnot() { this.setState({ annot: !this.state.annot }); }
-  replay() { this.clearTimers(); this.setState({ view: "queue", wb: "intake", arrived: false, disputed: false, dayOpen: false, drawer: null, quickOpen: false, inv1050: "pending", gateStep: 0, gateBlocked: false, sealStep: 0, intakeState: 0, claimFieldsShown: 0, eventsShown: 0, coverageFilled: false, checksShown: 0, ledgerRuleFilled: false, auditEntry: 0 }); this.later(() => this.setState({ arrived: true }), 900); }
+  replay() { this.clearTimers(); this.setState({ view: "queue", wb: "intake", arrived: false, disputed: false, dayOpen: false, drawer: null, quickOpen: false, inv1050: "pending", gateStep: 0, gateBlocked: false, sealStep: 0, intakeState: 0, claimFieldsShown: 0, eventsShown: 0, ledgerRowsShown: 0, coverageFilled: false, checksShown: 0, ledgerRuleFilled: false, auditEntry: 0 }); this.later(() => this.setState({ arrived: true }), 900); }
   stop(e) { e.stopPropagation(); }
   jump(id, e) { if (e && e.preventDefault) e.preventDefault(); const c = document.getElementById("tly-scroll"); const el = document.getElementById(id); if (c && el) { const top = el.getBoundingClientRect().top - c.getBoundingClientRect().top + c.scrollTop - 74; c.scrollTo({ top: Math.max(0, top), behavior: this.reduced ? "auto" : "smooth" }); } }
   stateOpen(key) { const w = this.state.wb; if (key === "source") return w === "intake"; if (key === "timeline") return w === "reconstructing" || w === "reconstructed"; if (key === "days") return ["reconstructing","reconstructed","retrieving","ruleVerified","recommendation","insufficient"].indexOf(w) >= 0; if (key === "corr") return ["correspondence","sending","sent"].indexOf(w) >= 0; return false; }
@@ -707,7 +714,9 @@ export default class Workbench extends React.Component {
     // Fallback: if the wb rank is already past intake (SSE-advanced), show all
     // fields — the paced stagger only governs the intake reveal itself.
     const cShown = (i) => st.claimFieldsShown > i || this.at("reconstructing") || insuf;
-    const cOp = (i) => (cShown(i) ? 1 : 0.35);
+    // Invisible (0) until revealed, then full black — each field "enters" line by
+    // line rather than fading up from a faint preview.
+    const cOp = (i) => (cShown(i) ? 1 : 0);
     const claims = [
       { label: "Charge type", value: "Demurrage", color: "#23272F", opacity: cOp(0) },
       { label: "Rate", value: claimRate, color: "#A9823C", opacity: cOp(1) },
@@ -960,7 +969,11 @@ export default class Workbench extends React.Component {
       sourceUrl: this.live ? (this.sourceUrl || null) : null,
       claimsLabel: (st.claimFieldsShown >= 6 || this.at("reconstructing") || insuf) ? "EXTRACTED CLAIMS" : "EXTRACTING CLAIMS…", claims,
       timeline: tl, timelineEmpty: tl.length === 0, timelineCount: tl.length ? tl.length + (tl.length === 1 ? " event" : " events") : "",
-      days, coverageLine: P
+      // The 7 charged-day rows reveal one at a time (ledgerRowsShown), post-
+      // reconstruction. Fallback: show all once the rank is past reconstructed
+      // (SSE-advanced) or coverage has filled — the stagger only governs the reveal.
+      days: (this.at("retrieving") || st.coverageFilled) ? days : days.slice(0, st.ledgerRowsShown),
+      coverageLine: P
         ? `${P.cov.days_complete} of ${P.cov.days_total} days${P.cov.days_complete === P.cov.days_total ? " · SOURCE COMPLETE" : " · evidence required"}`
         : (ruleDone ? "7 of 7 days · SOURCE COMPLETE" : reconDone ? "7 of 7 sourced" : "reconstructing…"),
       dayOpen: st.dayOpen, day: dayDetail,
