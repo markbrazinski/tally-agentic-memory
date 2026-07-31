@@ -24,6 +24,27 @@ function money(minor) {
   return "$" + Math.round(minor / 100).toLocaleString("en-US");
 }
 
+// Reconstruction event_type -> friendly label for the sourced timeline.
+const EVENT_LABELS = {
+  DISCHARGED: "Container discharged",
+  AVAILABLE: "Container available",
+  FREE_TIME_START: "Free time begins",
+  FREE_TIME_END: "Free time ends",
+  GATE_OUT: "Container gated out",
+};
+
+// ISO instant -> "Jun 2" (short) or "Jun 2, 2026, 14:12 UTC" (full). The
+// projection's occurred_at/recorded_at are UTC ISO; render in UTC so the demo
+// reads the same wherever it's filmed.
+function fmtDay(iso) {
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+function fmtFull(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) +
+    ", " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" }) + " UTC";
+}
+
 /* ------------------------------------------------------------------ *
  * css(): parse a DC inline-style STRING into a React style object.
  * Lets us port the design's exact style strings verbatim (1:1 parity)
@@ -55,7 +76,7 @@ export default class Workbench extends React.Component {
     this.state = {
       view: "queue", invoiceId: null, wb: "intake",
       arrived: false, sealStep: 0, gateStep: 0, gateBlocked: false,
-      dayOpen: false, dayIx: 2, drawer: null, quickOpen: false, inv1050: "pending",
+      dayOpen: false, dayIx: 2, eventIx: 0, drawer: null, quickOpen: false, inv1050: "pending",
       annot: false, disputed: false, sceneApplied: false,
       userDisc: {}, discWb: null, queueFilter: "all", qrEvid: false, drawerTab: "source",
     };
@@ -75,7 +96,7 @@ export default class Workbench extends React.Component {
     ["goQueue","goCoverage","goHandoff","goDecision","goActivity","replay","toggleAnnot",
      "approveDispute","approveSend","retrySend","closeDay","approvePayment","openQuickReview",
      "closeQuickReview","closeDrawer","stop","noop","openSourceInvoice","openSourceTariff",
-     "setQueueFilter","toggleQrEvid","openInv1050","openDayDrawer","setDrawerTab"]
+     "setQueueFilter","toggleQrEvid","openInv1050","openDayDrawer","openEventDrawer","setDrawerTab"]
       .forEach((m) => (this[m] = this[m].bind(this)));
   }
   componentDidMount() {
@@ -368,6 +389,7 @@ export default class Workbench extends React.Component {
   closeDrawer() { this.setState({ drawer: null }); }
   openDay(ix) { this.setState({ dayOpen: true, dayIx: ix }); }
   openDayDrawer(ix, e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ drawer: "day", dayIx: ix, drawerTab: "source" }); }
+  openEventDrawer(ix, e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ drawer: "event", eventIx: ix, drawerTab: "source" }); }
   setDrawerTab(t, e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ drawerTab: t }); }
   closeDay() { this.setState({ dayOpen: false }); }
   openQuickReview(e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ quickOpen: true }); }
@@ -564,6 +586,19 @@ export default class Workbench extends React.Component {
     return { r, cov, rec, byDate };
   }
 
+  // LIVE sourced timeline rows from the reconstruction projection. Each row
+  // renders like the mock's allEvents (date/label/tag/before) but carries the
+  // full projection event (`ev`) so openEventDrawer can show its provenance.
+  _liveTimeline() {
+    return (this.recon.timeline || []).map((ev) => ({
+      date: fmtDay(ev.occurred_at),
+      label: EVENT_LABELS[ev.type] || ev.type,
+      tag: ev.recorded_before_invoice ? "RECORDED BEFORE INVOICE" : "FROM INVOICE",
+      before: ev.recorded_before_invoice,
+      ev,
+    }));
+  }
+
   buildWorkbench() {
     const st = this.state; const sm = this.statusMeta(); const p = this.pill(sm.kind);
     const P = this.proj();
@@ -602,7 +637,11 @@ export default class Workbench extends React.Component {
       { date: "Jun 22", label: "Invoice issued", tag: "FROM INVOICE", before: false, since: 2 },
     ];
     const rnk = this.rank(st.wb);
-    const tl = allEvents.filter((e) => insuf || (rnk >= this.rank("reconstructing") && (rnk >= this.rank("reconstructed") || e.since <= 1))).map((e) => ({ date: e.date, label: e.label, tag: e.tag, dot: e.before ? "#2F7752" : "#8A96A0", tagBg: e.before ? "#E4EEE7" : "#ECEFF1", tagFg: e.before ? "#2F7752" : "#40515C" }));
+    // LIVE: the timeline is the real reconstruction projection (this.recon.timeline),
+    // each row carrying its full event object so the click handler can open its
+    // provenance. MOCK keeps the rank-gated hardcoded allEvents (click-audit).
+    const tl = (P ? this._liveTimeline() : allEvents.filter((e) => insuf || (rnk >= this.rank("reconstructing") && (rnk >= this.rank("reconstructed") || e.since <= 1))))
+      .map((e, i) => ({ date: e.date, label: e.label, tag: e.tag, dot: e.before ? "#2F7752" : "#8A96A0", tagBg: e.before ? "#E4EEE7" : "#ECEFF1", tagFg: e.before ? "#2F7752" : "#40515C", onOpen: e.ev ? this.openEventDrawer.bind(this, i) : null, active: st.drawer === "event" && st.eventIx === i }));
 
     const dayNums = [8,9,10,11,12,13,14];
     const days = dayNums.map((n, ix) => {
@@ -871,6 +910,28 @@ export default class Workbench extends React.Component {
       // v3: derive the day from the operational interval (after free time,
       // before gate-out) — no per-day "Container available / access" heartbeat row.
       return mk({ kind: "day", title: "Charged day · Jun " + n, meta: [{ k: "Occurred", v: "Jun " + n + ", 2026", color: "#40515C" }, { k: "Chargeable", v: "Yes · beyond free time", color: V }, { k: "Coverage", v: "COMPLETE", color: V }], chain: [{ k: "Free time ended", v: "Jun 7 — recorded before invoice", bg: "#E4EEE7", fg: "#2F7752" }, { k: "Gate-out", v: "Jun 14 — recorded before invoice", bg: "#E4EEE7", fg: "#2F7752" }, { k: "Operational interval", v: "after free time, before gate-out", bg: "#E4EEE7", fg: "#2F7752" }, { k: "Invoice rate (PDF anchor)", v: "$350 / day · INV-1048 p.1 line 4", bg: "#ECEFF1", fg: "#40515C" }, { k: "Applicable rate", v: "$250 / day · eff. Jun 1 · exact-version verified", bg: "#FBF1D8", fg: "#A9823C" }, { k: "Daily discrepancy", v: "$350 − $250 = $100", bg: "#F2E1DC", fg: "#B4513F" }], usedBy: [{ k: "Recommendation", v: "DISPUTE $700" }, { k: "Charged day", v: "Jun " + n + " of 7" }, { k: "Rolls into", v: "$700 supported difference" }], verification: [{ k: "Bound sources", v: refs, c: V }, { k: "Effective date", v: "VERIFIED", c: V }, { k: "Exact rate", v: "VERIFIED", c: V }, { k: "Scope", v: "VERIFIED", c: V }], body: "CHARGED DAY  Jun " + n + ", 2026\nInvoice rate     $350.00\nApplicable rate  $250.00\n----------------------------\nDiscrepancy      $100.00\n\nEvents  " + refs, bound: "$350 − $250 = $100 · RATE DISCREPANCY" });
+    }
+    if (d === "event") {
+      // The clicked sourced-timeline event, re-derived from the live projection
+      // (same order _liveTimeline renders). Every value shown is the projection's.
+      const tl = this.proj() ? this._liveTimeline() : [];
+      const ev = (tl[this.state.eventIx] || {}).ev;
+      if (!ev) return mk({ title: "Event", meta: [], body: "", bound: "" });
+      const label = EVENT_LABELS[ev.type] || ev.type;
+      const beforeInvoice = ev.recorded_before_invoice;
+      return mk({ title: "Event · " + label,
+        meta: [
+          { k: "Anchor", v: ev.anchor, color: "#40515C" },
+          { k: "Occurred at", v: fmtFull(ev.occurred_at), color: "#40515C" },
+          { k: "Recorded at", v: fmtFull(ev.recorded_at), color: "#40515C" },
+          { k: "Recording", v: beforeInvoice ? "BEFORE the invoice" : "from the invoice", color: beforeInvoice ? V : "#8A7A50" },
+          { k: "Verification", v: ev.verification_state, color: ev.verification_state === "VERIFIED" ? V : "#8A7A50" },
+          { k: "Provenance", v: ev.provenance_class, color: "#40515C" },
+        ],
+        usedBy: [{ k: "Event ref", v: ev.event_ref }, { k: "Sourced timeline", v: label }, { k: "Recorded", v: beforeInvoice ? "before invoice" : "from invoice" }],
+        verification: [{ k: "Verification state", v: ev.verification_state, c: ev.verification_state === "VERIFIED" ? V : "#8A7A50" }, { k: "Recorded before invoice", v: beforeInvoice ? "YES" : "NO", c: beforeInvoice ? V : "#8A7A50" }, { k: "Provenance", v: ev.provenance_class, c: "#40515C" }],
+        body: label.toUpperCase() + "\nAnchor       " + ev.anchor + "\nOccurred     " + fmtFull(ev.occurred_at) + "\nRecorded     " + fmtFull(ev.recorded_at) + "\n----------------------------\nRecording    " + (beforeInvoice ? "BEFORE invoice" : "from invoice") + "\nVerification " + ev.verification_state + "\nRef          " + ev.event_ref,
+        bound: ev.event_ref + " · recorded " + (beforeInvoice ? "before the invoice" : "from the invoice") });
     }
     if (d === "invoice") return mk({ title: "INV-1048.pdf", meta: [{ k: "Type", v: "Carrier PDF", color: "#40515C" }, { k: "Received", v: "Jun 22, 2026", color: "#40515C" }, { k: "Exact version", v: "VERIFIED", color: V }, { k: "Affected days", v: "Jun 8–14", color: "#40515C" }], usedBy: [{ k: "Claims", v: "6 fields extracted" }, { k: "Affected days", v: "7 charged days" }, { k: "Recommendation", v: "DISPUTE $700" }], verification: [{ k: "Exact S3 version", v: "VERIFIED", c: V }, { k: "Region anchors", v: "6 linked", c: V }], body: "DEMURRAGE INVOICE\nContainer TLLU-482931-7\nB/L OAK-77421\nPeriod  Jun 8 – Jun 14, 2026\n\nRate    $350.00 / day\nDays    7\n--------------------------\nTotal   $2,450.00\n\nIssued  Jun 22, 2026", bound: "Rate $350.00/day · Total $2,450.00" });
     if (d === "tariff") return mk({ title: "Tariff · Pacific demurrage", meta: [{ k: "Effective", v: "Jun 1, 2026 →", color: "#40515C" }, { k: "Recorded", v: "before invoice", color: V }, { k: "Retrieval", v: "RETRIEVED (vector)", color: "#8A7A50" }, { k: "Applicability", v: "VERIFIED (deterministic)", color: V }], usedBy: [{ k: "Rule for", v: "all 7 charged days" }, { k: "Sets rate", v: "$250 / day" }, { k: "Recommendation", v: "DISPUTE $700" }], verification: [{ k: "Vector candidate", v: "RETRIEVED", c: "#8A7A50" }, { k: "Effective date", v: "VERIFIED", c: V }, { k: "Exact text", v: "VERIFIED", c: V }, { k: "Exact rate", v: "VERIFIED", c: V }, { k: "Scope", v: "VERIFIED", c: V }], body: "PACIFIC DEMURRAGE TARIFF\nSection 4 — Demurrage charges\n\n4.1  Free time: 96 hours from availability.\n4.2  Demurrage rate: $250 per calendar\n     day per container thereafter.\n\nEffective  2026-06-01", bound: "Demurrage rate: $250 per calendar day" });
@@ -1214,7 +1275,7 @@ export default class Workbench extends React.Component {
                 {wb.openTimeline && (<>
                   {wb.timelineEmpty && (<div style={css("padding: 20px 0; font-size: 12.5px; color: #8A96A0;")}>Waiting for reconstruction — no events retrieved yet.</div>)}
                   <ol style={css("list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column;")}>
-                    {wb.timeline.map((e, i) => (<li key={i} className="tly-row-in" style={css("display: grid; grid-template-columns: 74px 14px 1fr auto; gap: 10px; align-items: baseline; padding: 6px 0;")}><span style={css("font-family: 'IBM Plex Mono',monospace; font-size: 11px; color: #40515C;")}>{e.date}</span><span style={S("width: 8px; height: 8px; border-radius: 50%; align-self: center; margin-top: 2px;", { background: e.dot })} /><span style={css("font-size: 13px; color: #23272F;")}>{e.label}</span><span style={S("font-family: 'IBM Plex Mono',monospace; font-size: 9px; letter-spacing: 0.05em; border-radius: 4px; padding: 3px 7px;", { color: e.tagFg, background: e.tagBg })}>{e.tag}</span></li>))}
+                    {wb.timeline.map((e, i) => (<li key={i} className="tly-row-in" onClick={e.onOpen || undefined} onKeyDown={e.onOpen ? (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); e.onOpen(ev); } } : undefined} tabIndex={e.onOpen ? 0 : undefined} role={e.onOpen ? "button" : undefined} style={S("display: grid; grid-template-columns: 74px 14px 1fr auto; gap: 10px; align-items: baseline; padding: 6px 8px; border-radius: 7px;", { cursor: e.onOpen ? "pointer" : "default", background: e.active ? "#FBF6EE" : "transparent" })}><span style={css("font-family: 'IBM Plex Mono',monospace; font-size: 11px; color: #40515C;")}>{e.date}</span><span style={S("width: 8px; height: 8px; border-radius: 50%; align-self: center; margin-top: 2px;", { background: e.dot })} /><span style={css("font-size: 13px; color: #23272F;")}>{e.label}</span><span style={S("font-family: 'IBM Plex Mono',monospace; font-size: 9px; letter-spacing: 0.05em; border-radius: 4px; padding: 3px 7px;", { color: e.tagFg, background: e.tagBg })}>{e.tag}</span></li>))}
                   </ol>
                 </>)}
                 {v.annot && (<div style={css("font-family: 'IBM Plex Mono',monospace; font-size: 9.5px; color: #A9823C; background: #FBF1D8; border: 1px dashed #C8A955; border-radius: 6px; padding: 7px 10px; margin-top: 10px; line-height: 1.5;")}>Reconstruction Agent · <b>CockroachDB Managed MCP</b> retrieves prior shipment memory recorded before invoice · occurred/recorded times distinct · <b>NEW</b> · BACKEND REQUIRED (live timeline path)</div>)}

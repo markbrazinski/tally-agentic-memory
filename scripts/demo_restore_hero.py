@@ -31,6 +31,31 @@ CUTOFF = datetime(2026, 6, 22, 8, 0, tzinfo=timezone.utc)
 CHARGE_DATES = [date(2026, 6, d) for d in range(8, 15)]  # Jun 8..14 (7 days)
 INVOICE_RATE_MINOR = 35000   # $350/day (carrier claim)
 APPLICABLE_RATE_MINOR = 25000  # $250/day (tariff) → $100/day × 7 = $700 disputed
+HERO_SHIPMENT_REF = "SHP-1048"
+HERO_CONTAINER_REF = "TLLU4829317"
+
+# The hero's sourced timeline. Each event was recorded well before the Jun-22
+# knowledge cutoff (recorded_before_cutoff=true) — the core product point that the
+# facts were on record before the invoice ever landed. occurred_at is the DATA
+# domain (when it happened at the terminal); recorded_at is when memory saw it.
+HERO_EVENTS = [
+    ("SE-1048-001", "DISCHARGED", datetime(2026, 6, 2, 14, 12, tzinfo=timezone.utc),
+     datetime(2026, 6, 2, 15, 0, tzinfo=timezone.utc),
+     "milestone row: DISCHARGED 2026-06-02"),
+    ("SE-1048-002", "AVAILABLE", datetime(2026, 6, 3, 8, 0, tzinfo=timezone.utc),
+     datetime(2026, 6, 3, 9, 0, tzinfo=timezone.utc),
+     "availability notice: AVAILABLE 2026-06-03"),
+    ("SE-1048-003", "FREE_TIME_START", datetime(2026, 6, 3, 8, 0, tzinfo=timezone.utc),
+     datetime(2026, 6, 3, 9, 0, tzinfo=timezone.utc),
+     "free-time clock start: 2026-06-03"),
+    ("SE-1048-004", "FREE_TIME_END", datetime(2026, 6, 7, 23, 59, tzinfo=timezone.utc),
+     datetime(2026, 6, 8, 1, 0, tzinfo=timezone.utc),
+     "free-time clock end: 2026-06-07"),
+    ("SE-1048-005", "GATE_OUT", datetime(2026, 6, 14, 16, 30, tzinfo=timezone.utc),
+     datetime(2026, 6, 14, 17, 0, tzinfo=timezone.utc),
+     "milestone row: GATE_OUT 2026-06-14"),
+]
+HERO_SOURCE_ARTIFACT_REF = "SA-1048-MILESTONE"
 
 
 def _hero_invoice(cur, tenant_id: str) -> tuple[str, str]:
@@ -43,6 +68,56 @@ def _hero_invoice(cur, tenant_id: str) -> tuple[str, str]:
     if row is None:
         raise SystemExit(f"{HERO_DISPLAY_NAME} not found for tenant {tenant_id}")
     return str(row[0]), str(row[1])
+
+
+def _seed_events(cur, tenant_id: str, invoice_id: str, recon_id: str) -> None:
+    """Insert the hero's sourced timeline into reconstruction_events.
+
+    reconstruction_events.source_artifact_id is NOT NULL and FK-references
+    reconstruction_source_artifacts, so we seed ONE representative milestone
+    artifact first and point every event at it. We deliberately DON'T write
+    reconstruction_day_event_bindings — the charged days already stand without
+    bindings in this restore, and the FK that has crashed the live pipeline
+    (recon_day_binding_event_fk) only bites when a binding references a missing
+    event, so skipping bindings keeps the insert self-consistent.
+    """
+    cur.execute(
+        """
+        INSERT INTO reconstruction_source_artifacts
+            (tenant_id,id,invoice_id,public_ref,source_type,display_name,
+             mime_type,provenance_classification,public_disclosure,adapter_name,
+             s3_bucket_ref_private,s3_object_key_private,s3_version_id_private,
+             sha256,byte_length,verification_state,recorded_at,verified_at)
+        VALUES (%s,%s,%s,%s,'MILESTONE_EXPORT','Terminal milestone export',
+            'application/json','DEMO_SCENARIO','Representative demonstration data',
+            'representative-milestone','representative-demo-bucket',%s,
+            'representative-v1',%s,0,'VERIFIED',%s,%s)
+        ON CONFLICT (tenant_id, public_ref) DO NOTHING;
+        """,
+        (tenant_id, str(uuid4()), invoice_id, HERO_SOURCE_ARTIFACT_REF,
+         f"representative/{HERO_SOURCE_ARTIFACT_REF}",
+         uuid4().hex, CUTOFF, CUTOFF),
+    )
+    for seq, (ref, etype, occurred, recorded, anchor) in enumerate(HERO_EVENTS):
+        cur.execute(
+            """
+            INSERT INTO reconstruction_events
+                (tenant_id,id,reconstruction_id,invoice_id,public_ref,event_type,
+                 shipment_ref,container_ref,source_artifact_id,
+                 source_version_ref_private,source_anchor_private,
+                 display_anchor_public,provenance_classification,occurred_at,
+                 recorded_at,received_at,recorded_before_cutoff,normalized_facts,
+                 use_state,verification_state,display_sequence)
+            SELECT %s,%s,%s,%s,%s,%s,%s,%s,a.id,a.s3_version_id_private,%s,%s,
+                   'DEMO_SCENARIO',%s,%s,%s,true,'{}','USED','VERIFIED',%s
+            FROM reconstruction_source_artifacts a
+            WHERE a.tenant_id=%s AND a.public_ref=%s;
+            """,
+            (tenant_id, str(uuid4()), recon_id, invoice_id, ref, etype,
+             HERO_SHIPMENT_REF, HERO_CONTAINER_REF,
+             json.dumps({"anchor": anchor}), anchor, occurred, recorded, recorded,
+             seq, tenant_id, HERO_SOURCE_ARTIFACT_REF),
+        )
 
 
 def _seed_dispute(cur, tenant_id: str, invoice_id: str, carrier_id: str) -> None:
@@ -165,6 +240,7 @@ def _seed_dispute(cur, tenant_id: str, invoice_id: str, carrier_id: str) -> None
              j.invoice_rate_minor, j.applicable_rate_minor, j.discrepancy_minor,
              j.outcome.value, rule_id, j.explanation),
         )
+    _seed_events(cur, tenant_id, invoice_id, recon_id)
 
 
 def main() -> int:
@@ -198,11 +274,16 @@ def main() -> int:
                     "recommendations WHERE tenant_id=%s AND invoice_id=%s AND "
                     "superseded_by IS NULL;", (tenant_id, invoice_id))
         rec = cur.fetchone()
+        cur.execute("SELECT count(*) FROM reconstruction_events WHERE tenant_id=%s "
+                    "AND invoice_id=%s;", (tenant_id, invoice_id))
+        event_count = cur.fetchone()[0]
     conn.close()
     assert agg == "READY_FOR_REVIEW", agg
     assert rec == ("DISPUTE", "FROZEN", 70000), rec
+    assert event_count == len(HERO_EVENTS), event_count
     print(f"hero restored: {HERO_DISPLAY_NAME} → READY_FOR_REVIEW, "
-          f"rec={rec} (instantly approvable, no pipeline wait)")
+          f"rec={rec}, timeline={event_count} events "
+          f"(instantly approvable, no pipeline wait)")
     return 0
 
 
@@ -233,8 +314,9 @@ def _clear_derived(cur, tenant_id: str, invoice_id: str) -> None:
     cur.execute("DELETE FROM reconstruction_day_event_bindings WHERE tenant_id=%s AND "
                 "charged_day_id IN (SELECT id FROM reconstruction_charged_days WHERE "
                 "tenant_id=%s AND invoice_id=%s);", (tenant_id, tenant_id, invoice_id))
-    for tbl in ("reconstruction_events", "reconstruction_coverage",
-                "reconstruction_charged_days", "reconstructions"):
+    for tbl in ("reconstruction_events", "reconstruction_source_artifacts",
+                "reconstruction_coverage", "reconstruction_charged_days",
+                "reconstructions"):
         cur.execute(f"DELETE FROM {tbl} WHERE tenant_id=%s AND invoice_id=%s;",
                     (tenant_id, invoice_id))
 
