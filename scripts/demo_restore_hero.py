@@ -31,31 +31,48 @@ CUTOFF = datetime(2026, 6, 22, 8, 0, tzinfo=timezone.utc)
 CHARGE_DATES = [date(2026, 6, d) for d in range(8, 15)]  # Jun 8..14 (7 days)
 INVOICE_RATE_MINOR = 35000   # $350/day (carrier claim)
 APPLICABLE_RATE_MINOR = 25000  # $250/day (tariff) → $100/day × 7 = $700 disputed
-HERO_SHIPMENT_REF = "SHP-1048"
+# The live pipeline sets shipment_ref FROM the container ref
+# (reconstruction_repository._claim: shipment_ref=inputs["container_ref"]), and the
+# MCP view stores it the same way. "SHP-1048" appeared nowhere in real memory.
+HERO_SHIPMENT_REF = "TLLU4829317"
 HERO_CONTAINER_REF = "TLLU4829317"
 
 # The hero's sourced timeline. Each event was recorded well before the Jun-22
 # knowledge cutoff (recorded_before_cutoff=true) — the core product point that the
 # facts were on record before the invoice ever landed. occurred_at is the DATA
 # domain (when it happened at the terminal); recorded_at is when memory saw it.
+# public_refs, event->artifact links and shipment_ref MUST match
+# tests/fixtures/demo/INV-1048.reconstruction-events.json, which is what
+# seed_reconstruction_memory loads into shipment_event_memory (the table behind
+# the Managed MCP view a LIVE reconstruction reads). Divergence here is invisible
+# in the seeded hero and fatal on a live import — see _seed_events.
 HERO_EVENTS = [
-    ("SE-1048-001", "DISCHARGED", datetime(2026, 6, 2, 14, 12, tzinfo=timezone.utc),
+    ("SE-INV1048-001", "DISCHARGED", datetime(2026, 6, 2, 14, 12, tzinfo=timezone.utc),
      datetime(2026, 6, 2, 15, 0, tzinfo=timezone.utc),
-     "milestone row: DISCHARGED 2026-06-02"),
-    ("SE-1048-002", "AVAILABLE", datetime(2026, 6, 3, 8, 0, tzinfo=timezone.utc),
+     "milestone row: DISCHARGED 2026-06-02", "SRC-MILESTONE-INV-1048"),
+    ("SE-INV1048-002", "AVAILABLE", datetime(2026, 6, 3, 8, 0, tzinfo=timezone.utc),
      datetime(2026, 6, 3, 9, 0, tzinfo=timezone.utc),
-     "availability notice: AVAILABLE 2026-06-03"),
-    ("SE-1048-003", "FREE_TIME_START", datetime(2026, 6, 3, 8, 0, tzinfo=timezone.utc),
+     "availability notice: AVAILABLE 2026-06-03", "SRC-AVAILABILITY-INV-1048"),
+    ("SE-INV1048-003", "FREE_TIME_START",
+     datetime(2026, 6, 3, 8, 0, tzinfo=timezone.utc),
      datetime(2026, 6, 3, 9, 0, tzinfo=timezone.utc),
-     "free-time clock start: 2026-06-03"),
-    ("SE-1048-004", "FREE_TIME_END", datetime(2026, 6, 7, 23, 59, tzinfo=timezone.utc),
+     "free-time clock start: 2026-06-03", "SRC-AVAILABILITY-INV-1048"),
+    ("SE-INV1048-004", "FREE_TIME_END",
+     datetime(2026, 6, 7, 23, 59, tzinfo=timezone.utc),
      datetime(2026, 6, 8, 1, 0, tzinfo=timezone.utc),
-     "free-time clock end: 2026-06-07"),
-    ("SE-1048-005", "GATE_OUT", datetime(2026, 6, 14, 16, 30, tzinfo=timezone.utc),
+     "free-time clock end: 2026-06-07", "SRC-AVAILABILITY-INV-1048"),
+    ("SE-INV1048-005", "GATE_OUT", datetime(2026, 6, 14, 16, 30, tzinfo=timezone.utc),
      datetime(2026, 6, 14, 17, 0, tzinfo=timezone.utc),
-     "milestone row: GATE_OUT 2026-06-14"),
+     "milestone row: GATE_OUT 2026-06-14", "SRC-MILESTONE-INV-1048"),
 ]
-HERO_SOURCE_ARTIFACT_REF = "SA-1048-MILESTONE"
+HERO_SOURCE_ARTIFACTS = [
+    {"public_ref": "SRC-MILESTONE-INV-1048", "source_type": "MILESTONE_EXPORT",
+     "display_name": "Container milestone export (representative)",
+     "adapter_name": "representative-milestone"},
+    {"public_ref": "SRC-AVAILABILITY-INV-1048", "source_type": "AVAILABILITY_NOTICE",
+     "display_name": "Terminal availability notice (representative)",
+     "adapter_name": "representative-availability"},
+]
 
 
 def _hero_invoice(cur, tenant_id: str) -> tuple[str, str]:
@@ -74,31 +91,45 @@ def _seed_events(cur, tenant_id: str, invoice_id: str, recon_id: str) -> None:
     """Insert the hero's sourced timeline into reconstruction_events.
 
     reconstruction_events.source_artifact_id is NOT NULL and FK-references
-    reconstruction_source_artifacts, so we seed ONE representative milestone
-    artifact first and point every event at it. We deliberately DON'T write
-    reconstruction_day_event_bindings — the charged days already stand without
-    bindings in this restore, and the FK that has crashed the live pipeline
-    (recon_day_binding_event_fk) only bites when a binding references a missing
-    event, so skipping bindings keeps the insert self-consistent.
+    reconstruction_source_artifacts, so the artifacts are seeded first and each
+    event points at the one its fixture names.
+
+    The artifact public_refs here MUST match the ones the real fixture's events
+    reference (SRC-MILESTONE-INV-1048 / SRC-AVAILABILITY-INV-1048). An earlier
+    version of this script invented a single 'SA-1048-MILESTONE' artifact, which
+    made the seeded hero look fine while a LIVE import crash-looped: the live
+    events reference the fixture refs, found no artifact, and their
+    INSERT ... SELECT silently wrote zero rows -- surfacing later as a
+    recon_day_binding_event_fk violation. Seeded and live paths now agree.
+
+    We still deliberately DON'T write reconstruction_day_event_bindings — the
+    charged days stand without bindings in this restore.
     """
-    cur.execute(
-        """
-        INSERT INTO reconstruction_source_artifacts
-            (tenant_id,id,invoice_id,public_ref,source_type,display_name,
-             mime_type,provenance_classification,public_disclosure,adapter_name,
-             s3_bucket_ref_private,s3_object_key_private,s3_version_id_private,
-             sha256,byte_length,verification_state,recorded_at,verified_at)
-        VALUES (%s,%s,%s,%s,'MILESTONE_EXPORT','Terminal milestone export',
-            'application/json','DEMO_SCENARIO','Representative demonstration data',
-            'representative-milestone','representative-demo-bucket',%s,
-            'representative-v1',%s,0,'VERIFIED',%s,%s)
-        ON CONFLICT (tenant_id, public_ref) DO NOTHING;
-        """,
-        (tenant_id, str(uuid4()), invoice_id, HERO_SOURCE_ARTIFACT_REF,
-         f"representative/{HERO_SOURCE_ARTIFACT_REF}",
-         uuid4().hex, CUTOFF, CUTOFF),
-    )
-    for seq, (ref, etype, occurred, recorded, anchor) in enumerate(HERO_EVENTS):
+    for artifact in HERO_SOURCE_ARTIFACTS:
+        cur.execute(
+            """
+            INSERT INTO reconstruction_source_artifacts
+                (tenant_id,id,invoice_id,public_ref,source_type,display_name,
+                 mime_type,provenance_classification,public_disclosure,
+                 adapter_name,s3_bucket_ref_private,s3_object_key_private,
+                 s3_version_id_private,sha256,byte_length,verification_state,
+                 recorded_at,verified_at)
+            VALUES (%s,%s,%s,%s,%s,%s,
+                'application/json','DEMO_SCENARIO',
+                'Representative demonstration data',
+                %s,'representative-demo-bucket',%s,
+                'representative-v1',%s,0,'VERIFIED',%s,%s)
+            ON CONFLICT (tenant_id, public_ref) DO NOTHING;
+            """,
+            (tenant_id, str(uuid4()), invoice_id, artifact["public_ref"],
+             artifact["source_type"], artifact["display_name"],
+             artifact["adapter_name"],
+             f"representative/{artifact['public_ref']}",
+             uuid4().hex, CUTOFF, CUTOFF),
+        )
+    for seq, (ref, etype, occurred, recorded, anchor, source_ref) in enumerate(
+        HERO_EVENTS
+    ):
         cur.execute(
             """
             INSERT INTO reconstruction_events
@@ -116,7 +147,7 @@ def _seed_events(cur, tenant_id: str, invoice_id: str, recon_id: str) -> None:
             (tenant_id, str(uuid4()), recon_id, invoice_id, ref, etype,
              HERO_SHIPMENT_REF, HERO_CONTAINER_REF,
              json.dumps({"anchor": anchor}), anchor, occurred, recorded, recorded,
-             seq, tenant_id, HERO_SOURCE_ARTIFACT_REF),
+             seq, tenant_id, source_ref),
         )
 
 
