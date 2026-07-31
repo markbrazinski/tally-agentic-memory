@@ -1,6 +1,9 @@
 """Build the deterministic fictional invoices used by the demo (Demo v3).
 
 INV-1048 is the complete-memory hero ($350/day × 7 = $2,450 → DISPUTE $700).
+Its PDF is NOT generated here: the hero ships as a designed, checked-in fixture
+(tests/fixtures/demo/INV-1048.pdf) so every import path serves the same document
+the camera sees. This script must never overwrite it -- see HERO_FILENAME below.
 INV-1047 is the queue-level refusal ($125/day × 7 = $875): a DIFFERENT shipment
 with complete operational history but no governing tariff in the corpus, so the
 evaluator genuinely returns NEEDS EVIDENCE / "Governing tariff not verified".
@@ -16,30 +19,16 @@ from pathlib import Path
 
 DEMO_DIR = Path(__file__).parents[1] / "tests/fixtures/demo"
 
+# The hero invoice is a designed document, not a generated one. It is the single
+# PDF the demo, the acceptance scripts, and the retained S3 copy all serve.
+HERO_FILENAME = "INV-1048.pdf"
+
 
 @dataclass(frozen=True)
 class InvoiceSpec:
     filename: str
     lines: tuple[tuple[int, str], ...]
 
-
-INV_1048 = InvoiceSpec(
-    filename="INV-1048.pdf",
-    lines=(
-        (20, "FICTIONAL DEMO INVOICE - NOT A REAL CARRIER CHARGE"),
-        (16, "Asterline Demo Shipping"),
-        (12, "Invoice: INV-1048"),
-        (12, "Issued: June 22, 2026"),
-        (12, "Bill of Lading: OAK-77421"),
-        (12, "Container: TLLU-482931-7"),
-        (12, "Charge Type: Demurrage"),
-        (12, "Charge Period: June 8, 2026 through June 14, 2026"),
-        (12, "Charged Days: 7"),
-        (12, "Daily Rate: USD $350.00 per day"),
-        (14, "Total Amount Due: USD $2,450.00"),
-        (10, "Synthetic hackathon fixture. No carrier was contacted."),
-    ),
-)
 
 INV_1041 = InvoiceSpec(
     filename="INV-1041.pdf",
@@ -127,7 +116,12 @@ def build_pdf(spec: InvoiceSpec) -> bytes:
 
 if __name__ == "__main__":
     DEMO_DIR.mkdir(parents=True, exist_ok=True)
-    for spec in (INV_1048, INV_1050, INV_1041):
+    for spec in (INV_1050, INV_1041):
+        if spec.filename == HERO_FILENAME:
+            raise SystemExit(
+                f"refusing to generate {HERO_FILENAME}: the hero invoice is a "
+                "designed, checked-in fixture, not a generated one"
+            )
         out = DEMO_DIR / spec.filename
         out.write_bytes(build_pdf(spec))
         print(f"wrote {out}")

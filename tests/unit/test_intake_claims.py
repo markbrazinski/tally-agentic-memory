@@ -24,56 +24,62 @@ def _fixture_pages():
 
 
 def _raw_claims():
+    """Claims whose excerpts are verbatim substrings of the designed hero PDF.
+
+    Anchoring is exact-match by design (an excerpt that is not literally in the
+    source makes the field UNVERIFIED), so these quotes track the document's real
+    wording -- mostly its REMITTANCE NOTES prose, which restates every fact.
+    """
     return {
         "claims": {
             "invoice_number": {
                 "value": "INV-1048",
-                "text_excerpt": "Invoice: INV-1048",
+                "text_excerpt": "Reference invoice INV-1048",
                 "page_number": 1,
             },
             "container_number": {
                 "value": "TLLU-482931-7",
-                "text_excerpt": "Container: TLLU-482931-7",
+                "text_excerpt": "OAK-77421 TLLU-482931-7",
                 "page_number": 1,
             },
             "bill_of_lading": {
                 "value": "OAK-77421",
-                "text_excerpt": "Bill of Lading: OAK-77421",
+                "text_excerpt": "bill of lading OAK-77421",
                 "page_number": 1,
             },
             "charge_type": {
                 "value": "Demurrage",
-                "text_excerpt": "Charge Type: Demurrage",
+                "text_excerpt": "Demurrage assessed at USD $350.00 per day",
                 "page_number": 1,
             },
             "period_start": {
                 "value": "June 8, 2026",
-                "text_excerpt": "Charge Period: June 8, 2026",
+                "text_excerpt": "covering June 8, 2026 through June 14, 2026.",
                 "page_number": 1,
             },
             "period_end": {
                 "value": "June 14, 2026",
-                "text_excerpt": "through June 14, 2026",
+                "text_excerpt": "through June 14, 2026.",
                 "page_number": 1,
             },
             "charged_days": {
                 "value": 7,
-                "text_excerpt": "Charged Days: 7",
+                "text_excerpt": "per day for 7 days,",
                 "page_number": 1,
             },
             "daily_rate": {
                 "value": "$350.00",
-                "text_excerpt": "Daily Rate: USD $350.00 per day",
+                "text_excerpt": "assessed at USD $350.00 per day",
                 "page_number": 1,
             },
             "total": {
                 "value": "$2,450.00",
-                "text_excerpt": "Total Amount Due: USD $2,450.00",
+                "text_excerpt": "Subtotal $2,450.00",
                 "page_number": 1,
             },
             "issued_date": {
                 "value": "June 22, 2026",
-                "text_excerpt": "Issued: June 22, 2026",
+                "text_excerpt": "June 22, 2026 USD",
                 "page_number": 1,
             },
         }
@@ -103,7 +109,7 @@ def test_claims_validate_to_expected_manifest_with_real_pdf_anchors():
 
 def test_unanchored_model_value_is_rejected():
     raw = _raw_claims()
-    raw["claims"]["total"]["text_excerpt"] = "Total Amount Due: USD $9,999.00"
+    raw["claims"]["total"]["text_excerpt"] = "Subtotal $9,999.00"
 
     result = validate_extracted_claims(raw, _fixture_pages())
 
