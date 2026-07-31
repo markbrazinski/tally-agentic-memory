@@ -1,6 +1,29 @@
 import React from "react";
 import { nextWb, STATUS_LABEL } from "./api/eventMap.js";
 
+// DEMO PACING — the single source of truth for the filmed section-reveal tempo.
+// Every presentation delay in this file reads from here (via this.later, which
+// zeroes them under reduced-motion). These are FRONTEND-ONLY: they never gate the
+// backend, never couple to SSE arrival order, and never change what data is shown
+// — only WHEN each already-computed sub-element becomes visible. Owner tunes these
+// during dry runs. Cumulative-timing rationale for the defaults is in the report.
+const DEMO_PACING_MS = {
+  // Intake
+  INTAKE_STATE_TRANSITION_MS: 1200,      // RECEIVED -> INITIAL PROCESSING hold
+  INTAKE_CLAIM_FIELD_STAGGER_MS: 700,    // each claim field appears (6 fields)
+  // Reconstruction
+  RECONSTRUCTION_TIMELINE_EVENT_STAGGER_MS: 900,  // each timeline event
+  RECONSTRUCTION_LEDGER_COVERAGE_DELAY_MS: 800,   // after last event, before COVERAGE fills
+  // Evidence
+  EVIDENCE_CANDIDATE_TO_VERIFY_START_MS: 2200,    // candidate shown -> checks begin
+  EVIDENCE_VERIFY_CHECK_STAGGER_MS: 1600,         // each of 4 checks flips VERIFIED
+  EVIDENCE_VERIFIED_TO_LEDGER_FILL_MS: 1400,      // after 4th check -> ledger RULE/Δ fill
+  // Evidence phase = START + 3×STAGGER + FILL = 2200 + 4800 + 1400 = 8.4s (in the
+  // 8–10s acceptance window). Owner tunes these during dry runs.
+  // Seal audit trail (item 6)
+  SEAL_AUDIT_ENTRY_STAGGER_MS: 600,
+};
+
 // Invoice ids arrive in two forms (INV-TLY-1048 vs a uuid); match loosely by
 // the trailing invoice number so the display id and the server id line up.
 function sameInvoice(a, b) {
@@ -79,6 +102,16 @@ export default class Workbench extends React.Component {
       dayOpen: false, dayIx: 2, eventIx: 0, drawer: null, quickOpen: false, inv1050: "pending",
       annot: false, disputed: false, sceneApplied: false,
       userDisc: {}, discWb: null, queueFilter: "all", qrEvid: false, drawerTab: "source",
+      // DEMO PACING sub-step reveal counters (all advanced by startPacedReveal via
+      // this.later reading DEMO_PACING_MS). These gate WHEN a sub-element is shown;
+      // the DATA behind each still comes from the projection / mock as before.
+      intakeState: 0,        // 0 RECEIVED, 1 INITIAL PROCESSING
+      claimFieldsShown: 0,   // 0..6 intake claim fields revealed
+      eventsShown: 0,        // 0..N reconstruction timeline events revealed
+      coverageFilled: false, // ledger COVERAGE column filled (SOURCE COMPLETE)
+      checksShown: 0,        // 0..4 evidence checks flipped VERIFIED
+      ledgerRuleFilled: false, // ledger RULE/Δ columns filled
+      auditEntry: 0,         // 0..3 seal audit-trail entries revealed
     };
     this._timers = [];
     this.reduced = !!(props && props.reducedMotion);
@@ -193,7 +226,11 @@ export default class Workbench extends React.Component {
   applyScene() {
     const s = this.scene;
     if (s === "live") { this.later(() => this.setState({ arrived: true }), 1000); return; }
-    const base = { view: "workbench", invoiceId: "INV-TLY-1048", arrived: true };
+    // Prototype scenes jump straight to a terminal state — there's no paced reveal
+    // to run, so mark every paced sub-step already-revealed (full ledger/timeline/
+    // claims/audit) rather than leaving them at the pre-reveal 0 baseline.
+    const revealed = { intakeState: 1, claimFieldsShown: 6, eventsShown: 6, coverageFilled: true, checksShown: 4, ledgerRuleFilled: true, auditEntry: 3 };
+    const base = { view: "workbench", invoiceId: "INV-TLY-1048", arrived: true, ...revealed };
     if (s === "recommendation") this.setState({ ...base, wb: "recommendation", dayOpen: true });
     else if (s === "sendGate") this.setState({ ...base, wb: "sending", gateStep: 5, disputed: false });
     else if (s === "sendBlocked") this.setState({ ...base, wb: "sending", gateStep: 3, gateBlocked: true });
@@ -207,6 +244,8 @@ export default class Workbench extends React.Component {
 
   openInvoice(realId) {
     this.clearTimers();
+    // Fresh reveal: reset every paced sub-step counter so re-opening replays clean.
+    const pacingReset = { intakeState: 0, claimFieldsShown: 0, eventsShown: 0, coverageFilled: false, checksShown: 0, ledgerRuleFilled: false, auditEntry: 0 };
     if (this.live) {
       const id = typeof realId === "string" ? realId
         : (this.liveQueue && this.liveQueue.find(isHeroRow)?.invoiceId)
@@ -215,31 +254,64 @@ export default class Workbench extends React.Component {
       // replay the section-reveal animation over the real data up to the state
       // the server actually reached. The data is real; only the reveal timing is
       // a replay of a completed record (shown as "replay", never live processing).
-      this.setState({ view: "workbench", invoiceId: id, wb: "intake" }, () => {
+      this.setState({ view: "workbench", invoiceId: id, wb: "intake", ...pacingReset }, () => {
         this.openInvoiceLive(id);
       });
       return;
     }
-    this.setState({ view: "workbench", invoiceId: "INV-TLY-1048", wb: "intake" });
+    this.setState({ view: "workbench", invoiceId: "INV-TLY-1048", wb: "intake", ...pacingReset });
     this.replayReveal("recommendation");
   }
-  // Timer reveal through the pipeline ranks up to `target`, for the section-
-  // populate animation. Used by the prototype and the live cosmetic replay.
-  replayReveal(target) {
-    // The recommendation is the CONSEQUENCE of evidence completing — it lands the
-    // same beat as ruleVerified (validation done → $ conclusion), not on its own
-    // detached timer (#1: "make the recommendation hit once the evidence is done").
-    const steps = [
-      ["reconstructing", 1200], ["reconstructed", 2600], ["retrieving", 3600],
-      ["ruleVerified", 4800], ["recommendation", 4950],
-    ];
+  // DEMO PACING orchestrator. Replaces the coarse rank-based replayReveal with a
+  // sub-step reveal sequence driven entirely by DEMO_PACING_MS through this.later
+  // (which zeroes every delay under reduced-motion, keeping tests instant). It only
+  // advances presentation counters + the wb rank in step; it NEVER changes data.
+  // Filmed in both live (cosmetic replay over real data) and the prototype reveal.
+  startPacedReveal(target) {
+    const P = DEMO_PACING_MS;
     const targetRank = this.rank(target);
-    steps.forEach(([wb, ms]) => {
-      if (this.rank(wb) <= targetRank) {
-        this.later(() => this.setState({ wb }), this.reduced ? 0 : ms);
-      }
-    });
+    const reach = (wb) => this.rank(wb) <= targetRank; // only reveal up to target
+    // How many timeline events the reconstructed view will show (real projection
+    // length in live; the mock's full sourced set otherwise). Data unchanged — we
+    // only stagger their appearance one at a time.
+    const N = this.recon && this.recon.timeline ? this.recon.timeline.length : 6;
+    let t = 0; // cumulative schedule cursor (ms)
+    const step = (ms, fn) => { t += ms; this.later(fn, t); };
+
+    // 1. Intake: hold RECEIVED, then INITIAL PROCESSING + stagger the 6 claim fields.
+    step(P.INTAKE_STATE_TRANSITION_MS, () => this.setState({ intakeState: 1 }));
+    for (let i = 1; i <= 6; i++) {
+      step(P.INTAKE_CLAIM_FIELD_STAGGER_MS, () => this.setState({ claimFieldsShown: i }));
+    }
+    if (!reach("reconstructing")) return;
+
+    // 2. Enter reconstruction + stagger the timeline events one at a time.
+    step(P.RECONSTRUCTION_TIMELINE_EVENT_STAGGER_MS, () => this.setState({ wb: "reconstructing", eventsShown: 1 }));
+    for (let i = 2; i <= N; i++) {
+      step(P.RECONSTRUCTION_TIMELINE_EVENT_STAGGER_MS, () => this.setState({ eventsShown: i }));
+    }
+
+    // 3. After the last event, fill COVERAGE (SOURCE COMPLETE); RULE/Δ stay pending.
+    if (!reach("reconstructed")) return;
+    step(P.RECONSTRUCTION_LEDGER_COVERAGE_DELAY_MS, () => this.setState({ wb: "reconstructed", coverageFilled: true }));
+
+    // 4. Enter Evidence — candidate header shows immediately — then flip the 4 checks.
+    if (!reach("retrieving")) return;
+    step(0, () => this.setState({ wb: "retrieving" }));
+    step(P.EVIDENCE_CANDIDATE_TO_VERIFY_START_MS, () => this.setState({ checksShown: 1 }));
+    for (let i = 2; i <= 4; i++) {
+      step(P.EVIDENCE_VERIFY_CHECK_STAGGER_MS, () => this.setState({ checksShown: i }));
+    }
+
+    // 5. After the 4th check: APPLICABILITY VERIFIED badge, then fill ledger RULE/Δ
+    //    across all 7 rows at once + land the recommendation (tied to ruleVerified).
+    if (!reach("ruleVerified")) return;
+    step(P.EVIDENCE_VERIFIED_TO_LEDGER_FILL_MS, () => this.setState({ wb: "ruleVerified", ledgerRuleFilled: true }));
+    if (!reach("recommendation")) return;
+    step(150, () => this.setState({ wb: "recommendation" }));
   }
+  // Back-compat alias: openInvoice / openInvoiceLive call this to run the reveal.
+  replayReveal(target) { this.startPacedReveal(target); }
   async openInvoiceLive(id) {
     let target = "recommendation";
     // The real retained-PDF link (exact S3 version) from the invoice projection.
@@ -294,7 +366,8 @@ export default class Workbench extends React.Component {
   approveDispute() {
     this.clearTimers();
     if (this.live) { this.approveDisputeLive(); return; }
-    this.setState({ wb: "approved", dayOpen: false, sealStep: 1 });
+    this.setState({ wb: "approved", dayOpen: false, sealStep: 1, auditEntry: 0 });
+    this.revealAuditTrail(); // stagger the visible audit entries into view
     this.later(() => this.setState({ wb: "sealing", sealStep: 2 }), 900);
     this.later(() => this.setState({ wb: "readyToSend", sealStep: 3 }), 1900);
     this.later(() => this.setState({ wb: "correspondence" }), 2700);
@@ -321,15 +394,18 @@ export default class Workbench extends React.Component {
     // the SERVER decide the seal state — no timers author sealing/ready. The
     // awaited approve() performs approve+seal atomically; its resolution IS the
     // server confirming the seal, and SSE `decision.sealed` reconciles wb too.
-    this.setState({ wb: "approved", dayOpen: false, sealStep: 1 });
+    this.setState({ wb: "approved", dayOpen: false, sealStep: 1, auditEntry: 0 });
     try {
       const key = `approve-${this.state.invoiceId}-${this.recommendation.id}`;
       await this.provider.approve(
         this.state.invoiceId, this.recommendation.id, this.recommendation.etag, key,
       );
       // Sealed per the atomic server response; reveal the composer. sealStep 3
-      // reflects the completed seal, not a timed animation step.
+      // reflects the completed seal, not a timed animation step. The audit-trail
+      // entries are staggered into view AFTER the real seal — presentation only,
+      // the API call above already completed (DEMO PACING item 6).
       this.setState({ wb: "correspondence", sealStep: 3 });
+      this.revealAuditTrail();
     } catch (e) {
       // Fail closed: surface the block, do not pretend it sealed.
       // eslint-disable-next-line no-console
@@ -397,7 +473,7 @@ export default class Workbench extends React.Component {
   closeQuickReview() { this.setState({ quickOpen: false }); }
   approvePayment() { this.setState({ inv1050: "done" }); }
   toggleAnnot() { this.setState({ annot: !this.state.annot }); }
-  replay() { this.clearTimers(); this.setState({ view: "queue", wb: "intake", arrived: false, disputed: false, dayOpen: false, drawer: null, quickOpen: false, inv1050: "pending", gateStep: 0, gateBlocked: false, sealStep: 0 }); this.later(() => this.setState({ arrived: true }), 900); }
+  replay() { this.clearTimers(); this.setState({ view: "queue", wb: "intake", arrived: false, disputed: false, dayOpen: false, drawer: null, quickOpen: false, inv1050: "pending", gateStep: 0, gateBlocked: false, sealStep: 0, intakeState: 0, claimFieldsShown: 0, eventsShown: 0, coverageFilled: false, checksShown: 0, ledgerRuleFilled: false, auditEntry: 0 }); this.later(() => this.setState({ arrived: true }), 900); }
   stop(e) { e.stopPropagation(); }
   jump(id, e) { if (e && e.preventDefault) e.preventDefault(); const c = document.getElementById("tly-scroll"); const el = document.getElementById(id); if (c && el) { const top = el.getBoundingClientRect().top - c.getBoundingClientRect().top + c.scrollTop - 74; c.scrollTo({ top: Math.max(0, top), behavior: this.reduced ? "auto" : "smooth" }); } }
   stateOpen(key) { const w = this.state.wb; if (key === "source") return w === "intake"; if (key === "timeline") return w === "reconstructing" || w === "reconstructed"; if (key === "days") return ["reconstructing","reconstructed","retrieving","ruleVerified","recommendation","insufficient"].indexOf(w) >= 0; if (key === "corr") return ["correspondence","sending","sent"].indexOf(w) >= 0; return false; }
@@ -414,7 +490,11 @@ export default class Workbench extends React.Component {
   statusMeta() {
     const w = this.state.wb;
     if (w === "insufficient") return { status: "NEEDS EVIDENCE", kind: "checking" };
-    if (w === "intake") return { status: "INITIAL PROCESSING", kind: "checking" };
+    // DEMO PACING: hold RECEIVED until the paced reveal advances intakeState to 1,
+    // then INITIAL PROCESSING. Only affects the intake phase.
+    if (w === "intake") return this.state.intakeState >= 1
+      ? { status: "INITIAL PROCESSING", kind: "checking" }
+      : { status: "RECEIVED", kind: "neutral" };
     if (["reconstructing","reconstructed","retrieving","ruleVerified"].includes(w)) return { status: "RECONSTRUCTING", kind: "checking" };
     if (w === "recommendation") return { status: "READY FOR REVIEW", kind: "neutral" };
     if (w === "approved") return { status: "APPROVED", kind: "neutral" };
@@ -620,13 +700,21 @@ export default class Workbench extends React.Component {
     const claimRate = cdRate ? money(cdRate.invoice_rate_minor) + "/day" : "$350/day";
     const claimDays = P && P.rec && P.rec.days_total != null ? String(P.rec.days_total) : (P ? String(P.cov.days_total) : "7");
     const claimTotal = P && P.rec && P.rec.claimed_amount_minor != null ? money(P.rec.claimed_amount_minor) : "$2,450";
+    // DEMO PACING: each claim field fades to full opacity only when the paced
+    // reveal has reached it (claimFieldsShown > its index). Values are unchanged;
+    // this only staggers WHEN each of the 6 fields lands. claimVals keeps the
+    // pre-reveal baseline so a not-yet-revealed field reads as extracting (0.35).
+    // Fallback: if the wb rank is already past intake (SSE-advanced), show all
+    // fields — the paced stagger only governs the intake reveal itself.
+    const cShown = (i) => st.claimFieldsShown > i || this.at("reconstructing") || insuf;
+    const cOp = (i) => (cShown(i) ? 1 : 0.35);
     const claims = [
-      { label: "Charge type", value: "Demurrage", color: "#23272F", opacity: claimVals ? 1 : 0.35 },
-      { label: "Rate", value: claimRate, color: "#A9823C", opacity: claimVals ? 1 : 0.35 },
-      { label: "Charged days", value: claimDays, color: "#23272F", opacity: claimVals ? 1 : 0.35 },
-      { label: "Total", value: claimTotal, color: "#A9823C", opacity: claimVals ? 1 : 0.35 },
-      { label: "B/L", value: "OAK-77421", color: "#23272F", opacity: claimVals ? 1 : 0.35 },
-      { label: "Issued", value: "Jun 22", color: "#23272F", opacity: claimVals ? 1 : 0.35 },
+      { label: "Charge type", value: "Demurrage", color: "#23272F", opacity: cOp(0) },
+      { label: "Rate", value: claimRate, color: "#A9823C", opacity: cOp(1) },
+      { label: "Charged days", value: claimDays, color: "#23272F", opacity: cOp(2) },
+      { label: "Total", value: claimTotal, color: "#A9823C", opacity: cOp(3) },
+      { label: "B/L", value: "OAK-77421", color: "#23272F", opacity: cOp(4) },
+      { label: "Issued", value: "Jun 22", color: "#23272F", opacity: cOp(5) },
     ];
     const allEvents = [
       { date: "Jun 2", label: "Container discharged", tag: "RECORDED BEFORE INVOICE", before: true, since: 1 },
@@ -636,14 +724,44 @@ export default class Workbench extends React.Component {
       { date: "Jun 14", label: "Container gated out", tag: "RECORDED BEFORE INVOICE", before: true, since: 2 },
       { date: "Jun 22", label: "Invoice issued", tag: "FROM INVOICE", before: false, since: 2 },
     ];
-    const rnk = this.rank(st.wb);
     // LIVE: the timeline is the real reconstruction projection (this.recon.timeline),
     // each row carrying its full event object so the click handler can open its
     // provenance. MOCK keeps the rank-gated hardcoded allEvents (click-audit).
-    const tl = (P ? this._liveTimeline() : allEvents.filter((e) => insuf || (rnk >= this.rank("reconstructing") && (rnk >= this.rank("reconstructed") || e.since <= 1))))
+    // DEMO PACING: reveal timeline events one at a time — render only the first
+    // `eventsShown` of the full sourced set. Each row still carries its RECORDED
+    // BEFORE INVOICE tag (part of the row) and its click-to-drawer handler. insuf
+    // shows the full set immediately (no paced narrative for the evidence-gap scene).
+    const tlAll = P ? this._liveTimeline() : allEvents;
+    // Show all events once reconstruction is past (SSE-advanced) OR the paced count;
+    // whichever is further along. insuf shows the full set.
+    const eventsVisible = this.at("reconstructed") ? tlAll.length : st.eventsShown;
+    const tl = (insuf ? tlAll : tlAll.slice(0, eventsVisible))
       .map((e, i) => ({ date: e.date, label: e.label, tag: e.tag, dot: e.before ? "#2F7752" : "#8A96A0", tagBg: e.before ? "#E4EEE7" : "#ECEFF1", tagFg: e.before ? "#2F7752" : "#40515C", onOpen: e.ev ? this.openEventDrawer.bind(this, i) : null, active: st.drawer === "event" && st.eventIx === i }));
 
     const dayNums = [8,9,10,11,12,13,14];
+    // DEMO PACING — presentation gate that DECOUPLES the ledger's column reveal
+    // from projection availability. The DATA (coverage/rule/disc values) is fully
+    // computed below from pd (live) or the mock branch; this only decides WHEN the
+    // COVERAGE column vs the RULE/Δ columns become visible, driven by two booleans
+    // that startPacedReveal flips (coverageFilled, then ledgerRuleFilled). insuf
+    // (evidence-gap scene) bypasses the gate so its SOURCE GAP shows immediately.
+    // Reveal predicate: a sub-step is shown when the paced counter reached it OR the
+    // wb rank is already past its milestone (so an SSE-driven advance past the replay
+    // still renders correctly — the ANIMATION never couples to SSE, but the final
+    // projection stays correct).
+    const covShown = st.coverageFilled || this.at("reconstructed");
+    const ruleShown = st.ledgerRuleFilled || this.at("ruleVerified");
+    const PEND = { rule: "—", ruleColor: "#B7AE9C", disc: "—", discColor: "#B7AE9C" };
+    const gateLedger = (row, isGap) => {
+      if (insuf || isGap) return row;                 // gaps & the insuf scene: as-is
+      if (!covShown) {                                 // before COVERAGE fills: nothing sourced yet
+        return { ...row, coverage: "sourcing…", covFg: "#8A7A50", outcome: "SOURCING", outBg: "#F3EAD3", outFg: "#8A7A50", ...PEND };
+      }
+      if (!ruleShown) {                                // COVERAGE shown; RULE/Δ still pending
+        return { ...row, coverage: "SOURCE COMPLETE", covFg: "#2F7752", outcome: "SOURCE COMPLETE", outBg: "#E4EEE7", outFg: "#2F7752", rule: "verifying", ruleColor: "#8A7A50", disc: "…", discColor: "#8A7A50" };
+      }
+      return row;                                      // fully revealed: real values
+    };
     const days = dayNums.map((n, ix) => {
       // LIVE: read this day's persisted state from the projection. The June-11
       // gap, the coverage state, and the per-day discrepancy are the server's —
@@ -663,7 +781,8 @@ export default class Workbench extends React.Component {
         else if (complete && hasRate) { outcome = "SUPPORTED"; outBg = "#E4EEE7"; outFg = "#2F7752"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "$" + (pd.applicable_rate_minor / 100).toFixed(0); ruleColor = "#2F7752"; disc = "$0"; discColor = "#2F7752"; }
         else if (complete) { outcome = "SOURCE COMPLETE"; outBg = "#E4EEE7"; outFg = "#2F7752"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "verifying"; ruleColor = "#8A7A50"; disc = "…"; discColor = "#8A7A50"; }
         else { outcome = "UNRESOLVED"; outBg = "#ECEFF1"; outFg = "#40515C"; coverage = "—"; covFg = "#B7AE9C"; rule = "—"; ruleColor = "#B7AE9C"; disc = "—"; discColor = "#B7AE9C"; }
-        return { date: "Jun " + n, claim: "$350", rule, ruleColor, outcome, outBg, outFg, coverage, covFg, disc, discColor, rowBg: st.drawer === "day" && st.dayIx === ix ? "#FBF6EE" : "transparent", onOpen: this.openDayDrawer.bind(this, ix) };
+        const liveRow = { date: "Jun " + n, claim: "$350", rule, ruleColor, outcome, outBg, outFg, coverage, covFg, disc, discColor, rowBg: st.drawer === "day" && st.dayIx === ix ? "#FBF6EE" : "transparent", onOpen: this.openDayDrawer.bind(this, ix) };
+        return gateLedger(liveRow, gap);
       }
       // MOCK/non-live scene: unchanged prototype rendering.
       const badGap = insuf && ix === 2;
@@ -672,7 +791,8 @@ export default class Workbench extends React.Component {
       else if (reconDone) { outcome = "SOURCE COMPLETE"; outBg = "#E4EEE7"; outFg = "#2F7752"; coverage = "SOURCE COMPLETE"; covFg = "#2F7752"; rule = "verifying"; ruleColor = "#8A7A50"; disc = "…"; discColor = "#8A7A50"; }
       else if (this.at("reconstructing")) { outcome = "SOURCING"; outBg = "#F3EAD3"; outFg = "#8A7A50"; coverage = "sourcing…"; covFg = "#8A7A50"; rule = "—"; ruleColor = "#B7AE9C"; disc = "—"; discColor = "#B7AE9C"; }
       else { outcome = "UNRESOLVED"; outBg = "#ECEFF1"; outFg = "#40515C"; coverage = "—"; covFg = "#B7AE9C"; rule = "—"; ruleColor = "#B7AE9C"; disc = "—"; discColor = "#B7AE9C"; }
-      return { date: "Jun " + n, claim: "$350", rule, ruleColor, outcome, outBg, outFg, coverage, covFg, disc, discColor, rowBg: st.drawer === "day" && st.dayIx === ix ? "#FBF6EE" : "transparent", onOpen: this.openDayDrawer.bind(this, ix) };
+      const mockRow = { date: "Jun " + n, claim: "$350", rule, ruleColor, outcome, outBg, outFg, coverage, covFg, disc, discColor, rowBg: st.drawer === "day" && st.dayIx === ix ? "#FBF6EE" : "transparent", onOpen: this.openDayDrawer.bind(this, ix) };
+      return gateLedger(mockRow, badGap);
     });
 
     const A = (name, task, tool, output, state) => {
@@ -785,7 +905,15 @@ export default class Workbench extends React.Component {
         { q: "Sources complete & verified?", a: "Yes — 2 events + rule, exact versions verified", font: "inherit" },
       ],
       clause: "Demurrage rate: $250 per calendar day",
-      checks: [{ k: "Effective date", v: "VERIFIED", color: "#2F7752" }, { k: "Exact text", v: "VERIFIED", color: "#2F7752" }, { k: "Exact rate", v: "VERIFIED", color: "#2F7752" }, { k: "Scope", v: "VERIFIED", color: "#2F7752" }],
+      // DEMO PACING: the 4 checks flip VERIFIED one at a time as checksShown climbs
+      // (item 5). Not-yet-flipped checks read "checking…". insuf shows all verified
+      // immediately (the gap scene doesn't run the paced check reveal).
+      checks: [
+        { k: "Effective date", label: 1 }, { k: "Exact text", label: 2 },
+        { k: "Exact rate", label: 3 }, { k: "Scope", label: 4 },
+      ].map((c) => (insuf || st.checksShown >= c.label || ruleDone)
+        ? { k: c.k, v: "VERIFIED", color: "#2F7752" }
+        : { k: c.k, v: "checking…", color: "#8A7A50" }),
       effect: "Financial effect  $350 − $250 = $100 disputed",
     };
 
@@ -812,7 +940,11 @@ export default class Workbench extends React.Component {
       toggleSource: this.toggleSection.bind(this, "source"), toggleTimeline: this.toggleSection.bind(this, "timeline"), toggleDays: this.toggleSection.bind(this, "days"), toggleCorr: this.toggleSection.bind(this, "corr"),
       srcChev: chev(openSource), tlChev: chev(openTimeline), daysChev: chev(openDays), corrChev: chev(openCorr),
       srcDiscLabel: openSource ? "Collapse" : "View claims", tlDiscLabel: openTimeline ? "Collapse" : "View sourced events", daysDiscLabel: openDays ? "Collapse" : "View 7 daily judgments", corrDiscLabel: openCorr ? "Collapse" : "View request",
-      showTariffRef: ruleDone, tariffRate: "$250 / day", tariffEff: "effective Jun 1, 2026",
+      // DEMO PACING: the APPLICABILITY VERIFIED tariff badge appears only after all
+      // 4 evidence checks have flipped VERIFIED (checksShown===4). The 4 checks
+      // themselves live in the day drawer (dayDetail.checks); this badge is their
+      // visible summary in the main ledger flow. insuf never shows a verified badge.
+      showTariffRef: insuf ? false : (st.checksShown >= 4 || ruleDone), tariffRate: "$250 / day", tariffEff: "effective Jun 1, 2026",
       srcSummary, tlSummary, daysSummary, daysChip, dayFlow: chainFlow,
       srcCaption: "Carrier claims extracted and linked to the original PDF.",
       tlCaption: "Shipment events recorded before the invoice — occurred vs recorded time.",
@@ -826,7 +958,7 @@ export default class Workbench extends React.Component {
       // LIVE: real link to the retained PDF (exact S3 version). MOCK: null → the
       // in-app drawer opens instead (click-audit unchanged).
       sourceUrl: this.live ? (this.sourceUrl || null) : null,
-      claimsLabel: claimVals ? "EXTRACTED CLAIMS" : "EXTRACTING CLAIMS…", claims,
+      claimsLabel: (st.claimFieldsShown >= 6 || this.at("reconstructing") || insuf) ? "EXTRACTED CLAIMS" : "EXTRACTING CLAIMS…", claims,
       timeline: tl, timelineEmpty: tl.length === 0, timelineCount: tl.length ? tl.length + (tl.length === 1 ? " event" : " events") : "",
       days, coverageLine: P
         ? `${P.cov.days_complete} of ${P.cov.days_total} days${P.cov.days_complete === P.cov.days_total ? " · SOURCE COMPLETE" : " · evidence required"}`
@@ -881,7 +1013,21 @@ export default class Workbench extends React.Component {
   sealSteps() {
     const s = this.state.sealStep;
     const step = (n, label) => ({ label, icon: n < s ? "✓" : n === s ? "◌" : "·", color: n < s ? "#2F7752" : n === s ? "#8A7A50" : "#B7AE9C" });
-    return [step(1, "APPROVED — decision record created"), step(2, "SEALING — binding sources & approval"), step(3, "READY TO SEND — decision sealed")];
+    const all = [step(1, "APPROVED — decision record created"), step(2, "SEALING — binding sources & approval"), step(3, "READY TO SEND — decision sealed")];
+    // DEMO PACING (item 6): reveal the audit-trail entries one at a time. The REAL
+    // seal (the awaited approve()) is never delayed — only the VISIBLE entries are
+    // staggered, via auditEntry which revealAuditTrail() climbs. Fallback: if wb is
+    // already at/past correspondence (SSE-sealed) show all, so the trail is never
+    // stuck hidden when the reveal timers didn't run.
+    const shown = this.at("correspondence") ? all.length : this.state.auditEntry;
+    return all.slice(0, shown);
+  }
+  // Stagger the seal audit-trail entries into view (item 6). Presentation only;
+  // the seal itself already completed before this runs.
+  revealAuditTrail() {
+    for (let i = 1; i <= 3; i++) {
+      this.later(() => this.setState({ auditEntry: i }), i * DEMO_PACING_MS.SEAL_AUDIT_ENTRY_STAGGER_MS);
+    }
   }
   buildDrawer() {
     const d = this.state.drawer; const tab = this.state.drawerTab || "source"; const V = "#2F7752";
