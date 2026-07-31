@@ -75,3 +75,4 @@ graphify-out/
 
 # Claude Code session-local runtime state, not project config
 .claude/scheduled_tasks.lock
+ui-next/capture_demo.mjs
