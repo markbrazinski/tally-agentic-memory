@@ -165,6 +165,37 @@ def test_restore_demo_requires_authentication(judge_app):
         assert "connection string" in str(exc)
 
 
+def test_runtime_never_imports_from_scripts():
+    """Nothing under src/ may import scripts/ — the image does not ship it.
+
+    The Dockerfile copies only src/ and contract/. An import of scripts.* works
+    locally (repo root on sys.path) and raises ModuleNotFoundError in the
+    container, which is how the Restore demo button shipped returning 500 while
+    every local test passed. Runtime code must live where the image copies it.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+
+    # The image's copied roots, read from the Dockerfile rather than assumed.
+    dockerfile = (root / "Dockerfile").read_text()
+    copied = {
+        line.split()[1].rstrip("/")
+        for line in dockerfile.splitlines()
+        if line.startswith("COPY ") and not line.startswith("COPY --from")
+    }
+    assert "src" in copied, copied
+    assert "scripts" not in copied, "scripts/ is operator tooling, not runtime"
+
+    offenders = [
+        f"{path.relative_to(root)}:{n}"
+        for path in (root / "src").rglob("*.py")
+        for n, line in enumerate(path.read_text().splitlines(), 1)
+        if line.strip().startswith(("import scripts", "from scripts"))
+    ]
+    assert not offenders, f"src/ imports scripts/, which the image omits: {offenders}"
+
+
 def test_restore_demo_is_allowlisted_on_the_public_surface():
     """Guards the exact trap that once 404'd /approve and the login routes."""
     import inspect
@@ -179,12 +210,12 @@ def test_restore_demo_reuses_the_cli_restore_logic():
     """The endpoint must call the same restore the CLI uses, not a copy."""
     import inspect
 
-    from scripts.demo_restore_hero import restore_hero
     from src.platform import intake_api
+    from src.platform.demo_restore import restore_hero
 
     assert callable(restore_hero)
     src = inspect.getsource(intake_api)
-    assert "from scripts.demo_restore_hero import restore_hero" in src
+    assert "from src.platform.demo_restore import restore_hero" in src
     assert "restore_hero(cur, tenant_id)" in src
     # And it records who restored, in the same transaction as the restore.
     assert "'audit', 'demo_restore'" in src

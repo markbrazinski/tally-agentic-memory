@@ -276,7 +276,7 @@ def make_router(*, require_auth) -> APIRouter:
         outcomes are stable across restores. Idempotent — the restore clears the
         prior decision chain before reseeding, so repeated calls converge.
         """
-        from scripts.demo_restore_hero import restore_hero
+        from src.platform.demo_restore import restore_hero
 
         tenant_id = _tenant_id()
         with DAL.connect(Tenant(tenant_id, actor.display_name)) as dal:
