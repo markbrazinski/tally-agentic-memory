@@ -8,32 +8,40 @@ later.
 contacted, no credit was recovered, and no legal determination is claimed.
 All public names, invoices, cases, tariffs, dates, and amounts are fictional.
 
-Demo URL: **https://x69yr3tibq.us-east-1.awsapprunner.com/**
+## Judge access
 
-## Current verified status
+| | |
+|---|---|
+| **Hosted app** | https://r3n3ixixr3.us-east-1.awsapprunner.com |
+| **Sign in** | username `judge` — password supplied with the Devpost submission |
+| **Demo video** | _(link added at submission)_ |
 
-On July 22, 2026, the separately authorized recovery execution
-`16c798f2-3bb4-4cfc-ac44-72c7011f13e5` passed the complete deployed hero path
-three consecutive times from clean, logged-out clients. Each response reported
-`FILED` at sealing, `CONTESTED` now, unchanged receipt bindings, exact-version
-S3 verification, Managed MCP `verified_read`, and `mock_fallback: false`.
+Sign-in is Amazon Cognito. The browser holds no credential of its own: the
+session is an httpOnly cookie and every request — pages, API reads, PDF bytes,
+the SSE stream — is validated server-side.
 
-This is a new synthetic execution from the retained exact tariff and invoice
-objects. The earlier lineage whose CockroachDB history expired was not changed,
-recreated, or represented as recovered. Its historical blocked report remains
-preserved; the current bounded result is recorded in
-`artifacts/recovery/gate-5/GATE_5_RECOVERY_READINESS.md`.
+## What the demo shows
 
-## What the judge path proves
+The queue holds three fictional invoices that end in three different states,
+because the evidence differs in each case:
 
-The fixed public hero shows one fictional Northstar/Asterline case. The sealed
-case was `FILED`; after a fictional later challenge it is `CONTESTED`. The
-recorded tariff is $250/day and the later fictional claim is $350/day.
+| Invoice | Outcome | Why |
+|---|---|---|
+| INV-1041 | `APPROVED FOR PAYMENT` | the charged rate matches the applicable recorded tariff |
+| INV-1047 | `NEEDS EVIDENCE` | no governing tariff was recorded, so Tally refuses to conclude |
+| INV-1048 | `DISPUTED $700` | invoiced $350/day against a verified $250/day tariff, over 7 sourced days |
 
-The server—not the browser—selects the tenant, case, contest, CockroachDB
-transaction timestamp, SQL templates, and exact S3 object versions. The public
-response exposes none of those identifiers. It returns only the states, rates,
-verification booleans, retention wording, and explicit non-claims.
+The hero case is INV-1048. A $2,450 demurrage invoice arrives; Bedrock extracts
+the carrier's claims and versioned S3 preserves the exact original. The
+reconstruction agent reads pre-invoice shipment memory through CockroachDB
+Managed MCP, constrained to what was on record *before* the invoice existed.
+Distributed Vector Indexing retrieves the governing tariff clause, and
+deterministic code — not the model — verifies its effective date, scope,
+language, and rate. Seven charged days are adjudicated at $100/day difference,
+and a human authorizes the $700 dispute in one sealed transaction.
+
+`NEEDS EVIDENCE` is the point, not a gap: incomplete memory withholds authority
+rather than guessing.
 
 > Versioned S3 retains the dated source artifact. Within CockroachDB's
 > configured MVCC window, Tally can also replay the transactional case state at
@@ -42,6 +50,17 @@ verification booleans, retention wording, and explicit non-claims.
 Tally does not claim indefinite CockroachDB time travel. The configured MVCC
 window is 90 days; exact versioned S3 objects provide the longer-lived source
 binding.
+
+## Demo limitations
+
+- **All data is fictional.** Carriers, terminals, containers, tariffs, invoices
+  and amounts are synthetic. No carrier is contacted and no money moves.
+- **Outbound mail is a demonstration provider.** The send path is real and
+  gated, and returns a real receipt id, but no email leaves the system.
+- **The filmed hero is seeded.** INV-1048's decision chain is seeded to a
+  known-good state for reliable filming. The pipeline that produces it is the
+  real one; the deployed workers run for genuinely imported invoices.
+- **One tenant, one judge account.** This is an isolated demonstration lane.
 
 ## Architecture
 
@@ -122,19 +141,25 @@ Prerequisites: Python 3.12, Node.js 24, npm, and `make`. The automated suite
 makes no network requests and needs no cloud credentials.
 
 ```bash
+# Backend: full suite, no network, no cloud credentials required.
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-.venv/bin/python -m pytest
-npm --prefix ui ci
-npm --prefix ui test
-npm --prefix ui run build
-.venv/bin/python -m scripts.gate4_evaluation
+.venv/bin/python -m pytest              # 898 tests
+.venv/bin/python -m ruff check src/     # shipped runtime is lint-clean
+
+# Frontend: ui-next/ is the deployed SPA (the older ui/ is not shipped).
+npm --prefix ui-next ci
+npm --prefix ui-next run build
 ```
 
-The default UI provider is the credential-free public provider. Until live
-server configuration exists, it truthfully renders unavailable. Add `?film=1`
-to the local URL to inspect the explicitly labeled synthetic film; film data
-is never substituted into public live mode.
+Every external call is mocked in the suite — Bedrock, Managed MCP, S3, and
+Cognito all have test doubles, so `pytest` runs offline and needs no AWS
+account. The frontend has no unit-test suite; `ui-next/tests/audit.spec.js` is
+a Playwright accessibility audit that requires a running server.
+
+The SPA defaults to the live provider and talks to the FastAPI app on the same
+origin. Append `?provider=mock` to run the offline demo scene without a
+backend.
 
 Run the API locally only with an isolated synthetic database:
 

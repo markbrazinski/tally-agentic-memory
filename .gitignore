@@ -63,6 +63,22 @@ query-exports/
 .aws-sam/
 deploy/
 
+# Node / frontend build output. The SPA is built inside the Docker image, so a
+# committed bundle would be stale the moment the source changes.
+node_modules/
+ui-next/node_modules/
+ui-next/dist/
+dist/
+build/
+
+# Logs and coverage
+*.log
+logs/
+.coverage
+coverage/
+htmlcov/
+coverage.xml
+
 # OS cruft
 .DS_Store
 
