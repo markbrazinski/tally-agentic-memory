@@ -94,6 +94,21 @@ function isHeroRow(r) {
   return /1048/.test(hay);
 }
 
+// Statuses that mean the hero has ALREADY been worked — a decision was sealed or
+// the correspondence went out. Anything else (RECEIVED / RECONSTRUCTING /
+// READY_FOR_REVIEW / NEEDS_EVIDENCE) is still open work.
+const SETTLED_HERO_STATUSES = new Set([
+  "DISPUTED", "APPROVED_FOR_PAYMENT", "READY_TO_SEND", "SENDING", "SENT",
+]);
+
+// Should the hero animate in as a NEW arrival, or should it simply be there?
+// The ~1s deferral exists so a fresh invoice looks like it just landed on the
+// platform. Replaying that for an invoice whose decision is already sealed reads
+// as if the work were happening again, so a settled hero renders immediately.
+function isFreshArrival(row) {
+  return !SETTLED_HERO_STATUSES.has((row && row.aggregateStatus) || "");
+}
+
 // Minor-unit integer (70000) -> display dollars ("$700"), thousands-grouped.
 // ponytail: whole-dollar display only — the design never shows cents in these slots.
 function money(minor) {
@@ -328,7 +343,7 @@ export default class Workbench extends React.Component {
       this.liveQueue = await this.provider.listInvoices();
       const hero = this.liveQueue.find(isHeroRow);
       this._liveErr = null;
-      if (hero && deferHero && !this.state.arrived) {
+      if (hero && deferHero && !this.state.arrived && isFreshArrival(hero)) {
         // Pre-existing rows show now; the hero appears ~1s later.
         this.forceUpdate();
         this.later(() => this.setState({ arrived: true }), 1000);
@@ -762,7 +777,7 @@ export default class Workbench extends React.Component {
       const heroSub = disputedRow
         ? "Demurrage · Jun 8–14 · Disputed " + heroDisputed
         : "Demurrage · Jun 8–14";
-      heroRowObj = { name: "INV-1048.pdf", sub: heroSub, container: "TLLU-482931-7", status: st1048, ...this._q(kind1048), amount: heroTotal, chevron: "›", cursor: "pointer", rowBg: disputedRow ? "transparent" : "#FBF6EE", nameColor: "#23272F", amountColor: disputedRow ? "#B4513F" : "#23272F", onOpen: () => this.openInvoice(heroId), anim: view === "queue" ? "tly-row-in" : "", workDot: working ? "" : "display:none;" };
+      heroRowObj = { name: "INV-1048.pdf", sub: heroSub, container: "TLLU-482931-7", status: st1048, ...this._q(kind1048), amount: heroTotal, chevron: "›", cursor: "pointer", rowBg: disputedRow ? "transparent" : "#FBF6EE", nameColor: "#23272F", amountColor: disputedRow ? "#B4513F" : "#23272F", onOpen: () => this.openInvoice(heroId), anim: (view === "queue" && (!heroRow || isFreshArrival(heroRow))) ? "tly-row-in" : "", workDot: working ? "" : "display:none;" };
       // LIVE: the hero is appended AFTER the pre-existing rows below (#4: INV-1048
       // sits at the bottom of the list). MOCK keeps it at the top as before.
       if (!this.live) rows.push(heroRowObj);
