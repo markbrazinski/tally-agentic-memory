@@ -1,12 +1,17 @@
 # Tally
 
-Tally remembers the evidence that was true when a freight dispute was filed,
-then retrieves and replays that dated record when the carrier contests it
-later.
+Sourced, inspectable demurrage decisions built from shipment memory that was
+recorded before the invoice arrived.
 
 **SYNTHETIC DEMO — FICTIONAL DATA.** No real dispute is sent. No carrier was
-contacted, no credit was recovered, and no legal determination is claimed.
-All public names, invoices, cases, tariffs, dates, and amounts are fictional.
+contacted, no credit was recovered, and no legal determination is claimed. All
+names, invoices, tariffs, containers, dates, and amounts are fictional.
+
+Ocean carriers bill demurrage when a container sits past its free time. Judging
+one of those invoices means reconstructing what actually happened at the
+terminal, finding the tariff that governed it, and checking every charged day —
+months after the fact, against a carrier who has the paperwork. Tally records
+that evidence as it happens, then proves what was true when the invoice arrives.
 
 ## Judge access
 
@@ -15,10 +20,43 @@ submission, not here — the deployment is access-controlled and this repository
 is public.
 
 Sign-in is Amazon Cognito. The browser holds no credential of its own: the
-session is an httpOnly cookie and every request — pages, API reads, PDF bytes,
+session is an httpOnly cookie, and every request — pages, API reads, PDF bytes,
 the SSE stream — is validated server-side.
 
-## What the demo shows
+## How it works
+
+**Extract.** An operator imports a carrier PDF through the authenticated intake
+API. Versioned S3 preserves the exact bytes and returns a `VersionId` that is
+stored alongside a SHA-256 in CockroachDB. Amazon Bedrock (Claude Sonnet 4.6)
+extracts the carrier's claims, and every extracted value must quote a substring
+that can be located verbatim in the source text. A claim whose quote cannot be
+found is rejected before any worker sees it — the model may read the document,
+but it cannot paraphrase a number into the record.
+
+**Reconstruct.** The reconstruction agent retrieves prior shipment memory
+through the CockroachDB Cloud Managed MCP Server: one fixed, read-only
+`select_query` against a narrow view, scoped to the container and constrained to
+`recorded_at <= knowledge_cutoff`, where the cutoff is the invoice's own arrival.
+That constraint is re-checked deterministically in pure Python after retrieval.
+Nothing learned after the invoice landed can be used to judge it.
+
+**Adjudicate.** CockroachDB Distributed Vector Indexing retrieves candidate
+tariff clauses — Titan Text Embeddings V2, 1024 dimensions, C-SPANN index over
+`(tenant_id, carrier_id, embedding)`. Similarity only *ranks* candidates.
+Deterministic code then validates each one against effective date, scope,
+currency, unit, and exact rate text, and accepts a rule only if exactly one
+candidate survives with one distinct rate. No candidate passing means
+`NEEDS_EVIDENCE`, not a guess.
+
+**Seal.** A human reviews the sourced case file and authorizes. The approval,
+the decision record, the bound evidence references, the status projection, the
+durable event, and its outbox row all commit in **one SERIALIZABLE transaction**,
+guarded by a row lock, an idempotency key, a version-plus-digest staleness check,
+and a unique constraint. A partial seal cannot occur. Correspondence is then
+drafted by Bedrock from the sealed record alone, and every number in the
+generated prose is checked back against the seal before the draft can be sent.
+
+## The three outcomes
 
 The queue holds three fictional invoices that end in three different states,
 because the evidence differs in each case:
@@ -27,270 +65,157 @@ because the evidence differs in each case:
 |---|---|---|
 | INV-1041 | `APPROVED FOR PAYMENT` | the charged rate matches the applicable recorded tariff |
 | INV-1047 | `NEEDS EVIDENCE` | no governing tariff was recorded, so Tally refuses to conclude |
-| INV-1048 | `DISPUTED $700` | invoiced $350/day against a verified $250/day tariff, over 7 sourced days |
+| INV-1048 | `DISPUTED $700` | invoiced $350/day against a verified $250/day tariff, across 7 sourced days |
 
-The hero case is INV-1048. A $2,450 demurrage invoice arrives; Bedrock extracts
-the carrier's claims and versioned S3 preserves the exact original. The
-reconstruction agent reads pre-invoice shipment memory through CockroachDB
-Managed MCP, constrained to what was on record *before* the invoice existed.
-Distributed Vector Indexing retrieves the governing tariff clause, and
-deterministic code — not the model — verifies its effective date, scope,
-language, and rate. Seven charged days are adjudicated at $100/day difference,
-and a human authorizes the $700 dispute in one sealed transaction.
+`NEEDS EVIDENCE` is the point, not a gap. Incomplete memory withholds authority
+rather than guessing, and that refusal is a persisted state with a named reason —
+not a loading spinner.
 
-`NEEDS EVIDENCE` is the point, not a gap: incomplete memory withholds authority
-rather than guessing.
+The hero case is INV-1048: a $2,450 demurrage invoice, seven charged days from
+June 8–14, adjudicated at $100/day difference against a tariff clause that was
+already in memory before the invoice was issued.
 
-> Versioned S3 retains the dated source artifact. Within CockroachDB's
-> configured MVCC window, Tally can also replay the transactional case state at
-> filing.
+## Sponsor tools and services
 
-Tally does not claim indefinite CockroachDB time travel. The configured MVCC
-window is 90 days; exact versioned S3 objects provide the longer-lived source
-binding.
+### CockroachDB
 
-## Demo limitations
+**Managed MCP Server** is the reconstruction read path. The runtime authenticates
+with a non-expiring service-account API key (falling back to a leased OAuth
+bundle), and the adapter proves the credential is read-only by issuing an
+`insert_rows` probe against a random table name and requiring an OAuth
+`insufficient_scope` denial. Only `select_query` is exposed to application code.
 
-- **All data is fictional.** Carriers, terminals, containers, tariffs, invoices
-  and amounts are synthetic. No carrier is contacted and no money moves.
-- **Outbound mail is a demonstration provider.** The send path is real and
-  gated, and returns a real receipt id, but no email leaves the system.
-- **The filmed hero is seeded.** INV-1048's decision chain is seeded to a
-  known-good state for reliable filming. The pipeline that produces it is the
-  real one; the deployed workers run for genuinely imported invoices.
-- **One tenant, one judge account.** This is an isolated demonstration lane.
+**Distributed Vector Indexing** is the tariff retrieval path: a real
+`VECTOR(1024)` column with a C-SPANN index (`vector_l2_ops`), queried with the
+named index forced so the product path is exercised rather than a sequential
+scan. Each candidate's clause hash, embedding hash, and source version are
+captured at retrieval and bound by digest into the seal.
+
+**One consistency boundary.** Shipment events, reconstruction revisions, charged
+day judgments, immutable recommendation versions, human approvals, decision
+seals, and the durable event outbox are all CockroachDB rows. The seal commits
+across them atomically under SERIALIZABLE isolation, with client-side retry on
+SQLSTATE 40001.
+
+### AWS
+
+- **Amazon Bedrock** — Claude Sonnet 4.6 for claim extraction and correspondence
+  prose; Titan Text Embeddings V2 for clause retrieval. Models never decide a
+  verdict. Every verdict is computed in Python from validated inputs.
+- **Amazon S3** — versioned retention of the exact source bytes. A read that
+  returns a different `VersionId` than the one bound in the decision raises
+  rather than proceeding.
+- **Amazon Cognito** — judge authentication. JWTs are validated against the
+  pool's live JWKS for signature, issuer, expiry, `token_use`, and app-client
+  binding on every request.
+- **AWS App Runner** — hosts one same-origin service: the Vite SPA and the
+  FastAPI API.
+- **SSM Parameter Store** — the CockroachDB DSN, the MCP credential, and the
+  Cognito identifiers. No secret is committed to this repository.
+- **DynamoDB** — a short-lived conditional lease that serializes OAuth token
+  rotation so concurrent workers cannot race each other.
 
 ## Architecture
 
 ```text
-Logged-out browser
-  └── AWS App Runner (one same-origin Vite UI + FastAPI service)
-        └── GET /public/demo/hero (fixed inputs, rate-limited, bounded timeout)
-              ├── CockroachDB current read + AS OF SYSTEM TIME replay
-              ├── CockroachDB Managed MCP fixed select_query
-              └── Amazon S3 exact GetObjectVersion receipt verification
-
-Deployment agent
-  └── ccloud cluster list -o json
-        └── blocks deployment unless one expected Basic cluster is operational
-
-Authenticated intake/vector code (not exposed to the logged-out judge)
-  └── Amazon Bedrock bounded extraction/embedding adapters
+Browser (Cognito session cookie, no embedded credential)
+  └── AWS App Runner — one same-origin service
+        ├── Vite SPA (ui-next/)
+        └── FastAPI (src/platform/)
+              ├── intake API ── versioned S3 ── Bedrock extraction
+              │                                   └── verbatim anchor firewall
+              ├── durable workflow_tasks (leases, bounded retries)
+              │     ├── EXTRACT_INVOICE_CLAIMS   Bedrock
+              │     ├── START_RECONSTRUCTION     CockroachDB Managed MCP
+              │     ├── FIND_APPLICABLE_RULE     Distributed Vector Indexing
+              │     └── JUDGE_DAYS               deterministic core
+              ├── approve + seal ── ONE SERIALIZABLE TRANSACTION
+              └── SSE over durable invoice_events (Last-Event-ID resume)
 ```
 
-The public endpoint accepts no tenant ID, case ID, contest ID, timestamp, SQL,
-object version, or prompt. Generic reads and all mutations remain outside the
-logged-out provider. A dependency outage produces `unavailable` with
-`mock_fallback: false`.
+Everything up to the recommendation runs as asynchronous, leased, retryable
+workers. Everything from human approval onward is synchronous request-path code
+in serializable transactions.
 
-## Sponsor tools and services
+The codebase is hexagonal: `src/core` holds pure functions over Pydantic models
+with zero external dependencies, `src/external` holds the adapters, and
+`src/platform` holds routes and workers. A layer test enforces the boundary —
+`src/core` may not import from either of the others.
 
-### CockroachDB Cloud Managed MCP Server
+## Repository structure
 
-The deployed judge server uses an interactive OAuth bootstrap requesting `mcp:read`
-only. The renewable token bundle is held only in AWS SSM Parameter Store; no
-Cluster Operator/Admin API-key fallback is accepted by the deployed judge
-runtime. The older private Gate 3 operator path is not deployed. Application code exposes
-only a fixed `select_query` that loads and revalidates the sealed receipt for
-the server-selected later contest. It is application-filtered, not database
-RLS.
-
-The private Gate 5B proof showed repeated refresh,
-real-time near-expiry renewal, the fixed hero read after refresh, and explicit
-server denial for a safely shaped `insert_rows` probe against a fresh
-nonexistent table. Any ambiguous or executable write path stops publication.
-The deployed manager refreshes on demand below five minutes or once after a
-401, never after a 403. A one-item DynamoDB conditional lease prevents
-overlapping processes from consuming the same rotating refresh token.
-
-The direct historical replay and Managed MCP retrieval are separate proofs:
-the former reconstructs the database at the stored transaction timestamp; the
-latter retrieves the sealed memory for the later contest. MCP failure never
-falls back to direct SQL while being labeled MCP.
-
-### ccloud CLI
-
-`scripts/gate5_ccloud_preflight.py` runs the fixed structured command `ccloud
-cluster list -o json`. The deployment agent parses JSON and blocks deployment
-unless exactly one private expected cluster is `CREATED` on the `BASIC` plan.
-This proves control-plane authentication and target readiness only—not SQL or
-MCP data-plane health. The browser cannot invoke ccloud.
-
-### AWS
-
-- **AWS App Runner** is the authorized target for the combined public UI and API.
-- **Amazon S3** returns the exact object versions named by the sealed receipt;
-  the public route returns only whether all receipt checks passed.
-- **Amazon Bedrock** supports the existing bounded extraction and Titan Text
-  Embeddings V2 adapters. Models never decide eligibility or a verdict, and the
-  public API accepts no prompt.
-- **SSM Parameter Store** holds the DSN, renewable OAuth bundle, and private selectors.
-- **DynamoDB** holds only the short-lived owner/expiry lease used to serialize OAuth rotation.
-- **AWS Budgets** sends investigation-only alerts at $15, $25, $40, and $50
-  against the authorized $50 cumulative ceiling. It has no automatic stop
-  action.
-- **EventBridge Scheduler** initially deletes the App Runner service at the end
-  of September 30, 2026; the remaining secrets, image, roles, and OAuth grant
-  are removed by the documented teardown checklist that day.
+| Path | Contents |
+|---|---|
+| `src/core/` | pure decision logic — claim anchoring, reconstruction, applicability, judgment, seal manifest |
+| `src/external/` | adapters — CockroachDB DAL, Managed MCP client, vector search, Bedrock, S3, Titan |
+| `src/platform/` | FastAPI routes, workers, repositories, auth |
+| `ui-next/` | the deployed React SPA (the older `ui/` is not shipped) |
+| `migrations/` | ordered SQL migrations |
+| `tests/` | 898 tests — unit, integration, fallback |
+| `scripts/` | operator and demo tooling |
+| `contract/` | API contract fixtures |
 
 ## Local verification
 
-Prerequisites: Python 3.12, Node.js 24, npm, and `make`. The automated suite
-makes no network requests and needs no cloud credentials.
+Prerequisites: Python 3.12, Node.js 20+, npm.
 
 ```bash
-# Backend: full suite, no network, no cloud credentials required.
+# Backend: the full suite runs offline. Bedrock, Managed MCP, S3 and Cognito
+# all have test doubles, so no AWS account and no network are required.
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
 .venv/bin/python -m pytest              # 898 tests
 .venv/bin/python -m ruff check src/     # shipped runtime is lint-clean
 
-# Frontend: ui-next/ is the deployed SPA (the older ui/ is not shipped).
+# Frontend: ui-next/ is the deployed SPA.
 npm --prefix ui-next ci
 npm --prefix ui-next run build
 ```
 
-Every external call is mocked in the suite — Bedrock, Managed MCP, S3, and
-Cognito all have test doubles, so `pytest` runs offline and needs no AWS
-account. The frontend has no unit-test suite; `ui-next/tests/audit.spec.js` is
-a Playwright accessibility audit that requires a running server.
-
 The SPA defaults to the live provider and talks to the FastAPI app on the same
-origin. Append `?provider=mock` to run the offline demo scene without a
-backend.
+origin. Append `?provider=mock` to run the offline demo scene without a backend.
 
-Run the API locally only with an isolated synthetic database:
+Running the pipeline end to end against a real database additionally requires a
+CockroachDB DSN, AWS credentials with Bedrock access, and the migrations in
+`migrations/` applied in order. The hosted deployment is the intended path for
+evaluating the live system; the test suite covers the decision logic without it.
 
-```bash
-cp .env.example .env
-# Populate .env privately; never commit it.
-set -a; source .env; set +a
-TALLY_PUBLIC_DEMO_ENABLED=true .venv/bin/uvicorn src.platform.app:app --reload
-```
+## Environment
 
-Open `http://127.0.0.1:8000/public/demo/hero`. Missing dependencies return a
-safe 503 response rather than sample memory.
+Copy `.env.example` and fill it privately; never commit it.
 
-## Database setup and reset
+| Variable | Purpose |
+|---|---|
+| `TALLY_CRDB_DSN` | CockroachDB connection string |
+| `TALLY_TENANT_ID` | tenant scope for the demo lane |
+| `TALLY_COGNITO_USER_POOL_ID`, `TALLY_COGNITO_CLIENT_ID` | judge authentication; their presence enables Cognito enforcement |
+| `TALLY_JUDGE_AUTH_ENABLED` | switches the app from local static-bearer auth to Cognito |
+| `TALLY_MCP_CLUSTER_ID`, `TALLY_MCP_DATABASE` | Managed MCP scope |
+| `TALLY_INTAKE_BUCKET`, `TALLY_INTAKE_KEY_PREFIX` | versioned S3 retention target |
 
-Migrations are additive and tracked in `migrations/`. Apply them to a blank
-isolated database with:
+## Honest boundaries
 
-```bash
-TALLY_CRDB_DSN='<private isolated DSN>' .venv/bin/python -m src.external.migrate
-```
+Tally is a reproducible demonstration on fictional data. It is not a production
+service, and it does not claim to be one.
 
-The synthetic tenant seed is idempotent:
+- **Every carrier, terminal, container, tariff, invoice and amount is
+  synthetic.** No carrier is contacted, no invoice is paid, and no money moves.
+- **Outbound mail is a demonstration provider.** The send path is real and
+  fully gated, and returns a real receipt id, but no email leaves the system.
+- **The filmed hero invoice is seeded.** INV-1048's decision chain is seeded to
+  a known-good state so the demo is reliable on camera. The pipeline that
+  produces it is the real one, and the deployed workers run end to end for
+  genuinely imported invoices.
+- **The model never decides anything.** Bedrock extracts claims and writes
+  correspondence prose. Every verdict, rate, amount, and date is computed
+  deterministically in Python from validated inputs, and generated prose is
+  checked back against the sealed record before it can be sent.
+- **CockroachDB time travel is bounded.** The configured MVCC window is 90 days;
+  exact versioned S3 objects provide the longer-lived source binding. Tally does
+  not claim indefinite historical replay.
+- **One tenant, one judge account.** This is an isolated demonstration lane, not
+  a multi-tenant deployment.
 
-```bash
-TALLY_CRDB_DSN='<private isolated DSN>' .venv/bin/python -m src.external.seed_demo_tenant
-```
-
-The public repository intentionally does not include a live DSN, tenant/case
-IDs, source keys, object Version IDs, hashes, or source bodies. Re-run the seed
-and the Gate 1–4 workflows against your own fictional versioned inputs; do not
-invent substitute evidence when a retained object is missing.
-
-For a clean reset, delete only the isolated database/resources you created,
-create a new blank database, rerun migrations and seed, then rebuild the
-receipt through the real workflow. Never relabel fixtures as executed data.
-
-## Deployment
-
-Deployment requires a scoped AWS deployer, Docker, AWS CLI, ccloud CLI, and
-`jq`. Exact identifiers and credentials stay in ignored private environment
-configuration.
-
-1. Run `scripts/gate5_ccloud_preflight.py` with the private expected cluster
-   ID. A failure stops the deployment.
-2. Complete the narrow OAuth bootstrap and the mandatory repeated-refresh,
-   near-expiry, MCP write-denial, and fixed-read proof.
-3. Export the private server values named in `.env.example` plus a JSON array
-   of the exact S3 object ARNs as `TALLY_EVIDENCE_OBJECT_ARNS_JSON`.
-4. Run `scripts/gate5_provision_aws.sh`. It creates two bounded App Runner
-   roles, six configuration SecureStrings, one tagged ECR repository, and the
-   conditional refresh-lease table. The already proven OAuth bundle remains a
-   seventh SecureString and is never copied into an environment variable.
-5. Commit and scan the exact public tree, then run `deploy_app.sh` from that
-   clean commit. It builds `linux/amd64`, deploys the combined service, reads
-   back image/readiness/public-ingress state, and verifies the live hero.
-6. Set the private budget email and run `scripts/gate5_guardrails.sh` before
-   making the URL public.
-
-No deployment script accepts a browser credential or prints a secret. The
-OAuth grant is server-side material and must be revoked on teardown.
-
-## Expected cost and teardown
-
-Gate 5 has an owner-authorized AWS ceiling of **$50 total**. The live budget
-is one non-resetting `CUSTOM` period beginning July 1 and remaining active
-through the eventual teardown. The design uses
-one minimum-size App Runner service, a small ECR image, existing versioned S3
-objects, and bounded requests. Before deployment, the service-scoped budget
-must be read back with investigation-only alerts at $15, $25, $40, and $50;
-unrelated account spend must not be presented as Gate 5 spend. The alerts do
-not pause, delete, or otherwise interrupt judge access.
-No paid CockroachDB plan or AWS purchase is required.
-
-Post-update readback on July 22 showed $4.484 accumulated and an AWS-generated
-custom-period forecast of $8.892. A more conservative bottom-up estimate adds
-$5.92–$7.17 through the initial September 30 teardown, producing approximately
-$10.40–$11.65 cumulative. This is below the current $50 authorization. Alerts
-still require investigation, but do not automatically interrupt access. The
-budget is service-filtered rather than resource-tag isolated, so it may
-conservatively include other account use of the same seven services. See the
-official [App Runner pricing](https://aws.amazon.com/apprunner/pricing/),
-[ECR pricing](https://aws.amazon.com/ecr/pricing/), [Parameter Store
-pricing](https://aws.amazon.com/systems-manager/pricing/), and [AWS Budgets
-pricing](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/).
-
-The judge URL is authorized to remain available until seven calendar days after
-winners are announced. The initial teardown is September 30, 2026 at 11:59 PM
-America/Los_Angeles. If winners have not been announced, rerun the guardrail
-before that time with the next seven-day date—for example,
-`TALLY_GATE5_TEARDOWN_DATE=2026-10-07`—and continue in seven-day increments.
-Once winners are announced, retain the first scheduled increment that is at
-least seven calendar days later. On the resulting teardown date:
-
-1. Confirm the scheduled App Runner deletion executed.
-2. Delete the Gate 5 ECR repository and its images.
-3. Delete `/tally/gate5/*` SSM parameters and the OAuth refresh-lease table.
-4. Delete the three `tally-gate5-*` IAM roles and their inline policies, plus
-   the Gate 5 budget and schedule.
-5. Revoke the Gate 5 CockroachDB OAuth grant and dynamic client.
-6. Read back every deletion and preserve only sanitized aggregate evidence.
-
-The existing historical/private Tally repository and recovery evidence are not
-part of this teardown.
-
-## Troubleshooting
-
-- `public_demo_disabled` or `configuration_unavailable`: set only the required
-  server-side selectors; never put them in Vite variables.
-- `cockroach_or_s3_unavailable`: check private DB/S3 connectivity and exact
-  version permissions. Do not fall back to current objects.
-- `evidence_verification_failed` or `evidence_binding_mismatch`: stop; the
-  retained receipt did not verify.
-- `mcp_memory_unavailable`: verify the server-side OAuth bundle, refresh lease,
-  cluster header, and fixed read. Do not substitute the direct database result
-  as MCP output.
-- ccloud preflight failure: treat control-plane readiness as false; raw cluster
-  details remain private.
-- Bedrock failure: the bounded model task abstains/is unavailable; Python still
-  owns eligibility and calculations.
-
-## Truth and security boundaries
-
-- No real carrier identities, customer data, external send, credit, recovery,
-  resolution, legal ruling, or production-readiness claim.
-- No claim of RLS, tenant-scoped DB credentials, physical immutability,
-  indefinite time travel, or request-exact MCP server auditing.
-- No credentials, DSNs, private IDs, hashes, object versions, source URLs, or
-  raw source material in the browser, examples, Git history, or reports.
-- Synthetic evaluation is a deterministic test harness, not production
-  performance.
-
-Public-safe example outputs are under `artifacts/recovery/`; private executed
-evidence stays ignored under mode-restricted `runtime-artifacts/`.
+## License
 
 Licensed under the [MIT License](LICENSE).
