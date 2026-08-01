@@ -11,6 +11,7 @@ retry never duplicates delivery.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import uuid4
@@ -24,6 +25,7 @@ from src.core.correspondence import (
     locked_fields,
     locked_fields_digest,
     validate_draft_locked_fields,
+    validate_draft_prose,
 )
 from src.core.receipt import canonical_json_bytes, prefixed_sha256
 from src.external.controlled_mail import (
@@ -116,6 +118,21 @@ def load_sealed_fact_pack(dal: DAL, *, decision_seal_id: str) -> SealedFactPack:
     )
 
 
+def _generator_identity(generator) -> tuple[str, str | None]:
+    """(kind, model_id) for audit — which writer produced this prose."""
+    name = type(generator).__name__
+    model_id = getattr(generator, "model_id", None) or getattr(
+        type(generator), "MODEL_ID", None
+    )
+    if name == "BedrockDraftGenerator":
+        from src.external.correspondence_bedrock import INFERENCE_PROFILE_ID
+
+        return "BEDROCK", model_id or INFERENCE_PROFILE_ID
+    if name == "DeterministicDraftGenerator":
+        return "DETERMINISTIC", None
+    return name.upper(), model_id
+
+
 def draft_from_sealed(
     dal: DAL, *, decision_seal_id: str, body_prose: str | None = None,
     draft_generator: DraftGeneratorProtocol | None = None,
@@ -130,12 +147,33 @@ def draft_from_sealed(
     """
     tenant_id = dal.tenant.tenant_id
     pack = load_sealed_fact_pack(dal, decision_seal_id=decision_seal_id)
+    generator_kind = "CALLER_SUPPLIED"
+    generator_model_id = None
     if body_prose is None:
         generator = draft_generator or DeterministicDraftGenerator()
-        body_prose = generator.draft_body(pack)
+        generator_kind, generator_model_id = _generator_identity(generator)
+        try:
+            body_prose = generator.draft_body(pack)
+        except Exception:  # noqa: BLE001 — provider outage must not strand a seal
+            # A sealed decision must stay sendable even if Bedrock is throttled or
+            # unavailable. Fall back to the deterministic generator and RECORD that
+            # it ran, so the audit trail never implies a model wrote this text.
+            logging.getLogger("tally.correspondence").warning(
+                "draft generator %s failed; using deterministic fallback",
+                generator_kind, exc_info=True,
+            )
+            fallback = DeterministicDraftGenerator()
+            generator_kind, generator_model_id = _generator_identity(fallback)
+            generator_kind = f"{generator_kind}_FALLBACK"
+            body_prose = fallback.draft_body(pack)
     fields = locked_fields(pack)
     fields_digest = locked_fields_digest(pack)
     validation = validate_draft_locked_fields(pack, fields)
+    # The locked-field check compares seal-derived values to seal-derived values,
+    # so it cannot catch a hallucination in the free text. This does: any number
+    # or identifier in the prose that the seal does not support invalidates the
+    # draft, which blocks the send (LOCKED_FIELDS gate reads validation_state).
+    prose_validation = validate_draft_prose(pack, body_prose)
     subject = build_subject(pack)
 
     def _draft(conn):
@@ -151,21 +189,30 @@ def draft_from_sealed(
             if existing is not None:
                 return DraftResult(str(existing[0]), pack.seal_digest, "VALIDATED")
             draft_id = str(uuid4())
+            # A draft is sendable only if BOTH the locked fields and the generated
+            # prose validate. Either failing marks it INVALID.
+            overall = (
+                "VALIDATED" if (validation.ok and prose_validation.ok) else "INVALID"
+            )
             cur.execute(
                 """
                 INSERT INTO correspondence_drafts
                     (tenant_id, id, invoice_id, decision_seal_id, seal_digest,
                      recipient_class, subject, body_prose, locked_fields,
-                     locked_fields_digest, validation_state, state)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'DRAFT_READY');
+                     locked_fields_digest, validation_state, state,
+                     generator_kind, generator_model_id,
+                     prose_validation_state, prose_validation_issues)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'DRAFT_READY',
+                        %s,%s,%s,%s);
                 """,
                 (tenant_id, draft_id, pack.invoice_id, decision_seal_id,
                  pack.seal_digest, RECIPIENT_CLASS, subject, body_prose,
-                 json.dumps(fields), fields_digest,
-                 "VALIDATED" if validation.ok else "INVALID"),
+                 json.dumps(fields), fields_digest, overall,
+                 generator_kind, generator_model_id,
+                 "VALIDATED" if prose_validation.ok else "INVALID",
+                 json.dumps(list(prose_validation.issues))),
             )
-            return DraftResult(draft_id, pack.seal_digest,
-                               "VALIDATED" if validation.ok else "INVALID")
+            return DraftResult(draft_id, pack.seal_digest, overall)
 
     return dal.run_with_retry(_draft)
 

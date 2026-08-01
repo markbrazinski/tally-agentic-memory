@@ -16,6 +16,7 @@ from src.core.correspondence import (
     SealedFactPack,
     locked_fields,
     validate_draft_locked_fields,
+    validate_draft_prose,
 )
 from src.external.correspondence_bedrock import (
     BedrockDraftGenerator,
@@ -75,3 +76,97 @@ def test_empty_bedrock_response_fails_closed():
     fake = FakeBedrock(None)  # no text block
     with pytest.raises(ValueError, match="no text block"):
         BedrockDraftGenerator(client=fake).draft_body(PACK)
+
+
+# ---- P1: generated prose is fact-checked against the seal ----
+
+
+def test_prose_check_accepts_a_faithful_draft():
+    """Legitimate prose — including the claimed total — must pass.
+
+    The claimed total ($2,450) is not a SealedFactPack field but IS sealed
+    (supported + disputed), and is the figure a writer most naturally cites.
+    """
+    ok_drafts = [
+        DeterministicDraftGenerator().draft_body(PACK),
+        "We dispute $700 on INV-1048 for container TLLU-482931-7 under Clause 4.2.",
+        "Invoice INV-1048: disputed $700.00 of $2,450.00 claimed; supported $1,750.00.",
+        "We request an adjustment per the applicable recorded tariff.",
+    ]
+    for draft in ok_drafts:
+        v = validate_draft_prose(PACK, draft)
+        assert v.ok, (draft, v.issues)
+
+
+@pytest.mark.parametrize(
+    "prose,marker",
+    [
+        ("We request an adjustment of $900.00.", "UNSUPPORTED_NUMBER"),
+        ("The rate should be $275 per day.", "UNSUPPORTED_NUMBER"),
+        ("Charges from June 30, 2026 are disputed.", "UNSUPPORTED_NUMBER"),
+        ("Container TLLU-482931-9 was held.", "MANGLED_IDENTIFIER"),
+    ],
+)
+def test_prose_check_rejects_unsupported_facts(prose, marker):
+    """A number or identifier the seal does not support invalidates the draft.
+
+    This is the check the locked-field validator structurally cannot perform:
+    locked_fields compares seal-derived values against seal-derived values, so it
+    is always ok. Only the prose can carry a hallucination.
+    """
+    v = validate_draft_prose(PACK, prose)
+    assert not v.ok
+    assert any(issue.startswith(marker) for issue in v.issues), v.issues
+
+
+def test_unsupported_prose_makes_the_draft_unsendable():
+    """An INVALID draft cannot be sent: the LOCKED_FIELDS gate reads the state.
+
+    draft_from_sealed persists validation_state=INVALID when either the locked
+    fields or the prose fail, and evaluate_send_gates blocks on a failed
+    LOCKED_FIELDS gate — so a hallucinated fact stops the send, it does not
+    merely annotate it.
+    """
+    from src.core.correspondence import GateResult, GateState, evaluate_send_gates
+
+    hallucinated = validate_draft_prose(PACK, "Adjustment of $12,345.00 requested.")
+    assert not hallucinated.ok
+
+    results = {
+        code: GateResult(code, GateState.VERIFIED, None)
+        for code in ("SECOND_AUTHORIZATION", "APPROVED_MEMORY_MCP",
+                     "VECTOR_CLAUSE_BINDING", "EXACT_S3_SOURCE", "NO_FALLBACK")
+    }
+    results["LOCKED_FIELDS"] = GateResult(
+        "LOCKED_FIELDS", GateState.FAILED, "draft not validated"
+    )
+    decision = evaluate_send_gates(results)
+    assert not decision.permitted
+
+
+def test_generator_identity_records_which_writer_ran():
+    """Provenance must name the writer and, for Bedrock, the model."""
+    from src.platform.correspondence_repository import _generator_identity
+
+    kind, model = _generator_identity(BedrockDraftGenerator(client=FakeBedrock("x")))
+    assert kind == "BEDROCK"
+    assert model == "us.anthropic.claude-sonnet-4-6"
+
+    kind, model = _generator_identity(DeterministicDraftGenerator())
+    assert kind == "DETERMINISTIC"
+    assert model is None
+
+
+def test_deployed_draft_route_wires_bedrock():
+    """The API route must pass BedrockDraftGenerator — the P1 acceptance claim.
+
+    Regression guard for the exact defect this task fixed: the route previously
+    called draft_from_sealed WITHOUT a generator, so the deterministic default ran
+    and Bedrock was never invoked on the deployed lane.
+    """
+    import inspect
+
+    from src.platform import correspondence_api
+
+    src = inspect.getsource(correspondence_api)
+    assert "draft_generator=BedrockDraftGenerator()" in src

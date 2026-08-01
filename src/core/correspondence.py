@@ -9,6 +9,7 @@ locked-field integrity must every one be VERIFIED, or the send is blocked.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -91,6 +92,85 @@ def validate_draft_locked_fields(
             if expected[k] != draft_locked_fields.get(k)
         ) or ("LOCKED_FIELD_SET_MISMATCH",)
         return DraftValidation(False, issues)
+    return DraftValidation(True, ())
+
+
+def _supported_number_tokens(pack: SealedFactPack) -> set[str]:
+    """Every numeric string a draft is allowed to contain, from the seal alone.
+
+    Money is admitted in the shapes a writer legitimately uses: minor units, plain
+    dollars, and thousands-grouped, with and without decimals ("70000", "700",
+    "700.00", "$700.00"). Dates contribute both their ISO form and their component
+    parts, so "June 8, 2026" clears via 8/2026 while an invented "June 9" does not.
+    """
+    allowed: set[str] = set()
+
+    for minor in (pack.disputed_amount_minor, pack.supported_amount_minor):
+        whole, cents = divmod(int(minor), 100)
+        allowed.update({
+            str(int(minor)), str(whole), f"{whole:,}",
+            f"{whole}.{cents:02d}", f"{whole:,}.{cents:02d}",
+        })
+
+    for value in (pack.charged_period_start, pack.charged_period_end):
+        text = str(value)
+        allowed.add(text)
+        for part in text.replace("-", " ").replace("/", " ").split():
+            allowed.add(part)
+            allowed.add(part.lstrip("0") or "0")
+
+    # Identifiers frequently embed digits (TLLU-482931-7, INV-1048, Clause 4.2).
+    # Harvest dotted forms BEFORE bare runs so a clause number like "4.2" is
+    # admitted whole rather than only as "4" and "2".
+    for ident in (pack.container_ref, pack.invoice_no, pack.rule_ref):
+        text = str(ident)
+        for run in re.findall(r"\d+(?:\.\d+)*", text):
+            allowed.add(run)
+            allowed.add(run.lstrip("0") or "0")
+
+    # The claimed total is sealed (supported + disputed) and is the one figure a
+    # writer naturally cites that is not itself a pack field.
+    claimed = int(pack.supported_amount_minor) + int(pack.disputed_amount_minor)
+    whole, cents = divmod(claimed, 100)
+    allowed.update({
+        str(claimed), str(whole), f"{whole:,}",
+        f"{whole}.{cents:02d}", f"{whole:,}.{cents:02d}",
+    })
+
+    return allowed
+
+
+def validate_draft_prose(pack: SealedFactPack, prose: str) -> DraftValidation:
+    """Reject generated prose that asserts a number the seal does not support.
+
+    ``validate_draft_locked_fields`` compares seal-derived fields to seal-derived
+    fields, so it cannot catch a hallucination in the free text. This does: every
+    numeric token in the prose must be traceable to the sealed fact pack, and any
+    sealed identifier the prose names must be spelled exactly.
+
+    Deliberately one-directional — prose need not mention every fact, it simply
+    may not introduce one. Ordinals and small counts ("2-4 sentences", "7 days")
+    are admitted only when the seal supports them; everything else is an issue.
+    """
+    allowed = _supported_number_tokens(pack)
+    issues: list[str] = []
+
+    for token in re.findall(r"\$?\d[\d,]*(?:\.\d+)?", prose or ""):
+        bare = token.lstrip("$")
+        if bare in allowed or bare.replace(",", "") in allowed:
+            continue
+        issues.append(f"UNSUPPORTED_NUMBER:{token}")
+
+    # An identifier may be omitted, but a mangled one is a fabricated reference.
+    lowered = (prose or "").lower()
+    for name, ident in (("container_ref", pack.container_ref),
+                        ("invoice_no", pack.invoice_no)):
+        stem = re.split(r"[\s,;]", str(ident).strip())[0]
+        if stem and stem.lower()[:4] in lowered and stem.lower() not in lowered:
+            issues.append(f"MANGLED_IDENTIFIER:{name}")
+
+    if issues:
+        return DraftValidation(False, tuple(sorted(set(issues))))
     return DraftValidation(True, ())
 
 

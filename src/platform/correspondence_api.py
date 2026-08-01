@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
 
 from src.external.controlled_mail import DemonstrationInboxProvider
+from src.external.correspondence_bedrock import BedrockDraftGenerator
 from src.external.dal import DAL, Tenant
 from src.platform.auth import AuthedActor
 from src.platform.correspondence_repository import (
@@ -107,7 +108,16 @@ def register_correspondence_routes(
             seal_id = _latest_decision_seal_id(dal, invoice_id=invoice_id)
             if seal_id is None:
                 raise HTTPException(status_code=404, detail={"error": "NOT_SEALED"})
-            result = draft_from_sealed(dal, decision_seal_id=seal_id)
+            # Bedrock writes the PROSE from the sealed fact pack; the locked
+            # financial/identifier fields are always re-derived from the seal, and
+            # the generated prose is fact-checked against it. If Bedrock is
+            # unavailable, draft_from_sealed falls back to the deterministic
+            # generator and records which writer ran.
+            result = draft_from_sealed(
+                dal,
+                decision_seal_id=seal_id,
+                draft_generator=BedrockDraftGenerator(),
+            )
         return JSONResponse(
             {
                 "draft_id": result.draft_id,
