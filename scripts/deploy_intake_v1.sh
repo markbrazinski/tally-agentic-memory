@@ -29,37 +29,53 @@ aws ecr get-login-password --profile "$PROFILE" --region "$REGION" |
 docker tag "${REPOSITORY}:${IMAGE_TAG}" "${ECR_URI}:${IMAGE_TAG}"
 docker push "${ECR_URI}:${IMAGE_TAG}" >/dev/null
 
+# Cognito judge auth switches on ONLY when the pool + client ids are actually in
+# SSM. Two failure modes this avoids: (1) App Runner rejects the whole deployment
+# if a RuntimeEnvironmentSecrets entry points at a missing parameter, and (2) with
+# TALLY_JUDGE_AUTH_ENABLED=true but no pool, every request 401s and there is no
+# working login — the lane locks itself out. Provision first (CloudShell), then
+# this flips automatically on the next deploy.
+if aws ssm get-parameter --name "${PREFIX}/cognito-user-pool-id" \
+     --profile "$PROFILE" --region "$REGION" >/dev/null 2>&1 &&
+   aws ssm get-parameter --name "${PREFIX}/cognito-client-id" \
+     --profile "$PROFILE" --region "$REGION" >/dev/null 2>&1; then
+  COGNITO_READY=true
+  echo "cognito: pool + client ids found in SSM — judge auth ENABLED"
+else
+  COGNITO_READY=false
+  echo "cognito: ids not in SSM — judge auth DISABLED (provision to enable)"
+fi
+
 SOURCE_CONFIG="$(jq -n \
   --arg image "${ECR_URI}:${IMAGE_TAG}" --arg access "$ACCESS_ROLE_ARN" \
-  --arg region "$REGION" --arg account "$ACCOUNT_ID" --arg prefix "$PREFIX" '{
+  --arg region "$REGION" --arg account "$ACCOUNT_ID" --arg prefix "$PREFIX" \
+  --argjson cognito "$COGNITO_READY" '{
   ImageRepository:{
     ImageIdentifier:$image,
     ImageRepositoryType:"ECR",
     ImageConfiguration:{
       Port:"8000",
-      RuntimeEnvironmentSecrets:{
-        TALLY_CRDB_DSN:("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/crdb-dsn"),
-        TALLY_TENANT_ID:("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/tenant-id"),
+      RuntimeEnvironmentSecrets:(
+        {
+          TALLY_CRDB_DSN:("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/crdb-dsn"),
+          TALLY_TENANT_ID:("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/tenant-id")
+        }
         # Cognito pool + app-client ids. Not secret, but sourced from SSM so
-        # provisioning (CloudShell) stays decoupled from this script. Their
-        # PRESENCE is what switches the app from static-bearer to Cognito auth
-        # (app.py: _cognito_config = CognitoConfig.from_env()).
-        TALLY_COGNITO_USER_POOL_ID:("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/cognito-user-pool-id"),
-        TALLY_COGNITO_CLIENT_ID:("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/cognito-client-id")
-      },
-      RuntimeEnvironmentVariables:{
+        # provisioning (CloudShell) stays decoupled from this script. Added ONLY
+        # when they exist — App Runner fails the whole deployment on a dangling
+        # secret reference.
+        + (if $cognito then {
+          TALLY_COGNITO_USER_POOL_ID:("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/cognito-user-pool-id"),
+          TALLY_COGNITO_CLIENT_ID:("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/cognito-client-id")
+        } else {} end)
+      ),
+      RuntimeEnvironmentVariables:({
         AWS_REGION:$region,
         TALLY_INTAKE_BUCKET:"tally-record",
         TALLY_INTAKE_KEY_PREFIX:"isolated-intake-v1",
         TALLY_INTAKE_DEMO_ENABLED:"true",
         TALLY_INTAKE_WORKER_ENABLED:"true",
         TALLY_PUBLIC_DEMO_ENABLED:"false",
-        # Cognito judge auth. Required IN ADDITION to the two SSM ids above:
-        # app.py only builds CognitoConfig when this is "true". With it set and
-        # the ids present, every request (pages, /api reads, PDF bytes, SSE,
-        # import) needs a valid JWT; the only public paths are /login, /api/login,
-        # /api/logout, health, and static assets.
-        TALLY_JUDGE_AUTH_ENABLED:"true",
         TALLY_STATIC_DIR:"/app/ui",
         # Managed MCP OAuth (reconstruction worker reads these at runtime — the
         # bundle SSM param the canary refreshes + the refresh lease table). Must
@@ -75,6 +91,9 @@ SOURCE_CONFIG="$(jq -n \
         TALLY_MCP_CLUSTER_ID:"51445757-7351-4f55-b545-1bc84a4f6a55",
         TALLY_MCP_DATABASE:"tally_intake_deployed_20260723"
       }
+      # app.py only builds CognitoConfig when this is "true". Set only alongside
+      # the pool/client ids, so the lane can never enforce auth it cannot serve.
+      + (if $cognito then {TALLY_JUDGE_AUTH_ENABLED:"true"} else {} end))
     }
   },
   AutoDeploymentsEnabled:false,
