@@ -651,7 +651,19 @@ export default class Workbench extends React.Component {
     }
   }
   retrySend() { this.setState({ gateBlocked: false }); this.approveSend(); }
-  goQueue(e) { if (e && e.preventDefault) e.preventDefault(); this.clearTimers(); this.setState({ view: "queue", drawer: null }); }
+  // Returning to the queue re-reads it from the server. Without this the list
+  // renders from the liveQueue snapshot fetched on FIRST load, so an invoice
+  // sealed during this session still showed its pre-approval status (READY FOR
+  // REVIEW) until a hard refresh. The seal is already durable server-side; only
+  // the client's cached list was stale.
+  goQueue(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    this.clearTimers();
+    // `arrived` stays true so the settled rows render immediately — this is a
+    // return to a queue already seen, not a first arrival to animate.
+    this.setState({ view: "queue", drawer: null, dayOpen: false, arrived: true });
+    this.loadQueue();
+  }
   goCoverage(e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ view: "coverage", drawer: null }); }
   goHandoff(e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ view: "handoff", drawer: null }); }
   goDecision(e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ drawer: "decision", drawerTab: "source" }); }
