@@ -75,6 +75,30 @@ The hero case is INV-1048: a $2,450 demurrage invoice, seven charged days from
 June 8–14, adjudicated at $100/day difference against a tariff clause that was
 already in memory before the invoice was issued.
 
+### The queue
+
+Three invoices, three outcomes. Refusal is a first-class result, not an error
+state.
+
+![Invoice queue showing INV-1041 approved for payment, INV-1047 needing evidence, and INV-1048 ready for review](images/1-queue-three-outcomes.png)
+
+### The sourced case file
+
+Every charged day is adjudicated against events recorded before the invoice
+arrived and against the tariff clause that governed it. The reviewer sees the
+claim, the rule, the outcome, and the per-day difference — with the pipeline
+naming the service behind each stage.
+
+![Case file for INV-1048 showing the sourced timeline, seven charged days at $350 claimed against a $250 verified tariff, and a DISPUTE $700 recommendation awaiting human authorization](images/2-sourced-case-file.png)
+
+### The sealed decision
+
+After a human authorizes, the decision is sealed in one transaction and the
+adjustment request is drafted from that sealed record. Every attachment resolves
+to the exact retained source version.
+
+![Sealed decision for INV-1048 with the completed inputs, a drafted adjustment request, and the source manifest](images/3-sealed-decision.png)
+
 ## Sponsor tools and services
 
 ### CockroachDB

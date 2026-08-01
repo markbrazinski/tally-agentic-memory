@@ -1,4 +1,6 @@
-# Internal strategy/spec docs — not for the public repo
+# Internal strategy/spec docs — not for the public repo. (README screenshots
+# live in /images/, outside this rule: git cannot re-include a path inside an
+# excluded directory, so a !/docs/images/ exception would not work.)
 /docs/
 # Operator runbook: carries the live URL, service ARN, ECR URI and Cognito
 # pool/client ids. Not secret, but infrastructure detail with no reason to be
