@@ -1531,7 +1531,7 @@ export default class Workbench extends React.Component {
             </div>
             {v.restoreDemo && (
               <div style={css("margin-top:10px;")}>
-                <button onClick={v.restoreDemo} disabled={v.restoring} title="Return INV-1048 to READY FOR REVIEW so the scenario can be run again" style={S("width:100%; background:none; border:1px solid rgba(255,255,255,0.12); border-radius:6px; color:#8A96A0; font-size:10px; letter-spacing:0.04em; padding:6px 8px; cursor:pointer;", v.restoring ? { opacity: 0.6, cursor: "default" } : {})}>{v.restoring ? "RESTORING…" : "RESTORE DEMO"}</button>
+                <button onClick={v.restoreDemo} disabled={v.restoring} title="Return INV-1048 to READY FOR REVIEW so the scenario can be run again" style={S("width:100%; background:#F5F0E7; border:1px solid #F5F0E7; border-radius:6px; color:#1D2A33; font-size:10px; font-weight:600; letter-spacing:0.04em; padding:6px 8px; cursor:pointer;", v.restoring ? { opacity: 0.55, cursor: "default" } : {})}>{v.restoring ? "RESTORING…" : "RESTORE DEMO"}</button>
                 {v.restoreMsg && (<div style={S("font-size:10px; line-height:1.4; margin-top:6px; padding:0 2px;", { color: v.restoreErr ? "#D98A7A" : "#7E8C97" })}>{v.restoreMsg}</div>)}
               </div>
             )}
