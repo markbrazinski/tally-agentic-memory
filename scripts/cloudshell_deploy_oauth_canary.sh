@@ -11,7 +11,9 @@
 set -euo pipefail
 
 REGION="us-east-1"
-ACCOUNT="352720962539"
+# Derived, not hardcoded — this repo is public. CloudShell runs with the
+# operator's own credentials, so the caller identity is the right source.
+ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
 REPO_URL="https://github.com/markbrazinski/tally-agentic-memory.git"
 BRANCH="authority-transition-v1"
 

@@ -1,5 +1,9 @@
 # Internal strategy/spec docs — not for the public repo
 /docs/
+# Operator runbook: carries the live URL, service ARN, ECR URI and Cognito
+# pool/client ids. Not secret, but infrastructure detail with no reason to be
+# in a public repo.
+/JUDGE_DEMO_DEPLOY.md
 
 # Python
 __pycache__/

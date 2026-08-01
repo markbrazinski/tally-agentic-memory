@@ -25,7 +25,10 @@ set -euo pipefail
 SERVICE_NAME="tally-intake-v1"
 REGION="${AWS_REGION:-us-east-1}"
 PROFILE="${TALLY_DEPLOY_PROFILE:-gate5-deployer}"
-ACCOUNT_ID="352720962539"
+# Derived, not hardcoded: this repo is public, and the account id is an
+# infrastructure identifier that does not belong in it. Same pattern as
+# scripts/deploy_intake_v1.sh.
+ACCOUNT_ID="$(aws sts get-caller-identity --profile "$PROFILE" --query Account --output text)"
 ECR_REPO_NAME="tally-intake-v1"
 ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${ECR_REPO_NAME}"
 ACCESS_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/tally-intake-v1-ecr-access"

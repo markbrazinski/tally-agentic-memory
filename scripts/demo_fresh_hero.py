@@ -44,7 +44,9 @@ import psycopg
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HERO_PDF = REPO_ROOT / "tests" / "fixtures" / "demo" / "INV-1048.pdf"
 HERO_DISPLAY_NAME = "INV-1048.pdf"
-DEFAULT_URL = "https://r3n3ixixr3.us-east-1.awsapprunner.com"
+# No hosted URL is hardcoded: this repo is public and the deployment is
+# access-controlled. Pass --url, or export TALLY_DEMO_URL.
+DEFAULT_URL = ""
 
 # Expected end state — the locked demo story. Printed as PASS/FAIL, never forced.
 EXPECT_CLAIMED_MINOR = 245000
@@ -83,12 +85,18 @@ def _elapsed(started: float) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--url", default=os.environ.get("TALLY_DEMO_URL", DEFAULT_URL))
+    ap.add_argument("--url", default=os.environ.get("TALLY_DEMO_URL", DEFAULT_URL),
+                    help="deployed base URL (or set TALLY_DEMO_URL)")
     ap.add_argument("--keep", action="store_true",
                     help="do not delete the existing hero first (debugging)")
     ap.add_argument("--timeout", type=float, default=300.0,
                     help="seconds to wait for the pipeline to settle")
     args = ap.parse_args()
+
+    if not args.url:
+        print("STOP: no deployed URL. Pass --url or set TALLY_DEMO_URL "
+              "(not hardcoded — this repo is public).", file=sys.stderr)
+        return 2
 
     if not HERO_PDF.exists():
         print(f"STOP: hero fixture missing: {HERO_PDF}", file=sys.stderr)

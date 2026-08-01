@@ -24,6 +24,24 @@ Scanned the working tree and **all 108 commits** of history.
 
 No history rewrite is required. No credential rotation is required.
 
+**Infrastructure identifiers removed from the tracked tree** (second pass, after
+the operator asked that the hosted link not be published). These were not
+secrets — no password or key value was ever committed — but they are needless
+detail for a public repo:
+
+| Identifier | Was in | Now |
+|---|---|---|
+| Hosted judge URL | `README.md`, `JUDGE_DEMO_DEPLOY.md`, `scripts/demo_fresh_hero.py`, `SUBMISSION_AUDIT.md` | absent; supplied with the Devpost submission |
+| AWS account id `3527…` | `JUDGE_DEMO_DEPLOY.md`, `deploy_judge.sh`, `scripts/cloudshell_deploy_oauth_canary.sh` | derived at runtime via `sts get-caller-identity` |
+| App Runner service ARN, ECR URI, Cognito pool/client ids | `JUDGE_DEMO_DEPLOY.md` | file untracked (kept on disk, gitignored) |
+
+`JUDGE_DEMO_DEPLOY.md` was also **stale** — it documented Cognito pool
+`us-east-1_avnXdxC10` / client `45flk5tc649…`, which are not the live ones.
+It contained no password value, only an SSM pointer.
+
+The URL remains in three historical commits. It is a public App Runner hostname
+behind Cognito, not a credential, so no history rewrite was performed.
+
 **Representative data is fictional.** Carriers (Asterline, Seabright, Harborline),
 containers, B/Ls, tariffs and amounts are synthetic; fixtures carry an explicit
 `SYNTHETIC DEMO — FICTIONAL DATA` / `FICTIONAL DEMONSTRATION DOCUMENT` marking.
@@ -46,7 +64,7 @@ modified third-party source was found.
 
 | File | Change |
 |---|---|
-| `README.md` | Replaced the stale lead. Was advertising `x69yr3tibq…` (a **different, un-hardened live service**) and describing a Northstar/Asterline FILED/CONTESTED case that is not what was filmed. Now leads with judge access for `r3n3ixixr3…`, the three-outcome demo, and a demo-limitations section. Fixed local-verification commands: they documented `npm --prefix ui`, but the Dockerfile ships `ui-next` and states `ui/` "is not shipped" — a judge following the old README would have tested dead code. |
+| `README.md` | Replaced the stale lead. Was advertising a hosted URL for a **different, un-hardened live service** and describing a Northstar/Asterline FILED/CONTESTED case that is not what was filmed. The README now carries **no hosted URL and no credentials** — both are delivered with the Devpost submission, since the deployment is access-controlled and this repository is public. Leads instead with the three-outcome demo and a demo-limitations section. Fixed local-verification commands: they documented `npm --prefix ui`, but the Dockerfile ships `ui-next` and states `ui/` "is not shipped" — a judge following the old README would have tested dead code. |
 | `.gitignore` | Added `node_modules/`, `dist/`, `build/`, `*.log`, `logs/`, coverage outputs. Nothing already tracked became ignored. |
 | `docs/TALLY_BE_HANDOFF_AFTER_INTAKE_2026-07-23.md` | Untracked (`git rm --cached`; file kept on disk). `.gitignore` already declares `/docs/` internal, but this file predated the rule. Reviewed first: it self-declares public-safe and contains no credentials — removed for consistency, not because it leaked. |
 
@@ -95,7 +113,7 @@ suite covers the logic offline.
 
 ## Hosted smoke test — PASS
 
-Against `https://r3n3ixixr3.us-east-1.awsapprunner.com`:
+Against the deployed judge lane (URL held out of this public repo):
 
 | Check | Expected | Actual |
 |---|---|---|

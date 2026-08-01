@@ -10,11 +10,9 @@ All public names, invoices, cases, tariffs, dates, and amounts are fictional.
 
 ## Judge access
 
-| | |
-|---|---|
-| **Hosted app** | https://r3n3ixixr3.us-east-1.awsapprunner.com |
-| **Sign in** | username `judge` — password supplied with the Devpost submission |
-| **Demo video** | _(link added at submission)_ |
+The hosted demo URL and sign-in credentials are provided with the Devpost
+submission, not here — the deployment is access-controlled and this repository
+is public.
 
 Sign-in is Amazon Cognito. The browser holds no credential of its own: the
 session is an httpOnly cookie and every request — pages, API reads, PDF bytes,
