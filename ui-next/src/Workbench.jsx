@@ -199,7 +199,7 @@ export default class Workbench extends React.Component {
     if (this.live) this.state.wb = "intake";
     ["goQueue","goCoverage","goHandoff","goDecision","goActivity","replay","toggleAnnot",
      "approveDispute","approveSend","retrySend","closeDay","approvePayment","openQuickReview",
-     "closeQuickReview","closeDrawer","onEscape","stop","noop","openSourceInvoice","openSourceTariff",
+     "closeQuickReview","closeDrawer","onEscape","signOut","stop","noop","openSourceInvoice","openSourceTariff",
      "setQueueFilter","toggleQrEvid","openInv1050","openDayDrawer","openEventDrawer","setDrawerTab"]
       .forEach((m) => (this[m] = this[m].bind(this)));
   }
@@ -658,6 +658,16 @@ export default class Workbench extends React.Component {
   openSourceInvoice(e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ drawer: "invoice", drawerTab: "source" }); }
   openSourceTariff(e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ drawer: "tariff", drawerTab: "source" }); }
   closeDrawer() { this.setState({ drawer: null }); }
+  // Sign out = POST /api/logout so the SERVER clears the httpOnly session cookie;
+  // script cannot delete it. Then hard-navigate to /login so no authenticated
+  // state survives in memory. Live lane only — the mock scene has no session.
+  async signOut(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    try {
+      await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
+    } catch { /* clearing client state below matters more than the response */ }
+    if (typeof window !== "undefined") window.location.href = "/login";
+  }
   // Escape = the panel's own "Close ✕". Closes ONE panel per press, topmost
   // first (quick review overlays the drawer, which overlays the inline day
   // detail), so repeated presses unwind the stack the way a reviewer expects.
@@ -838,6 +848,8 @@ export default class Workbench extends React.Component {
 
     return {
       goQueue: this.goQueue, goCoverage: this.goCoverage, goHandoff: this.goHandoff,
+      // Live lane only: the mock/prototype scene has no Cognito session to end.
+      signOut: this.live ? this.signOut : null,
       invNavBg: inv.bg, invNavFg: inv.fg, covNavBg: cov.bg, covNavFg: cov.fg,
       invAria: view === "queue" ? "page" : "false",
       toggleAnnot: this.toggleAnnot, replay: this.replay, annot: st.annot, internal: !!(this.props && this.props.internal),
@@ -1476,6 +1488,7 @@ export default class Workbench extends React.Component {
             <div style={css("display: flex; align-items: center; gap: 7px; margin-top: 12px; padding: 0 4px;")}>
               <span style={css("width: 24px; height: 24px; border-radius: 50%; background: #1D2A33; border: 1px solid rgba(229,216,188,0.3); color: #E5D8BC; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700;")}>RM</span>
               <span style={css("font-size: 11px; color: #8A96A0; line-height: 1.3;")}>Import ops<br /><span style={css("color:#56656F; font-size:10px;")}>reviewer</span></span>
+              {v.signOut && (<button onClick={v.signOut} title="Sign out" style={css("margin-left:auto; background:none; border:1px solid rgba(255,255,255,0.12); border-radius:6px; color:#8A96A0; font-size:10px; letter-spacing:0.04em; padding:4px 8px; cursor:pointer;")}>SIGN OUT</button>)}
             </div>
           </div>
         </nav>

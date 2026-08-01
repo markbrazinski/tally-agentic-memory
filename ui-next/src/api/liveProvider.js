@@ -6,24 +6,35 @@
 
 const BASE = import.meta.env.VITE_API_BASE || "";
 
-// The deployed judge lane gates mutating routes behind a fixed demo bearer token
-// (src/platform/auth.py). It is injected at build time (VITE_DEMO_TOKEN) and
-// scoped to this one demo tenant — there is no per-user login on this lane, so
-// the browser carries the token itself. authHeaders() merges it into every
-// request; reads are public but sending it is harmless.
-const DEMO_TOKEN = import.meta.env.VITE_DEMO_TOKEN || "";
-
+// Authentication is the Cognito session cookie (`tally_session`), set httpOnly +
+// Secure + SameSite=Strict by POST /api/login and validated server-side on every
+// request. `credentials: "same-origin"` is what carries it; the browser never
+// sees or holds a token, so there is NOTHING to embed in this bundle.
+//
+// A build-time bearer token used to be baked in here (VITE_DEMO_TOKEN). That is
+// deliberately gone: anything shipped to the browser is public, so a token in the
+// bundle is a published credential. Do not reintroduce one.
 function authHeaders(extra) {
-  const h = { ...(extra || {}) };
-  if (DEMO_TOKEN) h.Authorization = `Bearer ${DEMO_TOKEN}`;
-  return h;
+  return { ...(extra || {}) };
+}
+
+// A 401 means the session is missing or expired. Bounce to the login screen
+// rather than surfacing a raw error — an expired judge session should read as
+// "sign in again", not as a broken product.
+function handleUnauthorized(res) {
+  if (res.status === 401 && typeof window !== "undefined") {
+    window.location.href = "/login";
+  }
+  return res;
 }
 
 async function getJson(path) {
-  const res = await fetch(BASE + path, {
-    headers: authHeaders({ Accept: "application/json" }),
-    credentials: "same-origin",
-  });
+  const res = handleUnauthorized(
+    await fetch(BASE + path, {
+      headers: authHeaders({ Accept: "application/json" }),
+      credentials: "same-origin",
+    }),
+  );
   if (!res.ok) throw new Error(`GET ${path} -> ${res.status}`);
   return { body: await res.json(), etag: res.headers.get("ETag") };
 }

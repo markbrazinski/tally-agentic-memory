@@ -18,12 +18,10 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
-# The SPA carries the demo bearer token (no per-user login on this lane), baked
-# into the bundle at build time. Read it from SSM and pass as a build arg.
-DEMO_TOKEN="$(aws ssm get-parameter --name "${PREFIX}/demo-token" --with-decryption \
-  --profile "$PROFILE" --region "$REGION" --query 'Parameter.Value' --output text)"
+# NO credential is passed into the SPA build. Auth is the Cognito session cookie
+# validated server-side; a VITE_* value would be inlined into the shipped bundle
+# and therefore published. See the Dockerfile comment before changing this.
 docker build --platform linux/amd64 \
-  --build-arg "VITE_DEMO_TOKEN=${DEMO_TOKEN}" \
   -t "${REPOSITORY}:${IMAGE_TAG}" -f Dockerfile .
 aws ecr get-login-password --profile "$PROFILE" --region "$REGION" |
   docker login --username AWS --password-stdin \
@@ -42,7 +40,12 @@ SOURCE_CONFIG="$(jq -n \
       RuntimeEnvironmentSecrets:{
         TALLY_CRDB_DSN:("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/crdb-dsn"),
         TALLY_TENANT_ID:("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/tenant-id"),
-        TALLY_DEMO_TOKEN:("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/demo-token")
+        # Cognito pool + app-client ids. Not secret, but sourced from SSM so
+        # provisioning (CloudShell) stays decoupled from this script. Their
+        # PRESENCE is what switches the app from static-bearer to Cognito auth
+        # (app.py: _cognito_config = CognitoConfig.from_env()).
+        TALLY_COGNITO_USER_POOL_ID:("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/cognito-user-pool-id"),
+        TALLY_COGNITO_CLIENT_ID:("arn:aws:ssm:"+$region+":"+$account+":parameter"+$prefix+"/cognito-client-id")
       },
       RuntimeEnvironmentVariables:{
         AWS_REGION:$region,
@@ -51,6 +54,12 @@ SOURCE_CONFIG="$(jq -n \
         TALLY_INTAKE_DEMO_ENABLED:"true",
         TALLY_INTAKE_WORKER_ENABLED:"true",
         TALLY_PUBLIC_DEMO_ENABLED:"false",
+        # Cognito judge auth. Required IN ADDITION to the two SSM ids above:
+        # app.py only builds CognitoConfig when this is "true". With it set and
+        # the ids present, every request (pages, /api reads, PDF bytes, SSE,
+        # import) needs a valid JWT; the only public paths are /login, /api/login,
+        # /api/logout, health, and static assets.
+        TALLY_JUDGE_AUTH_ENABLED:"true",
         TALLY_STATIC_DIR:"/app/ui",
         # Managed MCP OAuth (reconstruction worker reads these at runtime — the
         # bundle SSM param the canary refreshes + the refresh lease table). Must
