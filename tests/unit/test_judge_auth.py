@@ -142,6 +142,54 @@ def test_logout_clears_cookie(judge_app):
 # ---- P0: no client-held credential, tenant derived only from server config ----
 
 
+def test_restore_demo_requires_authentication(judge_app):
+    """The judge-facing Restore demo is a mutation behind the same auth boundary.
+
+    It must not be reachable without a session, and it must not be 404'd by the
+    public-surface filter when a session IS present (the filter runs BEFORE the
+    route, so an un-allowlisted POST would 404 rather than 401 — which would look
+    like a missing feature instead of a blocked one).
+    """
+    unauth = judge_app.post("/api/demo/restore")
+    assert unauth.status_code == 401
+
+    # With a valid token the request must get PAST both the public-surface
+    # filter and the auth gate. It then reaches the DB layer, which has no
+    # connection in tests — anything other than 401/404 proves it was admitted.
+    try:
+        authed = judge_app.post(
+            "/api/demo/restore", headers={"Authorization": "Bearer goodtoken"}
+        )
+        assert authed.status_code not in (401, 404)
+    except RuntimeError as exc:
+        assert "connection string" in str(exc)
+
+
+def test_restore_demo_is_allowlisted_on_the_public_surface():
+    """Guards the exact trap that once 404'd /approve and the login routes."""
+    import inspect
+
+    from src.platform import app as app_mod
+
+    src = inspect.getsource(app_mod)
+    assert 'path == "/api/demo/restore"' in src
+
+
+def test_restore_demo_reuses_the_cli_restore_logic():
+    """The endpoint must call the same restore the CLI uses, not a copy."""
+    import inspect
+
+    from scripts.demo_restore_hero import restore_hero
+    from src.platform import intake_api
+
+    assert callable(restore_hero)
+    src = inspect.getsource(intake_api)
+    assert "from scripts.demo_restore_hero import restore_hero" in src
+    assert "restore_hero(cur, tenant_id)" in src
+    # And it records who restored, in the same transaction as the restore.
+    assert "'audit', 'demo_restore'" in src
+
+
 def test_expired_session_is_rejected_like_a_clean_browser(judge_app):
     """An expired JWT must fail exactly as no JWT does — 401, never a stale grant.
 

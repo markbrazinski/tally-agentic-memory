@@ -98,6 +98,26 @@ export function createLiveProvider() {
     },
 
     // First human authorization: approve the frozen recommendation + seal.
+    // Judge-facing "Restore demo": returns INV-1048 to READY_FOR_REVIEW so the
+    // scenario can be re-run. Server-side it is the same restore the CLI uses,
+    // and it touches only the hero — the other two queue outcomes are stable.
+    async restoreDemo() {
+      const res = handleUnauthorized(
+        await fetch(BASE + "/api/demo/restore", {
+          method: "POST",
+          headers: authHeaders({ Accept: "application/json" }),
+          credentials: "same-origin",
+        }),
+      );
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(
+          (detail && (detail.code || detail.error)) || `restore -> ${res.status}`,
+        );
+      }
+      return res.json();
+    },
+
     async approve(invoiceId, recommendationId, approvalEtag, idempotencyKey) {
       const res = await fetch(
         BASE + `/api/invoices/${invoiceId}/recommendations/${recommendationId}/approve`,

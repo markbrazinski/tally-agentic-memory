@@ -262,6 +262,55 @@ def make_router(*, require_auth) -> APIRouter:
             },
         )
 
+    @router.post("/api/demo/restore")
+    def restore_demo(actor: AuthedActor = Depends(require_auth)) -> JSONResponse:
+        """Return INV-1048 to READY_FOR_REVIEW so the scenario can be re-run.
+
+        A thin authenticated wrapper over scripts.demo_restore_hero.restore_hero —
+        the same logic the CLI uses, not a reimplementation. It needs no elevated
+        credentials: the DSN and tenant it reads are the ones this process already
+        holds, so the judge session is a sufficient authority boundary.
+
+        Touches ONLY the hero. INV-1041 (APPROVED_FOR_PAYMENT) and INV-1047
+        (NEEDS_EVIDENCE) are never read or written, so the queue's other two
+        outcomes are stable across restores. Idempotent — the restore clears the
+        prior decision chain before reseeding, so repeated calls converge.
+        """
+        from scripts.demo_restore_hero import restore_hero
+
+        tenant_id = _tenant_id()
+        with DAL.connect(Tenant(tenant_id, actor.display_name)) as dal:
+
+            def _restore(conn):
+                with conn.cursor() as cur:
+                    result = restore_hero(cur, tenant_id)
+                    # Audit row in the SAME transaction as the restore, so a
+                    # recorded restore always corresponds to one that happened.
+                    cur.execute(
+                        "INSERT INTO query_log "
+                        "(tenant_id, kind, tag, sql_text, actor, ok) "
+                        "VALUES (%s, 'audit', 'demo_restore', %s, %s, true);",
+                        (tenant_id,
+                         f"RESTORE DEMO · {result['invoice_id']} → "
+                         f"{result['aggregate_status']} · by {actor.display_name}",
+                         actor.display_name),
+                    )
+                    return result
+
+            result = dal.run_with_retry(_restore)
+
+        if result["aggregate_status"] != "READY_FOR_REVIEW":
+            raise _http_error(500, "RESTORE_INCOMPLETE")
+        return JSONResponse(
+            {
+                "restored": True,
+                "invoice_id": result["invoice_id"],
+                "status": result["aggregate_status"],
+                "event_count": result["event_count"],
+            },
+            status_code=200,
+        )
+
     # Gate 2 downstream projection — the one reconstruction contract for Gate 3/4.
     register_reconstruction_routes(router, tenant_id_getter=_tenant_id)
     # Gate 5 human approval + atomic seal.

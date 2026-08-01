@@ -203,6 +203,11 @@ async def restrict_public_demo_surface(request: Request, call_next):
                 and path.startswith("/api/invoices/")
                 and path.endswith("/intake/retry")
             )
+            # Judge-facing "Restore demo". Same allowlist reason as /approve: this
+            # filter 404s an un-listed POST BEFORE the route or the auth
+            # dependency runs. Auth is still enforced — the route requires the
+            # judge session like every other mutation.
+            or (method == "POST" and path == "/api/demo/restore")
             # Gate 6 draft + gated send POSTs. Same reason as /approve above: the
             # public-surface filter 404s them BEFORE the route runs unless
             # allowlisted. The GET projection is already covered by the generic

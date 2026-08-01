@@ -180,6 +180,7 @@ export default class Workbench extends React.Component {
       coverageFilled: false, // ledger COVERAGE column filled (SOURCE COMPLETE)
       checksShown: 0,        // 0..4 evidence checks flipped VERIFIED
       auditEntry: 0,         // 0..3 seal audit-trail entries revealed
+      restoring: false, restoreMsg: "", restoreErr: false,  // Restore demo
     };
     this._timers = [];
     this.reduced = !!(props && props.reducedMotion);
@@ -199,7 +200,7 @@ export default class Workbench extends React.Component {
     if (this.live) this.state.wb = "intake";
     ["goQueue","goCoverage","goHandoff","goDecision","goActivity","replay","toggleAnnot",
      "approveDispute","approveSend","retrySend","closeDay","approvePayment","openQuickReview",
-     "closeQuickReview","closeDrawer","onEscape","signOut","stop","noop","openSourceInvoice","openSourceTariff",
+     "closeQuickReview","closeDrawer","onEscape","signOut","restoreDemo","stop","noop","openSourceInvoice","openSourceTariff",
      "setQueueFilter","toggleQrEvid","openInv1050","openDayDrawer","openEventDrawer","setDrawerTab"]
       .forEach((m) => (this[m] = this[m].bind(this)));
   }
@@ -658,6 +659,41 @@ export default class Workbench extends React.Component {
   openSourceInvoice(e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ drawer: "invoice", drawerTab: "source" }); }
   openSourceTariff(e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ drawer: "tariff", drawerTab: "source" }); }
   closeDrawer() { this.setState({ drawer: null }); }
+  // Restore demo — return INV-1048 to READY_FOR_REVIEW so a judge can run the
+  // scenario again without shell access. Confirms first (this is destructive to
+  // the current decision chain), then reloads the queue in place rather than
+  // hard-navigating, so the restored state appears without a page refresh.
+  async restoreDemo(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (this.state.restoring) return;
+    const ok = window.confirm(
+      "Restore demo?\n\n" +
+      "This resets INV-1048 to READY FOR REVIEW and returns the queue to its " +
+      "starting state.\n\n" +
+      "INV-1041 (approved for payment) and INV-1047 (needs evidence) are not " +
+      "changed.",
+    );
+    if (!ok) return;
+    this.setState({ restoring: true, restoreMsg: "Restoring the hero invoice…", restoreErr: false });
+    try {
+      await this.provider.restoreDemo();
+      // Back to the queue and reload it from the server, so the restored row is
+      // real data rather than a client-side guess.
+      this.clearTimers();
+      this._followed = {};
+      this.userScrolled = false;
+      this.setState({ view: "queue", drawer: null, dayOpen: false, arrived: true });
+      await this.loadQueue();
+      this.setState({ restoring: false, restoreMsg: "Demo restored.", restoreErr: false });
+      this.later(() => this.setState({ restoreMsg: "" }), 4000);
+    } catch (err) {
+      this.setState({
+        restoring: false,
+        restoreErr: true,
+        restoreMsg: `Restore failed: ${err && err.message ? err.message : "unknown error"}`,
+      });
+    }
+  }
   // Sign out = POST /api/logout so the SERVER clears the httpOnly session cookie;
   // script cannot delete it. Then hard-navigate to /login so no authenticated
   // state survives in memory. Live lane only — the mock scene has no session.
@@ -850,6 +886,9 @@ export default class Workbench extends React.Component {
       goQueue: this.goQueue, goCoverage: this.goCoverage, goHandoff: this.goHandoff,
       // Live lane only: the mock/prototype scene has no Cognito session to end.
       signOut: this.live ? this.signOut : null,
+      // Live lane only: the mock scene has no server to restore against.
+      restoreDemo: this.live ? this.restoreDemo : null,
+      restoring: st.restoring, restoreMsg: st.restoreMsg, restoreErr: st.restoreErr,
       invNavBg: inv.bg, invNavFg: inv.fg, covNavBg: cov.bg, covNavFg: cov.fg,
       invAria: view === "queue" ? "page" : "false",
       toggleAnnot: this.toggleAnnot, replay: this.replay, annot: st.annot, internal: !!(this.props && this.props.internal),
@@ -1490,6 +1529,12 @@ export default class Workbench extends React.Component {
               <span style={css("font-size: 11px; color: #8A96A0; line-height: 1.3;")}>Import ops<br /><span style={css("color:#56656F; font-size:10px;")}>reviewer</span></span>
               {v.signOut && (<button onClick={v.signOut} title="Sign out" style={css("margin-left:auto; background:none; border:1px solid rgba(255,255,255,0.12); border-radius:6px; color:#8A96A0; font-size:10px; letter-spacing:0.04em; padding:4px 8px; cursor:pointer;")}>SIGN OUT</button>)}
             </div>
+            {v.restoreDemo && (
+              <div style={css("margin-top:10px;")}>
+                <button onClick={v.restoreDemo} disabled={v.restoring} title="Return INV-1048 to READY FOR REVIEW so the scenario can be run again" style={S("width:100%; background:none; border:1px solid rgba(255,255,255,0.12); border-radius:6px; color:#8A96A0; font-size:10px; letter-spacing:0.04em; padding:6px 8px; cursor:pointer;", v.restoring ? { opacity: 0.6, cursor: "default" } : {})}>{v.restoring ? "RESTORING…" : "RESTORE DEMO"}</button>
+                {v.restoreMsg && (<div style={S("font-size:10px; line-height:1.4; margin-top:6px; padding:0 2px;", { color: v.restoreErr ? "#D98A7A" : "#7E8C97" })}>{v.restoreMsg}</div>)}
+              </div>
+            )}
           </div>
         </nav>
 

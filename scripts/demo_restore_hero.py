@@ -274,46 +274,65 @@ def _seed_dispute(cur, tenant_id: str, invoice_id: str, carrier_id: str) -> None
     _seed_events(cur, tenant_id, invoice_id, recon_id)
 
 
+def restore_hero(cur, tenant_id: str) -> dict:
+    """Restore INV-1048 to READY_FOR_REVIEW using an EXISTING cursor.
+
+    The single source of truth for the restore. `main()` wraps this for CLI use;
+    the authenticated API route wraps it so a judge can rerun the scenario from
+    the UI without shell access. Touches ONLY the hero — INV-1041 and INV-1047
+    are never read or written here.
+
+    Idempotent: _clear_derived removes any existing reconstruction/decision/send
+    chain before reseeding, so repeated calls converge on the same state rather
+    than duplicating rows.
+
+    Returns the read-back facts so the caller can assert on them.
+    """
+    invoice_id, carrier_id = _hero_invoice(cur, tenant_id)
+    _clear_derived(cur, tenant_id, invoice_id)
+    _seed_dispute(cur, tenant_id, invoice_id, carrier_id)
+    cur.execute(
+        "UPDATE workflow_tasks SET state='COMPLETED',lease_owner=NULL,"
+        "lease_expires_at=NULL,not_before=NULL WHERE tenant_id=%s AND invoice_id=%s "
+        "AND task_type='START_RECONSTRUCTION';",
+        (tenant_id, invoice_id),
+    )
+    cur.execute(
+        "UPDATE invoices SET status='READY_FOR_REVIEW',"
+        "aggregate_status='READY_FOR_REVIEW' WHERE tenant_id=%s AND id=%s;",
+        (tenant_id, invoice_id),
+    )
+    cur.execute("SELECT aggregate_status FROM invoices WHERE tenant_id=%s AND id=%s;",
+                (tenant_id, invoice_id))
+    agg = cur.fetchone()[0]
+    cur.execute("SELECT recommendation_type,state,disputed_amount_minor FROM "
+                "recommendations WHERE tenant_id=%s AND invoice_id=%s AND "
+                "superseded_by IS NULL;", (tenant_id, invoice_id))
+    rec = cur.fetchone()
+    cur.execute("SELECT count(*) FROM reconstruction_events WHERE tenant_id=%s "
+                "AND invoice_id=%s;", (tenant_id, invoice_id))
+    event_count = cur.fetchone()[0]
+    return {
+        "invoice_id": invoice_id,
+        "aggregate_status": agg,
+        "recommendation": rec,
+        "event_count": event_count,
+    }
+
+
 def main() -> int:
     tenant_id = os.environ["TALLY_TENANT_ID"]
     conn = psycopg.connect(os.environ["TALLY_CRDB_DSN"], connect_timeout=20,
                            autocommit=True)
     with conn.cursor() as cur:
-        invoice_id, carrier_id = _hero_invoice(cur, tenant_id)
-        # Clear any existing reconstruction/decision/send chain (FK-safe), keeping
-        # the invoice row + PDF + claims — delete_invoice would drop the invoice,
-        # so we clear children directly via a scoped delete of the derived rows.
-        _clear_derived(cur, tenant_id, invoice_id)
-        _seed_dispute(cur, tenant_id, invoice_id, carrier_id)
-        # Reconstruction task done; invoice ready for the human to approve.
-        cur.execute(
-            "UPDATE workflow_tasks SET state='COMPLETED',lease_owner=NULL,"
-            "lease_expires_at=NULL,not_before=NULL WHERE tenant_id=%s AND invoice_id=%s "
-            "AND task_type='START_RECONSTRUCTION';",
-            (tenant_id, invoice_id),
-        )
-        cur.execute(
-            "UPDATE invoices SET status='READY_FOR_REVIEW',"
-            "aggregate_status='READY_FOR_REVIEW' WHERE tenant_id=%s AND id=%s;",
-            (tenant_id, invoice_id),
-        )
-        # Read-back
-        cur.execute("SELECT aggregate_status FROM invoices WHERE tenant_id=%s AND id=%s;",
-                    (tenant_id, invoice_id))
-        agg = cur.fetchone()[0]
-        cur.execute("SELECT recommendation_type,state,disputed_amount_minor FROM "
-                    "recommendations WHERE tenant_id=%s AND invoice_id=%s AND "
-                    "superseded_by IS NULL;", (tenant_id, invoice_id))
-        rec = cur.fetchone()
-        cur.execute("SELECT count(*) FROM reconstruction_events WHERE tenant_id=%s "
-                    "AND invoice_id=%s;", (tenant_id, invoice_id))
-        event_count = cur.fetchone()[0]
+        result = restore_hero(cur, tenant_id)
     conn.close()
-    assert agg == "READY_FOR_REVIEW", agg
-    assert rec == ("DISPUTE", "FROZEN", 70000), rec
-    assert event_count == len(HERO_EVENTS), event_count
+    assert result["aggregate_status"] == "READY_FOR_REVIEW", result
+    assert result["recommendation"] == ("DISPUTE", "FROZEN", 70000), result
+    assert result["event_count"] == len(HERO_EVENTS), result
     print(f"hero restored: {HERO_DISPLAY_NAME} → READY_FOR_REVIEW, "
-          f"rec={rec}, timeline={event_count} events "
+          f"rec={result['recommendation']}, "
+          f"timeline={result['event_count']} events "
           f"(instantly approvable, no pipeline wait)")
     return 0
 
