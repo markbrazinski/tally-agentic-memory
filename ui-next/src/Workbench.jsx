@@ -184,7 +184,7 @@ export default class Workbench extends React.Component {
     if (this.live) this.state.wb = "intake";
     ["goQueue","goCoverage","goHandoff","goDecision","goActivity","replay","toggleAnnot",
      "approveDispute","approveSend","retrySend","closeDay","approvePayment","openQuickReview",
-     "closeQuickReview","closeDrawer","stop","noop","openSourceInvoice","openSourceTariff",
+     "closeQuickReview","closeDrawer","onEscape","stop","noop","openSourceInvoice","openSourceTariff",
      "setQueueFilter","toggleQrEvid","openInv1050","openDayDrawer","openEventDrawer","setDrawerTab"]
       .forEach((m) => (this[m] = this[m].bind(this)));
   }
@@ -205,6 +205,10 @@ export default class Workbench extends React.Component {
         window.removeEventListener("keydown", keys);
       };
     }
+    // Escape closes the topmost open panel — the same thing its "Close ✕" does.
+    // Deliberately NOT routed through the scroll guard above: Escape is not a
+    // scroll, so it must not switch off the pipeline-follow.
+    window.addEventListener("keydown", this.onEscape);
     if (this.live) { this.startLive(); return; }
     this.applyScene();
   }
@@ -303,7 +307,7 @@ export default class Workbench extends React.Component {
     clearTimeout(this._growthTimer);
     this._growthTimer = setTimeout(tick, P.SECTION_GROWTH_POLL_MS);
   }
-  componentWillUnmount() { this.clearTimers(); clearTimeout(this._growthTimer); if (this._unsub) this._unsub(); if (this._offScroll) this._offScroll(); }
+  componentWillUnmount() { this.clearTimers(); clearTimeout(this._growthTimer); window.removeEventListener("keydown", this.onEscape); if (this._unsub) this._unsub(); if (this._offScroll) this._offScroll(); }
 
   // ---- LIVE MODE plumbing (replaces the timer stand-ins) ----
   startLive() {
@@ -639,6 +643,23 @@ export default class Workbench extends React.Component {
   openSourceInvoice(e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ drawer: "invoice", drawerTab: "source" }); }
   openSourceTariff(e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ drawer: "tariff", drawerTab: "source" }); }
   closeDrawer() { this.setState({ drawer: null }); }
+  // Escape = the panel's own "Close ✕". Closes ONE panel per press, topmost
+  // first (quick review overlays the drawer, which overlays the inline day
+  // detail), so repeated presses unwind the stack the way a reviewer expects.
+  // No-op when nothing is open, and ignored while typing in a field.
+  onEscape(e) {
+    if (e.key !== "Escape" || e.defaultPrevented) return;
+    const el = e.target;
+    const tag = el && el.tagName ? el.tagName.toUpperCase() : "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"
+        || (el && el.isContentEditable)) return;
+    const st = this.state;
+    if (st.quickOpen) this.closeQuickReview();
+    else if (st.drawer) this.closeDrawer();
+    else if (st.dayOpen) this.closeDay();
+    else return;
+    e.preventDefault();
+  }
   openDay(ix) { this.setState({ dayOpen: true, dayIx: ix }); }
   openDayDrawer(ix, e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ drawer: "day", dayIx: ix, drawerTab: "source" }); }
   openEventDrawer(ix, e) { if (e && e.preventDefault) e.preventDefault(); this.setState({ drawer: "event", eventIx: ix, drawerTab: "source" }); }
