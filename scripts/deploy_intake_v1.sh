@@ -120,11 +120,28 @@ else
   PREVIOUS_UPDATED_AT="$(aws apprunner describe-service \
     --profile "$PROFILE" --region "$REGION" --service-arn "$SERVICE_ARN" \
     --query Service.UpdatedAt --output text)"
-  aws apprunner update-service --profile "$PROFILE" --region "$REGION" \
+  # App Runner rejects UpdateService while another operation is in flight
+  # (InvalidStateException: OPERATION_IN_PROGRESS). That once exited the script
+  # with status 0 — the config was never sent, the wait loop then saw RUNNING
+  # with a NEW UpdatedAt (from the concurrent roll) and declared success, so the
+  # deploy reported a change it had not made. Wait for idle, then fail loudly.
+  for _ in $(seq 1 60); do
+    CUR_STATUS="$(aws apprunner describe-service --profile "$PROFILE" \
+      --region "$REGION" --service-arn "$SERVICE_ARN" \
+      --query Service.Status --output text)"
+    [ "$CUR_STATUS" = "OPERATION_IN_PROGRESS" ] || break
+    echo "waiting: another App Runner operation is in progress…"
+    sleep 10
+  done
+  if ! aws apprunner update-service --profile "$PROFILE" --region "$REGION" \
     --service-arn "$SERVICE_ARN" \
     --source-configuration "$SOURCE_CONFIG" \
     --instance-configuration \
       "Cpu=0.25 vCPU,Memory=0.5 GB,InstanceRoleArn=${RUNTIME_ROLE_ARN}" >/dev/null
+  then
+    echo "STOP: UpdateService failed — configuration was NOT applied" >&2
+    exit 1
+  fi
 fi
 
 for _ in $(seq 1 60); do
@@ -150,6 +167,27 @@ done
   echo "STOP: isolated App Runner service did not become ready" >&2
   exit 1
 }
+
+# Read back the LIVE configuration and assert it matches what we intended. A
+# green status and a healthy /readyz only prove the service is up — not that the
+# env we just sent is the env it is running. Assert the effect, not the intent.
+LIVE_JUDGE_AUTH="$(aws apprunner describe-service --profile "$PROFILE" \
+  --region "$REGION" --service-arn "$SERVICE_ARN" \
+  --query 'Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables.TALLY_JUDGE_AUTH_ENABLED' \
+  --output text)"
+if [ "$COGNITO_READY" = "true" ]; then
+  [ "$LIVE_JUDGE_AUTH" = "true" ] || {
+    echo "STOP: judge auth was requested but the live service does not have it "\
+"(TALLY_JUDGE_AUTH_ENABLED=${LIVE_JUDGE_AUTH}). Configuration was not applied." >&2
+    exit 1
+  }
+  echo "read-back: TALLY_JUDGE_AUTH_ENABLED=true on the live service"
+else
+  [ "$LIVE_JUDGE_AUTH" = "None" ] || {
+    echo "STOP: judge auth is live but Cognito ids are not provisioned" >&2
+    exit 1
+  }
+fi
 
 SERVICE_URL="$(aws apprunner describe-service --profile "$PROFILE" --region "$REGION" \
   --service-arn "$SERVICE_ARN" --query Service.ServiceUrl --output text)"
